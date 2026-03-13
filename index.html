@@ -1,0 +1,543 @@
+﻿<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MyEsep.kz - Дашборд для ИП и самозанятых Казахстана</title>
+  <meta name="description" content="Дашборд для ИП и самозанятых Казахстана: налоги, сроки, доходы, сравнение режимов." />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Montserrat:wght@600;700;800&family=Rubik:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css?v=20260313-fix-encoding-01" />
+</head>
+<body>
+  <div id="publicApp" class="public-app">
+    <header class="public-nav">
+      <div class="logo">MyEsep<span>.kz</span></div>
+      <div class="nav-actions">
+        <button class="nav-link" data-action="open-login">Войти</button>
+        <button class="btn btn-primary" data-action="open-login">Начать бесплатно</button>
+      </div>
+    </header>
+
+    <section class="hero">
+      <div class="chip">Новый налоговый кодекс 2026 · Казахстан</div>
+      <h1>Знай, сколько платить.<br /><span>Не плати лишнего.</span></h1>
+      <p>
+        С 2026 года налоговые правила для ИП изменились. Введите доход — получите точный расчёт ОПВ, СО и ИПН за секунды. Без бухгалтера. Без карты.
+      </p>
+      <button class="btn btn-primary btn-glow" data-action="open-login">Считать налоги бесплатно ></button>
+    </section>
+
+    <section class="trust-strip">
+      <article class="trust-card">
+        <h3 class="trust-title"><span class="icon-inline" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><rect x="3" y="4" width="18" height="17" rx="3"></rect><path d="M8 2.8v3.5"></path><path d="M16 2.8v3.5"></path><path d="M3 9h18"></path><path d="M12 12.8v4"></path><circle cx="12" cy="18.2" r="0.7"></circle></svg></span>Штраф за просрочку — до 118&nbsp;000&nbsp;₸</h3>
+        <p>Сервис показывает критичные сроки и напоминает за 7, 3 и 1 день до даты уплаты.</p>
+      </article>
+      <article class="trust-card">
+        <h3 class="trust-title"><span class="icon-inline" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><rect x="3" y="5" width="7" height="14" rx="2"></rect><rect x="14" y="5" width="7" height="14" rx="2"></rect><path d="M10 9h4"></path><path d="M12 7l2 2-2 2"></path><path d="M14 15h-4"></path><path d="M12 13l-2 2 2 2"></path></svg></span>Не знаете какой режим выгоднее?</h3>
+        <p>Введите доход — за 30 секунд покажем какой режим выгоднее и сколько сэкономите.</p>
+      </article>
+      <article class="trust-card">
+        <h3 class="trust-title"><span class="icon-inline" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><rect x="5" y="3" width="14" height="18" rx="3"></rect><line x1="8" y1="8" x2="16" y2="8"></line><line x1="8" y1="12" x2="16" y2="12"></line><line x1="8" y1="16" x2="11" y2="16"></line><path d="M14 16l1.5 1.5L18 15"></path></svg></span>Ставки 2026 уже обновлены</h3>
+        <p>МРП, ОПВ, СО, ВОСМС и ИПН рассчитываются по актуальным данным нового кодекса.</p>
+      </article>
+    </section>
+
+    <section class="quick-calc card-dark">
+      <div class="calc-head">
+        <h2 class="calc-title"><span class="icon-inline icon-inline-lg" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><rect x="4" y="3" width="16" height="18" rx="3"></rect><line x1="8" y1="8" x2="16" y2="8"></line><line x1="8" y1="12" x2="16" y2="12"></line><line x1="8" y1="16" x2="13" y2="16"></line></svg></span>Рассчитайте налоги прямо сейчас</h2>
+        <div class="calc-head-meta">
+          <span>Без регистрации</span>
+          <div class="landing-period-switch" role="tablist" aria-label="Период расчета">
+            <button type="button" class="active" data-landing-period="month">В месяц</button>
+            <button type="button" data-landing-period="year">В год</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="calc-input-row">
+        <label for="landingIncome">Доход в месяц (₸)</label>
+        <div class="landing-income-control">
+          <button type="button" class="step-btn" data-landing-step="-50000">-</button>
+          <div class="landing-income-wrap">
+            <span>₸</span>
+            <input id="landingIncome" type="number" value="400000" min="0" step="10000" />
+          </div>
+          <button type="button" class="step-btn" data-landing-step="50000">+</button>
+        </div>
+      </div>
+      <p class="calc-input-note">Ввод всегда в месяц. Переключатель сверху меняет период показа налога.</p>
+
+      <div class="income-presets" aria-label="Быстрый выбор дохода">
+        <button type="button" data-landing-preset="300000">300k</button>
+        <button type="button" data-landing-preset="400000" class="active">400k</button>
+        <button type="button" data-landing-preset="500000">500k</button>
+        <button type="button" data-landing-preset="1000000">1M</button>
+      </div>
+
+      <div id="landingSummary" class="landing-summary"></div>
+
+      <div class="calc-mini-note">
+        <span aria-hidden="true">i</span>
+        <span>Сравнение режимов ниже показывает ориентир по налоговой нагрузке. Доход всегда вводится в месяц.</span>
+      </div>
+
+      <div id="landingCards" class="regime-cards"></div>
+
+      <div class="quick-footer">
+        <button class="btn btn-primary btn-with-icon" data-action="open-login"><span class="icon-inline" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><rect x="3" y="4" width="18" height="14" rx="2"></rect><path d="M8 20h8"></path><path d="M12 12l4-4"></path><path d="M16 8h-4"></path><path d="M16 8v4"></path></svg></span>Сохранить расчёт и открыть дашборд ></button>
+      </div>
+    </section>
+    <section class="landing-block how-it-works landing-animate landing-delay-1">
+      <div class="landing-block-head">
+        <h2>Как это работает</h2>
+        <span>3 шага</span>
+      </div>
+      <div class="how-grid">
+        <article class="how-card">
+          <span class="how-step">1</span>
+          <h3 class="how-title">
+            <span class="icon-inline" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <rect x="4" y="3" width="16" height="18" rx="3"></rect>
+                <line x1="8" y1="8" x2="16" y2="8"></line>
+                <line x1="8" y1="12" x2="16" y2="12"></line>
+                <line x1="8" y1="16" x2="13" y2="16"></line>
+              </svg>
+            </span>
+            Введите доход
+          </h3>
+          <p>Укажите ежемесячную выручку, а сервис покажет ориентир по налоговой нагрузке.</p>
+        </article>
+        <article class="how-card">
+          <span class="how-step">2</span>
+          <h3 class="how-title">
+            <span class="icon-inline" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M6 5v13"></path>
+                <path d="M6 18l-2-2"></path>
+                <path d="M6 18l2-2"></path>
+                <path d="M18 19V6"></path>
+                <path d="M18 6l-2 2"></path>
+                <path d="M18 6l2 2"></path>
+              </svg>
+            </span>
+            Сравните режимы
+          </h3>
+          <p>Сразу видно, какой режим доступен по лимиту и где меньше платежи.</p>
+        </article>
+        <article class="how-card">
+          <span class="how-step">3</span>
+          <h3 class="how-title">
+            <span class="icon-inline" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <rect x="3" y="5" width="18" height="16" rx="2"></rect>
+                <line x1="16" y1="3" x2="16" y2="7"></line>
+                <line x1="8" y1="3" x2="8" y2="7"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+              </svg>
+            </span>
+            Не пропускайте сроки
+          </h3>
+          <p>Получайте напоминания за 7, 3 и 1 день до даты уплаты. Успевайте вовремя — без штрафов.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="landing-block landing-deadlines landing-animate landing-delay-2">
+      <div class="landing-block-head">
+        <h2>Ближайшие налоговые сроки</h2>
+        <span>Календарь 2026</span>
+      </div>
+      <div id="landingDeadlines" class="deadline-grid"></div>
+    </section>
+
+    <section class="landing-block landing-faq landing-animate landing-delay-3">
+      <div class="landing-block-head">
+        <h2>Частые вопросы</h2>
+        <span>FAQ</span>
+      </div>
+      <div class="faq-list">
+        <details class="faq-item" open>
+          <summary>Насколько точны расчеты?</summary>
+          <p>Расчет строится по актуальным ставкам и лимитам, но перед оплатой налогов проверьте итог в официальных сервисах КГД.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Подойдет ли сервис, если я только открыл ИП?</summary>
+          <p>Да. Экран показывает базовые обязательства и помогает выбрать режим, который подходит под текущий доход.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Нужно ли подключать банковские интеграции?</summary>
+          <p>Нет, на старте можно работать без интеграций: ввести доход вручную и сразу получить ориентир по платежам и срокам.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Что будет, если доход превысит лимит режима?</summary>
+          <p>Режим помечается как недоступный, а в карточке выводится причина, чтобы вы не опирались на неверный сценарий.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Мои данные в безопасности?</summary>
+          <p>Да. Доступ в кабинет защищен авторизацией, а данные не передаются третьим лицам без вашего действия.</p>
+        </details>
+      </div>
+      <div class="landing-final-cta">
+        <button class="btn btn-primary btn-glow btn-with-icon" data-action="open-login">
+          <span class="icon-inline" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <rect x="3" y="4" width="18" height="14" rx="2"></rect>
+              <path d="M8 20h8"></path>
+              <path d="M12 12l4-4"></path>
+              <path d="M16 8h-4"></path>
+              <path d="M16 8v4"></path>
+            </svg>
+          </span>Начать считать налоги бесплатно ></button>
+        <p>Без карты. Доступ за 2 минуты.</p>
+        <div class="landing-proof">
+          <span>Локально для РК</span>
+          <span>Без карты</span>
+          <span>30 дней Pro бесплатно</span>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div id="dashboardApp" class="dashboard-app hidden">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="logo">MyEsep<span>.kz</span></div>
+        <p>Казахстан · 2026</p>
+      </div>
+
+      <nav id="sidebarNav" class="sidebar-nav">
+        <div class="sidebar-group">
+          <button data-page="dashboard"><i class="nav-icon" data-lucide="home"></i><span>Главная</span></button>
+        </div>
+
+        <div class="sidebar-group">
+          <p class="sidebar-group-title">Учет</p>
+          <button data-page="income"><i class="nav-icon" data-lucide="wallet"></i><span>Доходы</span></button>
+          <button data-page="taxes"><i class="nav-icon" data-lucide="file-check"></i><span>Налоги</span></button>
+        </div>
+
+        <div class="sidebar-group">
+          <p class="sidebar-group-title">Планирование</p>
+          <button data-page="calendar"><i class="nav-icon" data-lucide="calendar"></i><span>Календарь</span><span id="sidebarCalendarBadge" class="nav-badge hidden"></span></button>
+          <button data-page="calculator"><i class="nav-icon" data-lucide="sliders-horizontal"></i><span>Калькулятор</span></button>
+        </div>
+
+        <div class="sidebar-group">
+          <p class="sidebar-group-title">Помощь</p>
+          <button data-page="knowledge"><i class="nav-icon" data-lucide="book-open"></i><span>База знаний</span></button>
+          <button data-page="feedback"><i class="nav-icon" data-lucide="mail"></i><span>Обратная связь</span></button>
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button data-page="settings"><i class="nav-icon" data-lucide="settings"></i><span>Настройки</span></button>
+        <div class="account-box">
+          <small>Аккаунт</small>
+          <strong id="accountName">Demo User</strong>
+          <span id="planBadge"><span class="plan-badge plan-trial">Trial</span></span>
+          <div id="sidebarBetaBanner" class="sidebar-beta-banner hidden"></div>
+        </div>
+      </div>
+    </aside>
+    <div id="sidebarOverlay" class="sidebar-overlay" data-action="close-sidebar"></div>
+
+    <main class="main-area">
+      <header class="main-header">
+        <button id="sidebarToggle" class="sidebar-toggle" type="button" data-action="toggle-sidebar" aria-label="Открыть меню"><i class="nav-icon" data-lucide="menu"></i></button>
+        <div class="main-header-title">
+          <h2 id="pageTitle">Главная</h2>
+          <button id="amountsVisibilityBtn" class="amount-visibility-btn hidden" type="button" data-action="toggle-hide-amounts" aria-label="Скрыть суммы" title="Скрыть суммы">
+            <i class="nav-icon amount-visibility-icon" data-lucide="eye"></i>
+          </button>
+          <button id="calendarReminderToggle" class="calendar-reminder-toggle hidden" type="button" data-action="toggle-calendar-reminders" aria-pressed="false" title="Напоминания: Выкл">
+            <span class="calendar-reminder-toggle-icon" aria-hidden="true">🔔</span>
+            <span class="calendar-reminder-toggle-label">Напоминания</span>
+            <span class="calendar-reminder-toggle-state">Выкл</span>
+          </button>
+        </div>
+        <div class="header-actions">
+          <select id="regimeSelect">
+            <option value="self">Самозанятый</option>
+            <option value="simplified">Упрощенка (910)</option>
+            <option value="our">ОУР</option>
+          </select>
+          <button id="proBtn" class="btn btn-pro" data-action="open-pro">Pro</button>
+          <button class="btn btn-ghost" data-action="logout">Выйти</button>
+        </div>
+      </header>
+
+      <section id="pageContent" class="page-content"></section>
+    </main>
+
+    <nav id="mobileTabbar" class="mobile-tabbar">
+      <button data-page="dashboard">Главная</button>
+      <button data-page="income">Доходы</button>
+      <button data-page="calendar">Сроки</button>
+      <button data-page="knowledge">База</button>
+      <button data-page="calculator">Расчет</button>
+      <button data-page="settings">Профиль</button>
+      <button data-page="feedback">Фидбек</button>
+    </nav>
+  </div>
+
+  <div id="loginModal" class="modal hidden">
+    <div class="modal-card login-card">
+      <div class="modal-head login-head">
+        <div>
+          <h3>Вход в MyEsep.kz</h3>
+          <p>Личный кабинет для ИП и самозанятых Казахстана</p>
+        </div>
+        <button class="icon-btn" data-action="close-login" aria-label="Закрыть">&times;</button>
+      </div>
+
+      <div class="login-trust">
+        <span>Безопасная сессия</span>
+        <span>Данные не передаются третьим лицам</span>
+      </div>
+
+      <div class="login-mode-switch" role="tablist" aria-label="Режим авторизации">
+        <button type="button" class="login-mode-btn active" data-login-mode="login" aria-pressed="true">Вход</button>
+        <button type="button" class="login-mode-btn" data-login-mode="signup" aria-pressed="false">Регистрация</button>
+      </div>
+
+      <form id="loginForm" class="stack-form login-form">
+        <input id="loginAuthMode" name="authMode" type="hidden" value="login" />
+        <label class="field-label">
+          <span>Email</span>
+          <input id="loginEmail" type="email" placeholder="you@email.com" required />
+        </label>
+        <label class="field-label">
+          <span>Пароль</span>
+          <input id="loginPassword" type="password" minlength="6" placeholder="Введите пароль" required />
+        </label>
+        <button id="loginSubmitBtn" type="submit" class="btn btn-primary login-primary">Войти</button>
+        <button type="button" class="login-forgot-btn" data-action="forgot-password">Забыли пароль?</button>
+        <div class="login-auth-separator"><span>или</span></div>
+        <button type="button" class="btn login-google-btn" data-action="login-google">
+          <span class="google-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+              <path fill="#4285F4" d="M23.49 12.27c0-.79-.07-1.54-.2-2.27H12v4.29h6.44a5.5 5.5 0 0 1-2.39 3.61v3h3.87c2.26-2.08 3.57-5.15 3.57-8.63z"></path>
+              <path fill="#34A853" d="M12 24c3.24 0 5.95-1.07 7.93-2.9l-3.87-3c-1.07.72-2.44 1.14-4.06 1.14-3.12 0-5.76-2.11-6.71-4.95H1.29v3.09A11.99 11.99 0 0 0 12 24z"></path>
+              <path fill="#FBBC05" d="M5.29 14.29A7.2 7.2 0 0 1 4.93 12c0-.79.14-1.55.36-2.29V6.62H1.29A12 12 0 0 0 0 12c0 1.93.46 3.76 1.29 5.38l4-3.09z"></path>
+              <path fill="#EA4335" d="M12 4.77c1.76 0 3.35.61 4.6 1.8l3.45-3.45C17.94 1.09 15.24 0 12 0 7.31 0 3.27 2.69 1.29 6.62l4 3.09c.95-2.84 3.59-4.94 6.71-4.94z"></path>
+            </svg>
+          </span>
+          <span>Войти через Google</span>
+        </button>
+      </form>
+      <p id="loginHelper" class="login-helper" hidden></p>
+      <p id="loginStatus" class="status login-status"></p>
+    </div>
+  </div>
+  <div id="proModal" class="modal hidden">
+    <div class="modal-card pro-modal-card">
+      <div class="modal-head">
+        <div class="pro-modal-head-copy">
+          <span class="pro-modal-kicker">Для ИП и самозанятых Казахстана</span>
+          <div class="pro-title-row">
+            <h3 id="proModalTitle">MyEsep Pro</h3>
+            <span id="proModalPrice" class="pro-price-chip">1 990 ₸/мес</span>
+          </div>
+          <p id="proModalStatus" class="pro-status trial">Ваш план: Trial</p>
+        </div>
+        <button class="icon-btn" data-action="close-pro" aria-label="Закрыть">&times;</button>
+      </div>
+
+      <p id="proModalReason" class="pro-reason">Откройте напоминания, экспорт и расширенную аналитику.</p>
+
+      <article id="proFocusCard" class="pro-focus">
+        <p class="pro-focus-label"><span class="icon-inline" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M12 3l7 3v6c0 4.4-3 8.4-7 9-4-0.6-7-4.6-7-9V6l7-3z"></path><path d="M9 12l2 2 4-4"></path></svg></span>Что это даёт вам</p>
+        <h4 id="proFocusTitle">Контроль налогов без ручной рутины</h4>
+        <p id="proFocusText">Сервис помогает не пропускать сроки, вовремя видеть риски и принимать решения по режиму заранее.</p>
+      </article>
+
+      <ul class="pro-list">
+        <li><span class="icon-inline pro-item-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M7 3v3"></path><path d="M17 3v3"></path><rect x="4" y="5" width="16" height="16" rx="3"></rect><path d="M4 10h16"></path><path d="M9 14h2"></path><path d="M13 14h2"></path></svg></span><span>Напоминания за 7, 3, 1 день и в день срока</span></li>
+        <li><span class="icon-inline pro-item-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M12 7v10"></path><path d="M7 12h10"></path><rect x="3" y="3" width="18" height="18" rx="4"></rect></svg></span><span>Неограниченное количество операций доходов.</span></li>
+        <li><span class="icon-inline pro-item-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M14 3h5v5"></path><path d="M10 14L19 5"></path><path d="M20 14v6H4V4h6"></path></svg></span><span>Экспорт CSV / Excel для отчётов и бухгалтера</span></li>
+        <li><span class="icon-inline pro-item-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M4 19h16"></path><path d="M7 15l3-3 3 2 4-5"></path><circle cx="7" cy="15" r="1"></circle><circle cx="10" cy="12" r="1"></circle><circle cx="13" cy="14" r="1"></circle><circle cx="17" cy="9" r="1"></circle></svg></span><span>Прогноз лимита режима и риск-подсветка</span></li>
+      </ul>
+
+      <div id="proProof" class="pro-proof">
+        <span><span class="icon-inline" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M12 7v5l3 2"></path><circle cx="12" cy="12" r="9"></circle></svg></span>30 дней Pro бесплатно</span>
+        <span><span class="icon-inline" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><rect x="5" y="10" width="14" height="10" rx="2"></rect><path d="M8 10V8a4 4 0 0 1 8 0v2"></path></svg></span>Без карты на старте</span>
+        <span><span class="icon-inline" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11z"></path><circle cx="12" cy="10" r="2.5"></circle></svg></span>Локально для РК</span>
+      </div>
+
+      <button id="proModalCta" class="btn btn-primary" data-action="upgrade-pro">Подключить Pro</button>
+      <p id="proModalCtaMeta" class="pro-cta-meta">Подключение занимает меньше минуты.</p>
+      <button class="btn btn-ghost full pro-secondary-link" data-action="close-pro">Остаться на Trial</button>
+    </div>
+  </div>
+
+  <div id="deadlineModal" class="modal hidden">
+    <div class="modal-card deadline-modal-card">
+      <div class="modal-head deadline-modal-head">
+        <div>
+          <p id="deadlineModalDate" class="deadline-modal-date"></p>
+          <h3 id="deadlineModalTitle">Чеклист по сроку</h3>
+        </div>
+        <button class="icon-btn" data-action="close-deadline-modal" aria-label="Закрыть">&times;</button>
+      </div>
+      <div id="deadlineModalMeta" class="deadline-modal-meta"></div>
+      <div id="deadlineModalChecklist" class="deadline-modal-grid"></div>
+      <div class="deadline-modal-footer">
+        <button id="deadlineModalSubscribe" type="button" class="btn btn-primary deadline-modal-subscribe">
+          Подписаться на напоминания
+        </button>
+        <p id="deadlineModalHint">Включите напоминания, чтобы не пропустить срок оплаты.</p>
+        <div id="deadlineModalReminderPanel"></div>
+      </div>
+    </div>
+  </div>
+
+
+  <div id="remindersSetupModal" class="modal hidden">
+    <div class="modal-card reminders-setup-modal-card">
+      <div class="modal-head reminders-setup-head">
+        <h3 id="remindersSetupTitle">Настройка напоминаний</h3>
+        <button type="button" class="icon-btn" data-action="close-reminders-settings" aria-label="Закрыть">&times;</button>
+      </div>
+      <div class="reminders-settings-intro" role="note" aria-live="polite">
+        <span class="reminders-settings-intro-icon" aria-hidden="true">🔔</span>
+        <p>Мы будем напоминать о каждом налоговом сроке по вашему режиму — за 7, 3 и 1 день до срока оплаты. Так вы не пропустите платёж и избежите штрафов.</p>
+      </div>
+      <form id="remindersSettingsForm" class="reminders-settings-form">
+        <label>Email
+          <input id="remindersSettingsEmail" name="email" type="email" placeholder="you@email.com" />
+        </label>
+        <div class="reminders-telegram-connect-wrap">
+          <button type="button" class="btn btn-ghost reminders-telegram-connect" id="remindersTelegramConnectBtn" data-action="connect-reminders-telegram">Подключить Telegram →</button>
+          <span id="remindersTelegramConnectedBadge" class="reminders-telegram-connected hidden">✅ Telegram подключён</span>
+        </div>
+        <fieldset class="reminders-settings-days">
+          <legend>Когда напоминать</legend>
+          <label><input type="checkbox" name="days" value="7" checked /> За 7 дней</label>
+          <label><input type="checkbox" name="days" value="3" checked /> За 3 дня</label>
+          <label><input type="checkbox" name="days" value="1" checked /> За 1 день</label>
+          <label><input type="checkbox" name="days" value="0" checked /> В день срока</label>
+        </fieldset>
+        <p id="remindersSettingsHint" class="text-muted reminders-settings-hint"></p>
+        <div class="reminders-settings-actions">
+          <button type="button" class="btn btn-ghost" data-action="close-reminders-settings">Отмена</button>
+          <button type="submit" class="btn btn-primary" id="remindersSettingsSubmit">Сохранить настройки</button>
+        </div>
+        <button type="button" class="reminders-settings-disable-link hidden" id="remindersSettingsDisableLink" data-action="disable-reminders">Отключить напоминания</button>
+      </form>
+    </div>
+  </div>
+  <div id="taxLoadModal" class="modal hidden">
+    <div class="modal-card tax-load-modal-card">
+      <div class="modal-head tax-load-modal-head">
+        <h3 id="taxLoadModalTitle">Из чего состоят ваши налоги?</h3>
+      </div>
+      <div id="taxLoadModalBody" class="tax-load-modal-body"></div>
+      <div class="tax-load-modal-footer">
+        <button type="button" class="btn btn-primary" data-action="close-tax-load-modal">Понятно</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="incomeDeleteModal" class="modal hidden">
+    <div class="modal-card income-delete-modal-card">
+      <div class="modal-head income-delete-head">
+        <h3>Подтвердите удаление</h3>
+        <button type="button" class="icon-btn" data-action="cancel-income-delete" aria-label="Закрыть">&times;</button>
+      </div>
+      <p id="incomeDeleteMessage" class="income-delete-message">
+        <strong>Удалить запись?</strong>
+        <span>Это действие нельзя отменить.</span>
+      </p>
+      <div class="income-delete-actions">
+        <button type="button" class="btn btn-ghost income-delete-cancel" data-action="cancel-income-delete">Отмена</button>
+        <button type="button" class="btn income-delete-confirm" data-action="confirm-income-delete">Удалить</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="betaAccessModal" class="modal hidden">
+    <div class="modal-card beta-access-modal-card">
+      <div class="modal-head beta-access-head">
+        <h3 id="betaAccessTitle">Лимит бесплатной версии</h3>
+        <button type="button" class="icon-btn" data-action="close-beta-modal" aria-label="Закрыть">&times;</button>
+      </div>
+      <p id="betaAccessText" class="beta-access-message"></p>
+      <div class="beta-access-actions">
+        <button id="betaAccessPrimary" type="button" class="btn btn-primary" data-action="activate-beta-pro">Активировать бесплатно</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="./config.js"></script>
+  <script src="./app.js?v=20260313-fix-encoding-01" defer></script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

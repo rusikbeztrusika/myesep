@@ -1,0 +1,3644 @@
+﻿const DEFAULT_CONFIG = {
+  supabaseUrl: "",
+  supabaseAnonKey: "",
+  analytics: {
+    googleTagId: "",
+    plausibleDomain: ""
+  }
+};
+
+const APP_CONFIG = {
+  ...DEFAULT_CONFIG,
+  ...(window.APP_CONFIG || {}),
+  analytics: {
+    ...DEFAULT_CONFIG.analytics,
+    ...((window.APP_CONFIG && window.APP_CONFIG.analytics) || {})
+  }
+};
+
+const RATES = {
+  MRP: 3932,
+  MZP: 85000,
+  OPV_RATE: 0.1,
+  SO_RATE: 0.035,
+  VOSMS: 5950,
+  MAX_OPV_BASE: 850000
+};
+
+const MONTHS = ["Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"];
+
+const DEADLINES_2026 = [
+  { id: 1, date: "2026-02-15", title: "Сдача ФНО 910 за 2-е полугодие 2025", type: "report", regime: "simplified" },
+  { id: 2, date: "2026-02-25", title: "Уплата налогов по ФНО 910", type: "payment", regime: "simplified" },
+  { id: 3, date: "2026-03-31", title: "Декларация ИПН (220.00) за 2025", type: "report", regime: "our" },
+  { id: 4, date: "2026-04-25", title: "Уплата ОПВ, СО, ВОСМС за март", type: "payment", regime: "all" },
+  { id: 5, date: "2026-05-25", title: "Уплата ОПВ, СО, ВОСМС за апрель", type: "payment", regime: "all" },
+  { id: 6, date: "2026-06-25", title: "Уплата ОПВ, СО, ВОСМС за май", type: "payment", regime: "all" },
+  { id: 7, date: "2026-08-15", title: "Сдача ФНО 910 за 1-е полугодие 2026", type: "report", regime: "simplified" },
+  { id: 8, date: "2026-08-25", title: "Уплата налогов по ФНО 910", type: "payment", regime: "simplified" }
+];
+
+const initialIncomes = [
+  { id: 1, date: "2026-01-05", amount: 450000, category: "Услуги", comment: "Разработка сайта" },
+  { id: 2, date: "2026-01-18", amount: 120000, category: "Консультации", comment: "Налоговая консультация" },
+  { id: 3, date: "2026-02-10", amount: 380000, category: "Услуги", comment: "Дизайн логотипа" },
+  { id: 4, date: "2026-02-22", amount: 95000, category: "Аренда", comment: "Аренда помещения" },
+  { id: 5, date: "2026-03-08", amount: 520000, category: "Услуги", comment: "Разработка приложения" }
+];
+
+const STORAGE_KEY = "nalogip_state_v2";
+const SESSION_KEY = "nalogip_auth_v1";
+
+let supabaseClient = null;
+let eventCounter = 0;
+
+const TRIAL_DAYS = 7;
+const FREE_INCOME_MONTH_LIMIT = 30;
+const PRO_PRICE_MONTHLY = 1990;
+const PRO_FEATURES = {
+  deadline_reminders: "Напоминания по срокам",
+  unlimited_income_ops: "Безлимитные операции доходов",
+  exports: "Экспорт CSV/Excel",
+  advanced_analytics: "Расширенная аналитика"
+};
+
+function createDefaultSubscription() {
+  return {
+    plan: "free",
+    status: "free",
+    trialStartedAt: "",
+    trialEndsAt: "",
+    proStartedAt: ""
+  };
+}
+
+function normalizeSubscription(raw) {
+  const base = createDefaultSubscription();
+  const next = raw && typeof raw === "object" ? { ...base, ...raw } : base;
+
+  const allowedPlans = ["free", "pro"];
+  const allowedStatuses = ["free", "trialing", "active", "expired"];
+
+  next.plan = allowedPlans.includes(next.plan) ? next.plan : "free";
+  next.status = allowedStatuses.includes(next.status) ? next.status : next.plan === "pro" ? "active" : "free";
+  next.trialStartedAt = String(next.trialStartedAt || "");
+  next.trialEndsAt = String(next.trialEndsAt || "");
+  next.proStartedAt = String(next.proStartedAt || "");
+
+  return next;
+}
+
+function getFeatureTitle(featureKey) {
+  return PRO_FEATURES[featureKey] || "Pro-функция";
+}
+
+function getPaywallReasonText(featureKey) {
+  if (featureKey === "deadline_reminders") {
+    return "Авто-напоминания за 7, 3, 1 день и в день срока помогают не пропускать обязательные шаги.";
+  }
+
+  if (featureKey === "unlimited_income_ops") {
+    return `Во Free доступно до ${FREE_INCOME_MONTH_LIMIT} операций доходов в месяц. В Pro лимит снят.`;
+  }
+
+  if (featureKey === "exports") {
+    return "Экспорт CSV/Excel ускоряет передачу данных бухгалтеру и подготовку отчетности.";
+  }
+
+  if (featureKey === "advanced_analytics") {
+    return "Расширенная аналитика показывает риск по лимиту заранее, чтобы вы не выходили за рамки режима.";
+  }
+
+  return "Эта функция доступна в Trial/Pro.";
+}
+
+function getPaywallValueContext(featureKey) {
+  if (featureKey === "deadline_reminders") {
+    return {
+      title: "Снижаете риск просрочек и штрафов",
+      text: "Сервис напомнит о сроках заранее и подскажет, что именно нужно сделать по каждому обязательству."
+    };
+  }
+
+  if (featureKey === "unlimited_income_ops") {
+    return {
+      title: "Ведёте учёт без ограничений",
+      text: "Добавляйте сколько угодно операций в месяц и не теряйте данные, когда бизнес растет."
+    };
+  }
+
+  if (featureKey === "exports") {
+    return {
+      title: "Отдаёте данные в бухгалтерию за минуту",
+      text: "Экспортируйте операции в удобный файл и сокращайте ручную работу перед отчетными датами."
+    };
+  }
+
+  if (featureKey === "advanced_analytics") {
+    return {
+      title: "Видите риски по режиму заранее",
+      text: "Прогноз по лимиту помогает вовремя скорректировать стратегию и не платить лишнего."
+    };
+  }
+
+  return {
+    title: "Контроль налогов без лишней рутины",
+    text: "NalogIP Pro помогает держать доходы, сроки и риски в одном месте и принимать решения быстрее."
+  };
+}
+
+function getDaysLeft(dateString) {
+  if (!dateString) return 0;
+  const target = new Date(dateString);
+  if (Number.isNaN(target.getTime())) return 0;
+
+  const now = new Date();
+  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const targetStart = new Date(target.getFullYear(), target.getMonth(), target.getDate());
+  return Math.max(0, Math.ceil((targetStart - dayStart) / 86400000));
+}
+
+function refreshSubscriptionState() {
+  state.subscription = normalizeSubscription(state.subscription);
+
+  const nowMs = Date.now();
+  const trialEndMs = state.subscription.trialEndsAt ? new Date(state.subscription.trialEndsAt).getTime() : 0;
+
+  if (state.subscription.plan === "pro") {
+    state.subscription.status = "active";
+  } else if (state.subscription.status === "trialing" && trialEndMs > 0 && nowMs >= trialEndMs) {
+    state.subscription.status = "free";
+  }
+
+  state.isPro = state.subscription.plan === "pro" && state.subscription.status === "active";
+}
+
+function isProActive() {
+  refreshSubscriptionState();
+  return state.subscription.plan === "pro" && state.subscription.status === "active";
+}
+
+function isTrialActive() {
+  refreshSubscriptionState();
+  return state.subscription.plan === "free" && state.subscription.status === "trialing" && getDaysLeft(state.subscription.trialEndsAt) > 0;
+}
+
+function canUseFeature(featureKey) {
+  if (!(featureKey in PRO_FEATURES)) return true;
+  return isProActive() || isTrialActive();
+}
+
+function renderProModal(featureKey = "") {
+  const titleEl = document.getElementById("proModalTitle");
+  const priceEl = document.getElementById("proModalPrice");
+  const statusEl = document.getElementById("proModalStatus");
+  const reasonEl = document.getElementById("proModalReason");
+  const ctaEl = document.getElementById("proModalCta");
+  const ctaMetaEl = document.getElementById("proModalCtaMeta");
+  const focusCardEl = document.getElementById("proFocusCard");
+  const focusTitleEl = document.getElementById("proFocusTitle");
+  const focusTextEl = document.getElementById("proFocusText");
+  const proofEl = document.getElementById("proProof");
+
+  if (!titleEl || !statusEl || !reasonEl || !ctaEl) return;
+
+  refreshSubscriptionState();
+  const trialDays = getDaysLeft(state.subscription.trialEndsAt);
+  const proActive = isProActive();
+  const trialActive = isTrialActive();
+
+  titleEl.textContent = "NalogIP Pro";
+  if (priceEl) {
+    priceEl.textContent = `${fmt(PRO_PRICE_MONTHLY)}/мес`;
+  }
+
+  if (focusCardEl) {
+    focusCardEl.classList.toggle("hidden", proActive);
+  }
+
+  if (proofEl) {
+    proofEl.classList.toggle("hidden", proActive);
+  }
+
+  if (proActive) {
+    statusEl.textContent = "Ваш план: Pro активен";
+    statusEl.className = "pro-status active";
+    ctaEl.textContent = "Pro уже активен";
+    ctaEl.disabled = true;
+    if (ctaMetaEl) ctaMetaEl.textContent = "Все Pro-возможности уже доступны в вашем аккаунте.";
+  } else if (trialActive) {
+    statusEl.textContent = `Trial активен: ${trialDays} дн.`;
+    statusEl.className = "pro-status trial";
+    ctaEl.textContent = `Перейти на Pro · ${fmt(PRO_PRICE_MONTHLY)}/мес`;
+    ctaEl.disabled = false;
+    if (ctaMetaEl) ctaMetaEl.textContent = "Переход на Pro сохранит доступ ко всем функциям после Trial.";
+  } else {
+    statusEl.textContent = "Ваш план: Free";
+    statusEl.className = "pro-status free";
+    ctaEl.textContent = `Подключить Pro · ${fmt(PRO_PRICE_MONTHLY)}/мес`;
+    ctaEl.disabled = false;
+    if (ctaMetaEl) ctaMetaEl.textContent = "Подключение без лишних шагов, активация в один клик.";
+  }
+
+  if (featureKey) {
+    reasonEl.textContent = `${getFeatureTitle(featureKey)}: ${getPaywallReasonText(featureKey)}`;
+  } else if (proActive) {
+    reasonEl.textContent = "Доступ активен: напоминания, экспорт и аналитика уже работают в вашем аккаунте.";
+  } else {
+    reasonEl.textContent = "Откройте напоминания, экспорт и расширенную аналитику, чтобы меньше тратить времени на рутину.";
+  }
+
+  const context = getPaywallValueContext(featureKey);
+  if (focusTitleEl) focusTitleEl.textContent = context.title;
+  if (focusTextEl) focusTextEl.textContent = context.text;
+}
+
+function requireFeature(featureKey, source = "") {
+  if (canUseFeature(featureKey)) {
+    return true;
+  }
+
+  state.paywallFeature = featureKey;
+  saveState();
+  renderProModal(featureKey);
+  openModal(els.proModal);
+  trackEvent("paywall_shown", { feature: featureKey, source });
+  return false;
+}
+
+function activateProDemo() {
+  state.subscription.plan = "pro";
+  state.subscription.status = "active";
+  state.subscription.proStartedAt = new Date().toISOString();
+  state.paywallFeature = "";
+  refreshSubscriptionState();
+  saveState();
+  updatePlanUi();
+  closeModal(els.proModal);
+  renderDashboard();
+  trackEvent("upgrade_pro", { mode: "manual_demo" });
+}
+
+function ensureTrialIfNeeded() {
+  refreshSubscriptionState();
+
+  if (state.subscription.plan === "pro") {
+    return;
+  }
+
+  if (!state.subscription.trialStartedAt) {
+    const start = new Date();
+    const end = new Date(start);
+    end.setDate(end.getDate() + TRIAL_DAYS);
+
+    state.subscription.status = "trialing";
+    state.subscription.trialStartedAt = start.toISOString();
+    state.subscription.trialEndsAt = end.toISOString();
+    state.paywallFeature = "";
+    refreshSubscriptionState();
+    saveState();
+    trackEvent("trial_started", { days: TRIAL_DAYS });
+    return;
+  }
+
+  refreshSubscriptionState();
+  saveState();
+}
+
+function getIncomeOpsCountForMonth(dateString) {
+  const base = new Date(dateString);
+  if (Number.isNaN(base.getTime())) return 0;
+
+  return state.incomes.filter((row) => {
+    const date = new Date(row.date);
+    return date.getFullYear() === base.getFullYear() && date.getMonth() === base.getMonth();
+  }).length;
+}
+
+function exportIncomesCsv() {
+  const filters = {
+    ...getDefaultIncomeFilters(),
+    ...(state.incomeFilters || {})
+  };
+
+  const rows = getSortedIncomes(getFilteredIncomes(state.incomes, filters), filters.sort);
+  const header = ["Дата", "Категория", "Комментарий", "Сумма"];
+
+  const csvRows = [
+    header.join(";"),
+    ...rows.map((row) => {
+      const cells = [
+        formatDate(row.date),
+        String(row.category || ""),
+        String(row.comment || ""),
+        String(Math.round(row.amount || 0))
+      ].map((value) => `"${String(value).replaceAll('"', '""')}"`);
+
+      return cells.join(";");
+    })
+  ];
+
+  const blob = new Blob([`\ufeff${csvRows.join("\n")}`], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const today = new Date().toISOString().slice(0, 10);
+
+  link.href = url;
+  link.download = `nalogip-income-${today}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function getDefaultIncomeFilters() {
+  return {
+    query: "",
+    category: "all",
+    period: "all",
+    sort: "date_desc"
+  };
+}
+function normalizeIncomeFilterPeriod(value) {
+  const allowed = ["all", "30d", "90d", "ytd"];
+  return allowed.includes(value) ? value : "all";
+}
+
+function normalizeIncomeFilterSort(value) {
+  const allowed = ["date_desc", "date_asc", "amount_desc", "amount_asc"];
+  return allowed.includes(value) ? value : "date_desc";
+}
+
+function getDefaultCalendarFilters() {
+  return {
+    query: "",
+    type: "all",
+    status: "all",
+    timeframe: "upcoming"
+  };
+}
+
+function normalizeCalendarType(value) {
+  const allowed = ["all", "payment", "report"];
+  return allowed.includes(value) ? value : "all";
+}
+
+function normalizeCalendarStatus(value) {
+  const allowed = ["all", "pending", "done"];
+  return allowed.includes(value) ? value : "all";
+}
+
+function normalizeCalendarTimeframe(value) {
+  const allowed = ["upcoming", "year", "all"];
+  return allowed.includes(value) ? value : "upcoming";
+}
+
+function getDefaultTaxPlanner() {
+  return {
+    income: 500000,
+    expenses: 0,
+    reservePct: 15
+  };
+}
+
+function normalizeTaxPlanner(raw, fallbackIncome = 0, fallbackExpenses = 0, fallbackReservePct = 15) {
+  const source = raw && typeof raw === "object" ? raw : {};
+
+  const incomeInput = Number(source.income ?? fallbackIncome);
+  const income = Math.max(0, Math.round(Number.isFinite(incomeInput) ? incomeInput : 0));
+
+  const maxExpenses = Math.round(income * 0.95);
+  const expensesInput = Number(source.expenses ?? fallbackExpenses);
+  const expenses = Math.min(Math.max(0, Math.round(Number.isFinite(expensesInput) ? expensesInput : 0)), maxExpenses);
+
+  const reserveInput = Number(source.reservePct ?? fallbackReservePct);
+  const reservePct = Math.min(50, Math.max(0, Math.round(Number.isFinite(reserveInput) ? reserveInput : 15)));
+
+  return {
+    income,
+    expenses,
+    reservePct
+  };
+}
+
+
+const REMINDER_LEAD_DAYS = [7, 3, 1, 0];
+
+function normalizeDeadlineChecklistProgress(raw) {
+  if (!raw || typeof raw !== "object") return {};
+
+  const normalized = {};
+
+  Object.entries(raw).forEach(([deadlineId, value]) => {
+    const id = Number(deadlineId);
+    if (!Number.isFinite(id) || id <= 0 || !value || typeof value !== "object") return;
+
+    const next = {};
+    Object.entries(value).forEach(([taskKey, checked]) => {
+      if (!taskKey) return;
+      if (Boolean(checked)) {
+        next[String(taskKey)] = true;
+      }
+    });
+
+    if (Object.keys(next).length > 0) {
+      normalized[String(id)] = next;
+    }
+  });
+
+  return normalized;
+}
+
+function normalizeDeadlineReminderSettings(raw, fallbackEmail = "") {
+  if (!raw || typeof raw !== "object") return {};
+
+  const normalized = {};
+
+  Object.entries(raw).forEach(([deadlineId, value]) => {
+    const id = Number(deadlineId);
+    if (!Number.isFinite(id) || id <= 0 || !value || typeof value !== "object") return;
+
+    const channels = value.channels && typeof value.channels === "object" ? value.channels : {};
+    const leadDaysSource = Array.isArray(value.leadDays) ? value.leadDays : REMINDER_LEAD_DAYS;
+
+    const leadDays = [...new Set(leadDaysSource.map((item) => Number(item)).filter((item) => Number.isFinite(item) && item >= 0 && item <= 30))]
+      .sort((a, b) => b - a);
+
+    normalized[String(id)] = {
+      channels: {
+        telegram: Boolean(channels.telegram),
+        whatsapp: Boolean(channels.whatsapp),
+        email: Boolean(channels.email)
+      },
+      contacts: {
+        telegram: String(value.contacts && value.contacts.telegram ? value.contacts.telegram : "").trim(),
+        whatsapp: String(value.contacts && value.contacts.whatsapp ? value.contacts.whatsapp : "").trim(),
+        email: String(value.contacts && value.contacts.email ? value.contacts.email : fallbackEmail).trim()
+      },
+      leadDays: leadDays.length > 0 ? leadDays : [...REMINDER_LEAD_DAYS]
+    };
+  });
+
+  return normalized;
+}
+
+function getDeadlineReminderSettings(deadlineId) {
+  const key = String(deadlineId);
+  const fallbackEmail = state.userEmail && state.userEmail.includes("@") ? state.userEmail : "";
+  const source = state.deadlineReminderSettings[key] || {};
+  const normalizedMap = normalizeDeadlineReminderSettings({ [key]: source }, fallbackEmail);
+  const normalized = normalizedMap[key] || {
+    channels: { telegram: false, whatsapp: false, email: true },
+    contacts: { telegram: "", whatsapp: "", email: fallbackEmail },
+    leadDays: [...REMINDER_LEAD_DAYS]
+  };
+
+  if (!state.deadlineReminderSettings[key]) {
+    state.deadlineReminderSettings[key] = normalized;
+  }
+
+  return normalized;
+}
+
+function updateDeadlineReminderSubscription(deadlineId) {
+  const hasSettings = state.deadlineReminderSettings[String(deadlineId)];
+  if (!hasSettings) return;
+
+  const channels = hasSettings.channels || {};
+  const enabled = Boolean(channels.telegram || channels.whatsapp || channels.email);
+  const exists = state.deadlineReminderIds.includes(deadlineId);
+
+  if (enabled && !exists) {
+    state.deadlineReminderIds.push(deadlineId);
+  }
+
+  if (!enabled && exists) {
+    state.deadlineReminderIds = state.deadlineReminderIds.filter((id) => id !== deadlineId);
+  }
+}
+
+const state = {
+  isLoggedIn: false,
+  userEmail: "demo@nalogip.kz",
+  page: "dashboard",
+  isPro: false,
+  regime: "simplified",
+  incomes: [...initialIncomes],
+  doneDeadlines: [],
+  profile: {
+    name: "ИП Сарсенов А.",
+    iin: "831204350124",
+    city: "Алматы",
+    activity: "IT-услуги"
+  },
+  calcIncome: 500000,
+  calcExpenses: 0,
+  calcPeriod: "month",
+  landingPeriod: "month",
+  landingDeadlineOpenId: null,
+  deadlineReminderIds: [],
+  deadlineChecklistProgress: {},
+  deadlineReminderSettings: {},
+  subscription: createDefaultSubscription(),
+  paywallFeature: "",
+  incomeEditId: null,
+  incomeFilters: getDefaultIncomeFilters(),
+  calendarFilters: getDefaultCalendarFilters(),
+  taxPlanner: getDefaultTaxPlanner()
+};
+
+const els = {
+  publicApp: document.getElementById("publicApp"),
+  dashboardApp: document.getElementById("dashboardApp"),
+  landingIncome: document.getElementById("landingIncome"),
+  landingCards: document.getElementById("landingCards"),
+  landingSummary: document.getElementById("landingSummary"),
+  landingDeadlines: document.getElementById("landingDeadlines"),
+  loginModal: document.getElementById("loginModal"),
+  loginForm: document.getElementById("loginForm"),
+  loginEmail: document.getElementById("loginEmail"),
+  loginPassword: document.getElementById("loginPassword"),
+  loginStatus: document.getElementById("loginStatus"),
+  proModal: document.getElementById("proModal"),
+  deadlineModal: document.getElementById("deadlineModal"),
+  deadlineModalDate: document.getElementById("deadlineModalDate"),
+  deadlineModalTitle: document.getElementById("deadlineModalTitle"),
+  deadlineModalMeta: document.getElementById("deadlineModalMeta"),
+  deadlineModalChecklist: document.getElementById("deadlineModalChecklist"),
+  deadlineModalSubscribe: document.getElementById("deadlineModalSubscribe"),
+  deadlineModalHint: document.getElementById("deadlineModalHint"),
+  deadlineModalReminderPanel: document.getElementById("deadlineModalReminderPanel"),
+  pageContent: document.getElementById("pageContent"),
+  pageTitle: document.getElementById("pageTitle"),
+  regimeSelect: document.getElementById("regimeSelect"),
+  sidebarNav: document.getElementById("sidebarNav"),
+  accountName: document.getElementById("accountName"),
+  planBadge: document.getElementById("planBadge"),
+  proBtn: document.getElementById("proBtn")
+};
+
+const PAGE_TITLES = {
+  dashboard: "Дашборд",
+  income: "Доходы",
+  taxes: "Налоги и платежи",
+  calendar: "Календарь сроков",
+  calculator: "Калькулятор режимов",
+  settings: "Настройки"
+};
+
+init();
+
+async function init() {
+  initAnalyticsProviders();
+  initSupabase();
+  loadState();
+  refreshSubscriptionState();
+  bindBaseEvents();
+  try {
+    renderLandingCards();
+  } catch (error) {
+    console.error("Landing calculator render failed:", error);
+    if (els.landingCards) {
+      els.landingCards.innerHTML = '<p class="deadline-empty">Не удалось отрисовать калькулятор. Обновите страницу.</p>';
+    }
+  }
+  try {
+    renderLandingDeadlines();
+  } catch (error) {
+    console.error("Landing deadlines render failed:", error);
+    if (els.landingDeadlines) {
+      els.landingDeadlines.innerHTML = '<p class="deadline-empty">Не удалось загрузить сроки. Обновите страницу.</p>';
+    }
+  }
+  updateAuthUi();
+
+  if (supabaseClient) {
+    const { data } = await supabaseClient.auth.getSession();
+    if (data.session && data.session.user) {
+      state.isLoggedIn = true;
+      state.userEmail = data.session.user.email || state.userEmail;
+      ensureTrialIfNeeded();
+      updateAuthUi();
+      renderDashboard();
+    }
+  } else {
+    const savedSession = readJson(SESSION_KEY);
+    if (savedSession && savedSession.isLoggedIn) {
+      state.isLoggedIn = true;
+      state.userEmail = savedSession.userEmail || state.userEmail;
+      ensureTrialIfNeeded();
+      updateAuthUi();
+      renderDashboard();
+    }
+  }
+
+  trackEvent("visit");
+}
+
+function bindBaseEvents() {
+  document.addEventListener("click", handleGlobalClick);
+  document.addEventListener("submit", handleGlobalSubmit);
+  document.addEventListener("change", handleGlobalChange);
+  document.addEventListener("toggle", handleGlobalToggle, true);
+  if (els.landingIncome) {
+    els.landingIncome.addEventListener("input", () => {
+      els.landingIncome.value = String(normalizeIncome(els.landingIncome.value));
+      renderLandingCards();
+    });
+  }
+
+  if (els.regimeSelect) {
+    els.regimeSelect.addEventListener("change", (event) => {
+      state.regime = event.target.value;
+      saveState();
+      renderDashboard();
+      trackEvent("regime_change", { regime: state.regime });
+    });
+  }
+}
+
+function initSupabase() {
+  if (!(window.supabase && APP_CONFIG.supabaseUrl && APP_CONFIG.supabaseAnonKey)) {
+    return;
+  }
+
+  supabaseClient = window.supabase.createClient(APP_CONFIG.supabaseUrl, APP_CONFIG.supabaseAnonKey, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true
+    }
+  });
+}
+
+function loadState() {
+  const saved = readJson(STORAGE_KEY);
+  if (!saved) return;
+
+  state.regime = saved.regime || state.regime;
+  state.incomes = Array.isArray(saved.incomes) ? saved.incomes : state.incomes;
+  state.doneDeadlines = Array.isArray(saved.doneDeadlines) ? saved.doneDeadlines : [];
+  state.profile = { ...state.profile, ...(saved.profile || {}) };
+  state.calcIncome = Number(saved.calcIncome || state.calcIncome);
+  state.calcExpenses = Number(saved.calcExpenses || state.calcExpenses);
+  state.calcPeriod = saved.calcPeriod === "year" ? "year" : "month";
+  state.landingPeriod = saved.landingPeriod === "year" ? "year" : state.landingPeriod;
+  state.landingDeadlineOpenId = Number(saved.landingDeadlineOpenId || 0) || null;
+  state.deadlineReminderIds = Array.isArray(saved.deadlineReminderIds)
+    ? saved.deadlineReminderIds.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)
+    : [];
+  state.deadlineChecklistProgress = normalizeDeadlineChecklistProgress(saved.deadlineChecklistProgress);
+  state.deadlineReminderSettings = normalizeDeadlineReminderSettings(saved.deadlineReminderSettings, state.userEmail || "");
+
+  Object.keys(state.deadlineReminderSettings).forEach((id) => {
+    updateDeadlineReminderSubscription(Number(id));
+  });
+
+  state.deadlineReminderIds = [...new Set(state.deadlineReminderIds.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0))];
+
+  state.subscription = normalizeSubscription(saved.subscription);
+  if (!saved.subscription && Boolean(saved.isPro)) {
+    state.subscription.plan = "pro";
+    state.subscription.status = "active";
+  }
+
+  const savedFilters = saved.incomeFilters && typeof saved.incomeFilters === "object" ? saved.incomeFilters : {};
+  state.incomeFilters = {
+    ...getDefaultIncomeFilters(),
+    query: String(savedFilters.query || "").trim(),
+    category: String(savedFilters.category || "all"),
+    period: normalizeIncomeFilterPeriod(String(savedFilters.period || "all")),
+    sort: normalizeIncomeFilterSort(String(savedFilters.sort || "date_desc"))
+  };
+
+  const savedCalendarFilters = saved.calendarFilters && typeof saved.calendarFilters === "object" ? saved.calendarFilters : {};
+  state.calendarFilters = {
+    ...getDefaultCalendarFilters(),
+    query: String(savedCalendarFilters.query || "").trim(),
+    type: normalizeCalendarType(String(savedCalendarFilters.type || "all")),
+    status: normalizeCalendarStatus(String(savedCalendarFilters.status || "all")),
+    timeframe: normalizeCalendarTimeframe(String(savedCalendarFilters.timeframe || "upcoming"))
+  };
+
+  const taxFallbackIncome = Math.max(getCurrentMonthIncome(), normalizeIncome(state.calcIncome), 100000);
+  const taxFallbackExpenses = normalizeIncome(state.calcExpenses);
+  state.taxPlanner = normalizeTaxPlanner(saved.taxPlanner, taxFallbackIncome, taxFallbackExpenses, 15);
+
+  state.incomeEditId = Number(saved.incomeEditId || 0) || null;
+  state.paywallFeature = String(saved.paywallFeature || "");
+
+  refreshSubscriptionState();
+}
+
+function saveState() {
+  localStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify({
+      isPro: state.isPro,
+      regime: state.regime,
+      incomes: state.incomes,
+      doneDeadlines: state.doneDeadlines,
+      profile: state.profile,
+      calcIncome: state.calcIncome,
+      calcExpenses: state.calcExpenses,
+      calcPeriod: state.calcPeriod,
+      landingPeriod: state.landingPeriod,
+      landingDeadlineOpenId: state.landingDeadlineOpenId,
+      deadlineReminderIds: state.deadlineReminderIds,
+      deadlineChecklistProgress: state.deadlineChecklistProgress,
+      deadlineReminderSettings: state.deadlineReminderSettings,
+      incomeEditId: state.incomeEditId,
+      incomeFilters: state.incomeFilters,
+      calendarFilters: state.calendarFilters,
+      taxPlanner: state.taxPlanner,
+      subscription: state.subscription,
+      paywallFeature: state.paywallFeature
+    })
+  );
+}
+
+function updateAuthUi() {
+  if (state.isLoggedIn) {
+    els.publicApp.classList.add("hidden");
+    els.dashboardApp.classList.remove("hidden");
+    els.accountName.textContent = state.profile.name || state.userEmail;
+    updatePlanUi();
+    return;
+  }
+
+  els.publicApp.classList.remove("hidden");
+  els.dashboardApp.classList.add("hidden");
+}
+
+function updatePlanUi() {
+  refreshSubscriptionState();
+
+  const trialDays = getDaysLeft(state.subscription.trialEndsAt);
+  if (isProActive()) {
+    els.planBadge.textContent = "✨ Pro план";
+  } else if (isTrialActive()) {
+    els.planBadge.textContent = `Trial · ${trialDays} дн.`;
+  } else {
+    els.planBadge.textContent = "Free план";
+  }
+
+  els.proBtn.classList.remove("hidden");
+  els.proBtn.textContent = isProActive() ? "Тариф" : "Тарифы";
+}
+
+function handleGlobalClick(event) {
+  const actionEl = event.target.closest("[data-action]");
+  if (actionEl) {
+    const action = actionEl.dataset.action;
+
+    if (action === "open-login") {
+      openModal(els.loginModal);
+      trackEvent("open_login_modal");
+      return;
+    }
+
+    if (action === "close-login") {
+      closeModal(els.loginModal);
+      return;
+    }
+
+    if (action === "demo-login") {
+      loginDemo();
+      return;
+    }
+
+    if (action === "open-pro") {
+      renderProModal(state.paywallFeature || "");
+      openModal(els.proModal);
+      trackEvent("open_pro_modal", { feature: state.paywallFeature || "" });
+      return;
+    }
+
+    if (action === "close-pro") {
+      closeModal(els.proModal);
+      return;
+    }
+
+    if (action === "close-deadline-modal") {
+      state.landingDeadlineOpenId = null;
+      saveState();
+      closeModal(els.deadlineModal);
+      return;
+    }
+
+    if (action === "upgrade-pro") {
+      activateProDemo();
+      return;
+    }
+
+    if (action === "export-income-csv") {
+      if (!requireFeature("exports", "income_page")) return;
+      exportIncomesCsv();
+      trackEvent("income_export_csv");
+      return;
+    }
+
+    if (action === "copy-deadline-handoff") {
+      const deadlineId = Number(actionEl.dataset.deadlineHandoff || state.landingDeadlineOpenId || 0);
+      const row = DEADLINES_2026.find((item) => item.id === deadlineId);
+      if (!row) return;
+
+      const textToCopy = buildDeadlineHandoffText(row);
+      copyTextToClipboard(textToCopy).then((ok) => {
+        if (els.deadlineModalHint) {
+          els.deadlineModalHint.textContent = ok
+            ? "Чеклист скопирован. Отправьте его бухгалтеру в Telegram/WhatsApp/Email."
+            : "Не удалось скопировать автоматически. Выделите текст вручную и отправьте бухгалтеру.";
+        }
+      });
+
+      trackEvent("deadline_handoff_copy", { id: deadlineId });
+      return;
+    }
+
+    if (action === "copy-reminder-plan") {
+      const deadlineId = Number(actionEl.dataset.deadlineReminderPlan || state.landingDeadlineOpenId || 0);
+      const row = DEADLINES_2026.find((item) => item.id === deadlineId);
+      if (!row) return;
+
+      const settings = getDeadlineReminderSettings(deadlineId);
+      const textToCopy = buildReminderPlanText(row, settings);
+      copyTextToClipboard(textToCopy).then((ok) => {
+        if (els.deadlineModalHint) {
+          els.deadlineModalHint.textContent = ok
+            ? "План напоминаний скопирован. Можно передать команде или бухгалтеру."
+            : "Не удалось скопировать план автоматически.";
+        }
+      });
+
+      trackEvent("deadline_reminder_plan_copy", { id: deadlineId });
+      return;
+    }
+
+    if (action === "logout") {
+      logout();
+      return;
+    }
+  }
+
+  if (event.target === els.loginModal) {
+    closeModal(els.loginModal);
+    return;
+  }
+
+  if (event.target === els.proModal) {
+    closeModal(els.proModal);
+    return;
+  }
+
+  if (event.target === els.deadlineModal) {
+    state.landingDeadlineOpenId = null;
+    saveState();
+    closeModal(els.deadlineModal);
+    return;
+  }
+
+  const reminderLeadBtn = event.target.closest("[data-reminder-lead]");
+  if (reminderLeadBtn) {
+    if (!requireFeature("deadline_reminders", "deadline_reminder_timeline")) return;
+
+    const deadlineId = Number(reminderLeadBtn.dataset.deadlineId || 0);
+    const leadDays = Number(reminderLeadBtn.dataset.reminderLead || 0);
+    if (!deadlineId || !Number.isFinite(leadDays)) return;
+
+    const key = String(deadlineId);
+    const settings = getDeadlineReminderSettings(deadlineId);
+    const current = new Set((settings.leadDays || []).map((x) => Number(x)).filter((x) => Number.isFinite(x)));
+
+    if (current.has(leadDays) && current.size > 1) {
+      current.delete(leadDays);
+    } else {
+      current.add(leadDays);
+    }
+
+    settings.leadDays = [...current].sort((a, b) => b - a);
+    state.deadlineReminderSettings[key] = settings;
+    updateDeadlineReminderSubscription(deadlineId);
+    saveState();
+    renderLandingDeadlineModal(deadlineId);
+
+    trackEvent("deadline_reminder_timeline_toggle", { id: deadlineId, leadDays, enabled: current.has(leadDays) });
+    return;
+  }
+  const periodBtn = event.target.closest("[data-landing-period]");
+  if (periodBtn) {
+    state.landingPeriod = periodBtn.dataset.landingPeriod === "year" ? "year" : "month";
+    saveState();
+    renderLandingCards();
+    trackEvent("landing_period_change", { period: state.landingPeriod });
+    return;
+  }
+
+  const presetBtn = event.target.closest("[data-landing-preset]");
+  if (presetBtn && els.landingIncome) {
+    els.landingIncome.value = String(normalizeIncome(presetBtn.dataset.landingPreset));
+    renderLandingCards();
+    trackEvent("landing_income_preset", { income: Number(els.landingIncome.value) || 0 });
+    return;
+  }
+
+  const stepBtn = event.target.closest("[data-landing-step]");
+  if (stepBtn && els.landingIncome) {
+    const step = Number(stepBtn.dataset.landingStep || 0);
+    const current = normalizeIncome(els.landingIncome.value);
+    els.landingIncome.value = String(normalizeIncome(current + step));
+    renderLandingCards();
+    trackEvent("landing_income_step", { step, income: Number(els.landingIncome.value) || 0 });
+    return;
+  }
+
+
+  const calcPeriodBtn = event.target.closest("[data-calc-period]");
+  if (calcPeriodBtn && state.page === "calculator") {
+    state.calcPeriod = calcPeriodBtn.dataset.calcPeriod === "year" ? "year" : "month";
+    saveState();
+    renderCalculatorPage();
+    trackEvent("calc_period_change", { period: state.calcPeriod });
+    return;
+  }
+
+  const calcPresetBtn = event.target.closest("[data-calc-preset]");
+  if (calcPresetBtn && state.page === "calculator") {
+    const presetMonthly = normalizeIncome(calcPresetBtn.dataset.calcPreset || 0);
+    const multiplier = getCalcPeriodMultiplier();
+    const inputValue = state.calcPeriod === "year" ? presetMonthly * 12 : presetMonthly;
+    state.calcIncome = normalizeIncome(inputValue) / multiplier;
+    saveState();
+    renderCalculatorPage();
+    trackEvent("calc_income_preset", { income: state.calcIncome, period: state.calcPeriod });
+    return;
+  }
+
+  const calcStepBtn = event.target.closest("[data-calc-step]");
+  if (calcStepBtn && state.page === "calculator") {
+    const stepBase = Number(calcStepBtn.dataset.calcStep || 0);
+    const step = state.calcPeriod === "year" ? stepBase * 12 : stepBase;
+    const currentInput = getCalcInputIncome();
+    const nextInput = normalizeIncome(currentInput + step);
+    state.calcIncome = toCalcStorageValue(nextInput);
+    saveState();
+    renderCalculatorPage();
+    trackEvent("calc_income_step", { step, income: state.calcIncome, period: state.calcPeriod });
+    return;
+  }
+
+  const calcExpensePresetBtn = event.target.closest("[data-calc-expense-ratio]");
+  if (calcExpensePresetBtn && state.page === "calculator") {
+    const ratio = Math.min(Math.max(Number(calcExpensePresetBtn.dataset.calcExpenseRatio || 0), 0), 1);
+    const baseIncome = getCalcInputIncome();
+    const nextExpensesInput = normalizeIncome(baseIncome * ratio);
+    state.calcExpenses = toCalcStorageValue(nextExpensesInput);
+    saveState();
+    renderCalculatorPage();
+    trackEvent("calc_expense_ratio", { ratio, expenses: state.calcExpenses, period: state.calcPeriod });
+    return;
+  }
+
+  const taxIncomePresetBtn = event.target.closest("[data-tax-income-preset]");
+  if (taxIncomePresetBtn && state.page === "taxes") {
+    const income = normalizeIncome(taxIncomePresetBtn.dataset.taxIncomePreset || 0);
+    state.taxPlanner = normalizeTaxPlanner({ ...state.taxPlanner, income }, income, state.taxPlanner.expenses, state.taxPlanner.reservePct);
+    saveState();
+    renderTaxesPage();
+    trackEvent("tax_income_preset", { income, regime: state.regime });
+    return;
+  }
+
+  const taxExpenseRatioBtn = event.target.closest("[data-tax-expense-ratio]");
+  if (taxExpenseRatioBtn && state.page === "taxes") {
+    const ratio = Math.min(Math.max(Number(taxExpenseRatioBtn.dataset.taxExpenseRatio || 0), 0), 0.95);
+    const income = normalizeIncome(state.taxPlanner.income || getCurrentMonthIncome() || 0);
+    const expenses = normalizeIncome(income * ratio);
+    state.taxPlanner = normalizeTaxPlanner({ ...state.taxPlanner, income, expenses }, income, expenses, state.taxPlanner.reservePct);
+    saveState();
+    renderTaxesPage();
+    trackEvent("tax_expense_ratio", { ratio, regime: state.regime });
+    return;
+  }
+
+  const taxReservePresetBtn = event.target.closest("[data-tax-reserve-preset]");
+  if (taxReservePresetBtn && state.page === "taxes") {
+    const reservePct = Math.min(Math.max(Number(taxReservePresetBtn.dataset.taxReservePreset || 15), 0), 50);
+    state.taxPlanner = normalizeTaxPlanner({ ...state.taxPlanner, reservePct }, state.taxPlanner.income, state.taxPlanner.expenses, reservePct);
+    saveState();
+    renderTaxesPage();
+    trackEvent("tax_reserve_preset", { reservePct, regime: state.regime });
+    return;
+  }
+
+  const taxResetBtn = event.target.closest("[data-tax-reset]");
+  if (taxResetBtn && state.page === "taxes") {
+    const baseIncome = Math.max(getCurrentMonthIncome(), normalizeIncome(state.calcIncome), 100000);
+    const baseExpenses = normalizeIncome(state.calcExpenses);
+    state.taxPlanner = normalizeTaxPlanner({}, baseIncome, baseExpenses, 15);
+    saveState();
+    renderTaxesPage();
+    trackEvent("tax_planner_reset", { regime: state.regime });
+    return;
+  }
+  const calendarTypeBtn = event.target.closest("[data-calendar-type]");
+  if (calendarTypeBtn && state.page === "calendar") {
+    state.calendarFilters.type = normalizeCalendarType(String(calendarTypeBtn.dataset.calendarType || "all"));
+    saveState();
+    renderCalendarPage();
+    trackEvent("calendar_filter_type", { type: state.calendarFilters.type });
+    return;
+  }
+
+  const calendarStatusBtn = event.target.closest("[data-calendar-status]");
+  if (calendarStatusBtn && state.page === "calendar") {
+    state.calendarFilters.status = normalizeCalendarStatus(String(calendarStatusBtn.dataset.calendarStatus || "all"));
+    saveState();
+    renderCalendarPage();
+    trackEvent("calendar_filter_status", { status: state.calendarFilters.status });
+    return;
+  }
+
+  const calendarTimeframeBtn = event.target.closest("[data-calendar-timeframe]");
+  if (calendarTimeframeBtn && state.page === "calendar") {
+    state.calendarFilters.timeframe = normalizeCalendarTimeframe(String(calendarTimeframeBtn.dataset.calendarTimeframe || "upcoming"));
+    saveState();
+    renderCalendarPage();
+    trackEvent("calendar_filter_timeframe", { timeframe: state.calendarFilters.timeframe });
+    return;
+  }
+
+  const calendarResetBtn = event.target.closest("[data-reset-calendar-filters]");
+  if (calendarResetBtn && state.page === "calendar") {
+    state.calendarFilters = getDefaultCalendarFilters();
+    saveState();
+    renderCalendarPage();
+    trackEvent("calendar_filters_reset");
+    return;
+  }
+
+  const calendarMarkVisibleBtn = event.target.closest("[data-calendar-mark-visible]");
+  if (calendarMarkVisibleBtn && state.page === "calendar") {
+    const visibleRows = getFilteredCalendarRows();
+    const idsToMark = visibleRows.filter((row) => !row.done).map((row) => row.id);
+    if (idsToMark.length > 0) {
+      const set = new Set(state.doneDeadlines);
+      idsToMark.forEach((id) => {
+        set.add(id);
+        const row = DEADLINES_2026.find((item) => item.id === id);
+        if (row) {
+          markAllDeadlineTasks(id, row, true);
+        }
+      });
+      state.doneDeadlines = [...set];
+      saveState();
+      renderCalendarPage();
+      renderLandingDeadlines();
+      trackEvent("calendar_mark_visible_done", { count: idsToMark.length });
+    }
+    return;
+  }
+  const subscribeBtn = event.target.closest("[data-deadline-subscribe]");
+  if (subscribeBtn) {
+    if (!requireFeature("deadline_reminders", "landing_deadline_modal")) return;
+
+    const deadlineId = Number(subscribeBtn.dataset.deadlineSubscribe || 0);
+    if (deadlineId > 0) {
+      const hasReminder = state.deadlineReminderIds.includes(deadlineId);
+
+      if (hasReminder) {
+        state.deadlineReminderIds = state.deadlineReminderIds.filter((id) => id !== deadlineId);
+      } else {
+        const settings = getDeadlineReminderSettings(deadlineId);
+        if (!(settings.channels.telegram || settings.channels.whatsapp || settings.channels.email)) {
+          settings.channels.email = true;
+        }
+        state.deadlineReminderSettings[String(deadlineId)] = settings;
+        state.deadlineReminderIds = [...state.deadlineReminderIds, deadlineId];
+      }
+
+      state.landingDeadlineOpenId = deadlineId;
+      saveState();
+      renderLandingDeadlines();
+      renderLandingDeadlineModal(deadlineId);
+      trackEvent("landing_deadline_reminder_toggle", { id: deadlineId, enabled: !hasReminder });
+    }
+    return;
+  }
+
+  const expandBtn = event.target.closest("[data-deadline-expand]");
+  if (expandBtn) {
+    const deadlineId = Number(expandBtn.dataset.deadlineExpand || 0);
+    if (deadlineId > 0) {
+      state.landingDeadlineOpenId = deadlineId;
+      saveState();
+      renderLandingDeadlines();
+      renderLandingDeadlineModal(deadlineId);
+      openModal(els.deadlineModal);
+      trackEvent("landing_deadline_expand", { id: deadlineId, open: true });
+    }
+    return;
+  }
+
+  const pageBtn = event.target.closest("[data-page]");
+  if (pageBtn && state.isLoggedIn) {
+    state.page = pageBtn.dataset.page;
+    renderDashboard();
+    trackEvent("page_open", { page: state.page });
+    return;
+  }
+
+  const incomePresetBtn = event.target.closest("[data-income-preset]");
+  if (incomePresetBtn && state.page === "income") {
+    const amountInput = document.getElementById("incomeAmountInput");
+    if (amountInput) {
+      amountInput.value = String(normalizeIncome(incomePresetBtn.dataset.incomePreset || 0));
+      amountInput.focus();
+      trackEvent("income_preset", { amount: Number(amountInput.value) || 0 });
+    }
+    return;
+  }
+
+  const editBtn = event.target.closest("[data-edit-income]");
+  if (editBtn && state.page === "income") {
+    state.incomeEditId = Number(editBtn.dataset.editIncome || 0) || null;
+    saveState();
+    renderDashboard();
+    trackEvent("income_edit_open", { id: state.incomeEditId });
+    return;
+  }
+
+  const cancelEditBtn = event.target.closest("[data-cancel-income-edit]");
+  if (cancelEditBtn && state.page === "income") {
+    state.incomeEditId = null;
+    saveState();
+    renderDashboard();
+    trackEvent("income_edit_cancel");
+    return;
+  }
+
+  const resetFiltersBtn = event.target.closest("[data-reset-income-filters]");
+  if (resetFiltersBtn && state.page === "income") {
+    state.incomeFilters = getDefaultIncomeFilters();
+    saveState();
+    renderDashboard();
+    trackEvent("income_filters_reset");
+    return;
+  }
+
+  const deleteBtn = event.target.closest("[data-delete-income]");
+  if (deleteBtn) {
+    const id = Number(deleteBtn.dataset.deleteIncome);
+    const row = state.incomes.find((item) => item.id === id);
+    const ok = window.confirm(`Удалить операцию ${row ? fmt(row.amount) : ""}?`);
+    if (!ok) return;
+
+    state.incomes = state.incomes.filter((item) => item.id !== id);
+    if (state.incomeEditId === id) {
+      state.incomeEditId = null;
+    }
+    saveState();
+    renderDashboard();
+    trackEvent("income_delete", { id });
+    return;
+  }
+
+  const deadlineBtn = event.target.closest("[data-toggle-deadline]");
+  if (deadlineBtn) {
+    const id = Number(deadlineBtn.dataset.toggleDeadline);
+    toggleDeadlineDone(id);
+  }
+}
+
+
+function handleGlobalChange(event) {
+  if (!(event.target instanceof Element)) {
+    return;
+  }
+
+  const taskInput = event.target.closest('input[data-deadline-task]');
+  if (!taskInput) {
+    return;
+  }
+
+  const deadlineId = Number(taskInput.dataset.deadlineId || 0);
+  const taskKey = String(taskInput.dataset.deadlineTask || "").trim();
+  if (!deadlineId || !taskKey) {
+    return;
+  }
+
+  const key = String(deadlineId);
+  const prev = state.deadlineChecklistProgress[key] && typeof state.deadlineChecklistProgress[key] === "object"
+    ? { ...state.deadlineChecklistProgress[key] }
+    : {};
+
+  if (taskInput.checked) {
+    prev[taskKey] = true;
+  } else {
+    delete prev[taskKey];
+  }
+
+  if (Object.keys(prev).length > 0) {
+    state.deadlineChecklistProgress[key] = prev;
+  } else {
+    delete state.deadlineChecklistProgress[key];
+  }
+
+  const row = DEADLINES_2026.find((item) => item.id === deadlineId);
+  if (row) {
+    syncDeadlineDoneByChecklist(deadlineId, row);
+  }
+
+  saveState();
+  renderLandingDeadlineModal(deadlineId);
+  renderLandingDeadlines();
+
+  if (state.isLoggedIn && state.page === "calendar") {
+    renderCalendarPage();
+  }
+
+  trackEvent("deadline_checklist_toggle", { id: deadlineId, task: taskKey, done: taskInput.checked });
+}
+
+function handleGlobalToggle(event) {
+  const details = event.target;
+  if (!details || details.tagName !== "DETAILS" || !details.classList.contains("faq-item") || !details.open) {
+    return;
+  }
+
+  document.querySelectorAll(".faq-item[open]").forEach((node) => {
+    if (node !== details) {
+      node.open = false;
+    }
+  });
+}
+
+async function handleGlobalSubmit(event) {
+  if (event.target.id === "loginForm") {
+    event.preventDefault();
+    const email = (els.loginEmail.value || "").trim();
+    const password = (els.loginPassword.value || "").trim();
+    await login(email, password);
+    return;
+  }
+
+  if (event.target.id === "incomeForm") {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+
+    const editId = Number(formData.get("editId") || 0);
+    const amount = Number(formData.get("amount") || 0);
+    const date = String(formData.get("date") || "").trim();
+    const category = String(formData.get("category") || "").trim();
+    const comment = String(formData.get("comment") || "").trim();
+
+    if (!amount || !date || !category) {
+      return;
+    }
+
+    if (editId > 0) {
+      const target = state.incomes.find((item) => item.id === editId);
+      if (!target) return;
+
+      target.amount = amount;
+      target.date = date;
+      target.category = category;
+      target.comment = comment;
+      state.incomeEditId = null;
+      trackEvent("income_edit_save", { id: editId, amount, category });
+    } else {
+      if (!canUseFeature("unlimited_income_ops")) {
+        const monthOps = getIncomeOpsCountForMonth(date);
+        if (monthOps >= FREE_INCOME_MONTH_LIMIT) {
+          requireFeature("unlimited_income_ops", "income_add_limit");
+          return;
+        }
+      }
+
+      const nextId = Math.max(0, ...state.incomes.map((x) => x.id)) + 1;
+      state.incomes.unshift({ id: nextId, amount, date, category, comment });
+      trackEvent("income_add", { amount, category });
+    }
+
+    saveState();
+    renderDashboard();
+    return;
+  }
+
+  if (event.target.id === "incomeFilterForm") {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+
+    state.incomeFilters = {
+      query: String(formData.get("query") || "").trim(),
+      category: String(formData.get("category") || "all"),
+      period: normalizeIncomeFilterPeriod(String(formData.get("period") || "all")),
+      sort: normalizeIncomeFilterSort(String(formData.get("sort") || "date_desc"))
+    };
+
+    saveState();
+    renderDashboard();
+    trackEvent("income_filters_apply", { ...state.incomeFilters });
+    return;
+  }
+
+  if (event.target.id === "calendarFilterForm") {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+
+    state.calendarFilters = {
+      ...getDefaultCalendarFilters(),
+      query: String(formData.get("query") || "").trim(),
+      type: normalizeCalendarType(String(formData.get("type") || state.calendarFilters.type || "all")),
+      status: normalizeCalendarStatus(String(formData.get("status") || state.calendarFilters.status || "all")),
+      timeframe: normalizeCalendarTimeframe(String(formData.get("timeframe") || state.calendarFilters.timeframe || "upcoming"))
+    };
+
+    saveState();
+    renderCalendarPage();
+    trackEvent("calendar_filters_apply", { ...state.calendarFilters });
+    return;
+  }
+  if (event.target.id === "deadlineReminderForm") {
+    event.preventDefault();
+
+    if (!requireFeature("deadline_reminders", "deadline_reminder_form")) {
+      return;
+    }
+
+    const formData = new FormData(event.target);
+    const deadlineId = Number(formData.get("deadlineId") || 0);
+    const row = DEADLINES_2026.find((item) => item.id === deadlineId);
+    if (!row) {
+      return;
+    }
+
+    const key = String(deadlineId);
+    const current = getDeadlineReminderSettings(deadlineId);
+
+    const next = {
+      channels: {
+        telegram: formData.get("channelTelegram") === "on",
+        whatsapp: formData.get("channelWhatsapp") === "on",
+        email: formData.get("channelEmail") === "on"
+      },
+      contacts: {
+        telegram: String(formData.get("contactTelegram") || "").trim(),
+        whatsapp: String(formData.get("contactWhatsapp") || "").trim(),
+        email: String(formData.get("contactEmail") || "").trim()
+      },
+      leadDays: [...current.leadDays]
+    };
+
+    if (!(next.channels.telegram || next.channels.whatsapp || next.channels.email)) {
+      if (els.deadlineModalHint) {
+        els.deadlineModalHint.textContent = "Выберите хотя бы один канал для цепочки -7/-3/-1/сегодня.";
+      }
+      return;
+    }
+
+    if (next.channels.telegram && !next.contacts.telegram) {
+      if (els.deadlineModalHint) {
+        els.deadlineModalHint.textContent = "Укажите Telegram username или чат ID для канала Telegram.";
+      }
+      return;
+    }
+
+    if (next.channels.whatsapp && !next.contacts.whatsapp) {
+      if (els.deadlineModalHint) {
+        els.deadlineModalHint.textContent = "Укажите номер WhatsApp в международном формате.";
+      }
+      return;
+    }
+
+    if (next.channels.email && !next.contacts.email) {
+      next.contacts.email = state.userEmail && state.userEmail.includes("@") ? state.userEmail : "";
+    }
+
+    if (next.channels.email && !next.contacts.email) {
+      if (els.deadlineModalHint) {
+        els.deadlineModalHint.textContent = "Добавьте email для отправки цепочки напоминаний.";
+      }
+      return;
+    }
+
+    state.deadlineReminderSettings[key] = next;
+    updateDeadlineReminderSubscription(deadlineId);
+
+    saveState();
+    renderLandingDeadlines();
+    renderLandingDeadlineModal(deadlineId);
+
+    if (els.deadlineModalHint) {
+      els.deadlineModalHint.textContent = "Настройки напоминаний сохранены. Цепочка -7/-3/-1/сегодня активна.";
+    }
+
+    trackEvent("deadline_reminder_settings_save", {
+      id: deadlineId,
+      telegram: next.channels.telegram,
+      whatsapp: next.channels.whatsapp,
+      email: next.channels.email
+    });
+
+    return;
+  }
+  if (event.target.id === "taxPlannerForm") {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+
+    const fallbackIncome = Math.max(getCurrentMonthIncome(), normalizeIncome(state.calcIncome), 100000);
+    const fallbackExpenses = normalizeIncome(state.calcExpenses);
+
+    state.taxPlanner = normalizeTaxPlanner(
+      {
+        income: Number(formData.get("income") || fallbackIncome),
+        expenses: Number(formData.get("expenses") || fallbackExpenses),
+        reservePct: Number(formData.get("reservePct") || 15)
+      },
+      fallbackIncome,
+      fallbackExpenses,
+      15
+    );
+
+    saveState();
+    renderTaxesPage();
+    trackEvent("tax_planner_apply", { ...state.taxPlanner, regime: state.regime });
+    return;
+  }
+  if (event.target.id === "settingsForm") {
+    event.preventDefault();
+    const fd = new FormData(event.target);
+    state.profile = {
+      name: String(fd.get("name") || "").trim(),
+      iin: String(fd.get("iin") || "").trim(),
+      city: String(fd.get("city") || "").trim(),
+      activity: String(fd.get("activity") || "").trim()
+    };
+    saveState();
+    updateAuthUi();
+    renderDashboard();
+    trackEvent("settings_save");
+  }
+}
+
+async function login(email, password) {
+  if (!email || !password) {
+    setLoginStatus("Заполни email и пароль.", true);
+    return;
+  }
+
+  if (!supabaseClient) {
+    loginDemo(email);
+    return;
+  }
+
+  try {
+    setLoginStatus("Проверяем аккаунт...");
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+
+    state.isLoggedIn = true;
+    state.userEmail = data.user.email || email;
+    ensureTrialIfNeeded();
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ isLoggedIn: true, userEmail: state.userEmail }));
+
+    closeModal(els.loginModal);
+    setLoginStatus("Успешный вход.");
+    updateAuthUi();
+    renderDashboard();
+    trackEvent("login", { mode: "supabase" });
+  } catch (err) {
+    setLoginStatus(err.message || "Ошибка авторизации.", true);
+  }
+}
+
+function loginDemo(email = "demo@nalogip.kz") {
+  state.isLoggedIn = true;
+  state.userEmail = email;
+  ensureTrialIfNeeded();
+  localStorage.setItem(SESSION_KEY, JSON.stringify({ isLoggedIn: true, userEmail: state.userEmail }));
+  closeModal(els.loginModal);
+  setLoginStatus("Демо-вход активирован.");
+  updateAuthUi();
+  renderDashboard();
+  trackEvent("login", { mode: "demo" });
+}
+
+async function logout() {
+  if (supabaseClient) {
+    try {
+      await supabaseClient.auth.signOut();
+    } catch (_err) {
+      // ignore
+    }
+  }
+
+  state.isLoggedIn = false;
+  localStorage.removeItem(SESSION_KEY);
+  updateAuthUi();
+  trackEvent("logout");
+}
+
+function setLoginStatus(text, isError = false) {
+  els.loginStatus.textContent = text;
+  els.loginStatus.style.color = isError ? "#b91c1c" : "#6b7280";
+}
+
+function openModal(node) {
+  node.classList.remove("hidden");
+}
+
+function closeModal(node) {
+  node.classList.add("hidden");
+}
+
+function calcSelfEmployed(income) {
+  const esp = RATES.MRP;
+  return { esp, opv: 0, so: 0, vosms: 0, ipn: 0, socTax: 0, total: esp, limit: 13760000 };
+}
+
+function calcSimplified(income) {
+  const opv = Math.min(income * RATES.OPV_RATE, RATES.MAX_OPV_BASE);
+  const so = (income - opv) * RATES.SO_RATE;
+  const vosms = RATES.VOSMS;
+  const ipn = (income * 0.03) / 6;
+  const socTax = Math.max(income * 0.03 - so, 0);
+  const total = opv + so + vosms + ipn + socTax;
+  return { opv, so, vosms, ipn, socTax, total, limit: 94500000 };
+}
+
+function calcOUR(income, expenses = 0) {
+  const opv = Math.min(income * RATES.OPV_RATE, RATES.MAX_OPV_BASE);
+  const so = (income - opv) * RATES.SO_RATE;
+  const vosms = RATES.VOSMS;
+  const taxBase = Math.max(income - expenses - opv, 0);
+  const ipn = (taxBase * 0.1) / 12;
+  const total = opv + so + vosms + ipn;
+  return { opv, so, vosms, ipn, socTax: 0, total, limit: null };
+}
+
+function calcByRegime(regime, income, expenses = 0) {
+  if (regime === "self") return calcSelfEmployed(income);
+  if (regime === "our") return calcOUR(income, expenses);
+  return calcSimplified(income);
+}
+
+function fmt(value) {
+  return `${new Intl.NumberFormat("ru-KZ").format(Math.round(value || 0))} ₸`;
+}
+
+function normalizeIncome(value) {
+  return Math.max(0, Math.round(Number(value) || 0));
+}
+
+function getLandingPeriodMultiplier() {
+  return state.landingPeriod === "year" ? 12 : 1;
+}
+function annualizeIncome(monthlyIncome) {
+  return Math.max(0, Number(monthlyIncome) || 0) * 12;
+}
+
+function getCalcPeriodMultiplier() {
+  return state.calcPeriod === "year" ? 12 : 1;
+}
+
+function getCalcPeriodLabel() {
+  return state.calcPeriod === "year" ? "в год" : "в месяц";
+}
+
+function getCalcInputIncome() {
+  return normalizeIncome(state.calcIncome * getCalcPeriodMultiplier());
+}
+
+function getCalcInputExpenses() {
+  return normalizeIncome(state.calcExpenses * getCalcPeriodMultiplier());
+}
+
+function toCalcStorageValue(inputValue) {
+  const multiplier = getCalcPeriodMultiplier();
+  return normalizeIncome(inputValue) / multiplier;
+}
+
+function formatPct(value) {
+  if (!Number.isFinite(value)) return "0%";
+  return `${Math.max(0, value).toFixed(1)}%`;
+}
+
+function getRegimeLimit(regime) {
+  if (regime === "self") return RATES.MRP * 1175;
+  if (regime === "simplified") return 94500000;
+  return null;
+}
+
+function getRegimeAvailability(regime, monthlyIncome) {
+  const limit = getRegimeLimit(regime);
+  if (!limit) {
+    return { available: true, reason: "" };
+  }
+
+  const annualIncome = annualizeIncome(monthlyIncome);
+  if (annualIncome <= limit) {
+    return { available: true, reason: "" };
+  }
+
+  return {
+    available: false,
+    reason: `Превышен лимит ${fmt(limit)} в год`
+  };
+}
+
+function renderLandingSummary(bestRow, secondRow, multiplier, periodLabel, income) {
+  if (!els.landingSummary || !bestRow) return;
+
+  if (income <= 0) {
+    els.landingSummary.innerHTML = `
+      <article class="landing-summary-card">
+        <div class="landing-summary-main">
+          <small>Итог к уплате</small>
+          <div class="landing-summary-amount">Введите доход</div>
+          <p>Укажите сумму в поле выше, чтобы увидеть точный расчет по режимам.</p>
+        </div>
+      </article>
+    `;
+    return;
+  }
+
+  const total = bestRow.tax * multiplier;
+  const savingBase = Math.max((secondRow?.tax || 0) - bestRow.tax, 0);
+  const savings = savingBase * multiplier;
+  const lines = getTaxLines(bestRow.taxData, bestRow.id)
+    .filter((line) => line.value > 0)
+    .slice(0, 4)
+    .map((line) => `<span><b>${line.label}:</b> ${fmt(line.value * multiplier)}</span>`)
+    .join("");
+
+  els.landingSummary.innerHTML = `
+    <article class="landing-summary-card">
+      <div class="landing-summary-main">
+        <small>Итого к уплате ${periodLabel}</small>
+        <div class="landing-summary-amount">${fmt(total)}</div>
+        <p>
+          Режим: <strong>${bestRow.label}</strong>
+          ${savings > 0 ? ` · Экономия ${fmt(savings)} относительно ${secondRow.label}` : ""}
+        </p>
+      </div>
+      ${lines ? `<div class="landing-breakdown">${lines}</div>` : ""}
+    </article>
+  `;
+}
+
+function renderLandingCards() {
+  if (!els.landingIncome || !els.landingCards) return;
+
+  const income = normalizeIncome(els.landingIncome.value);
+  els.landingIncome.value = String(income);
+
+  const self = calcSelfEmployed(income);
+  const simplified = calcSimplified(income);
+  const our = calcOUR(income, 0);
+
+  const rows = [
+    { id: "self", label: "Самозанятый", tax: self.total, taxData: self },
+    { id: "simplified", label: "Упрощенка (910)", tax: simplified.total, taxData: simplified },
+    { id: "our", label: "ОУР", tax: our.total, taxData: our }
+  ].map((row) => ({ ...row, ...getRegimeAvailability(row.id, income) }));
+
+  const availableRows = rows.filter((row) => row.available).sort((a, b) => a.tax - b.tax);
+  const sortedFallback = [...rows].sort((a, b) => a.tax - b.tax);
+  const bestRow = availableRows[0] || sortedFallback[0];
+  const secondRow = availableRows[1] || null;
+
+  const multiplier = getLandingPeriodMultiplier();
+  const periodLabel = state.landingPeriod === "year" ? "в год" : "в месяц";
+
+  renderLandingSummary(bestRow, secondRow, multiplier, periodLabel, income);
+
+  els.landingCards.innerHTML = rows
+    .map((row) => {
+      const isBest = row.id === bestRow.id && income > 0 && row.available;
+      const bestClass = isBest ? "best" : "";
+      const unavailableClass = row.available ? "" : "unavailable";
+      const amount = fmt(row.tax * multiplier);
+      const savings = isBest && secondRow ? Math.max((secondRow.tax - row.tax) * multiplier, 0) : 0;
+      const savingsText = savings > 0 ? `Экономия ${fmt(savings)}` : "";
+      const statusText = row.available ? "&nbsp;" : row.reason;
+
+      return `
+        <div class="regime-card ${bestClass} ${unavailableClass}">
+          <div class="regime-top-note">${isBest ? "ВЫГОДНЕЕ ✓" : row.available ? "&nbsp;" : "Недоступно"}</div>
+          <div class="regime-title">${row.label}</div>
+          <div class="amount">${amount}</div>
+          <div class="regime-period">${periodLabel}</div>
+          <div class="regime-save">${isBest ? savingsText : statusText}</div>
+        </div>
+      `;
+    })
+    .join("");
+
+  document.querySelectorAll("[data-landing-period]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.landingPeriod === state.landingPeriod);
+  });
+
+  document.querySelectorAll("[data-landing-preset]").forEach((button) => {
+    button.classList.toggle("active", Number(button.dataset.landingPreset || 0) === income);
+  });
+}
+
+function getLandingDeadlineChecklist(row) {
+  if (row.type === "report" && row.title.includes("220.00")) {
+    return {
+      submit: ["Сдать декларацию ИПН (форма 220.00)", "Проверить статус приема формы"],
+      where: ["cabinet.kgd.gov.kz", "Раздел: Налоговая отчетность"],
+      data: ["ИИН и ЭЦП", "Доходы за 2025 год", "Суммы удержаний и вычетов"]
+    };
+  }
+
+  if (row.type === "report") {
+    return {
+      submit: ["Сдать налоговую форму по режиму", "Проверить квитанцию о приеме"],
+      where: ["cabinet.kgd.gov.kz", "Раздел: Налоговая отчетность"],
+      data: ["ИИН/БИН", "Доходы за период", "ЭЦП для подписи"]
+    };
+  }
+
+  return {
+    submit: ["Оплатить ОПВ", "Оплатить СО и ВОСМС"],
+    where: ["e-Salyq Business", "Банк / Kaspi / Halyk"],
+    data: ["Сумма дохода за месяц", "КБК и назначение платежа", "Подтверждение оплаты"]
+  };
+}
+
+
+function getDeadlineChecklistSections(row) {
+  const checklist = getLandingDeadlineChecklist(row);
+
+  return [
+    { id: "submit", title: "Что сделать", items: checklist.submit || [] },
+    { id: "where", title: "Куда зайти", items: checklist.where || [] },
+    { id: "data", title: "Какие данные нужны", items: checklist.data || [] }
+  ];
+}
+
+function getDeadlineTaskKey(sectionId, index) {
+  return `${sectionId}:${index}`;
+}
+
+function getDeadlineChecklistProgress(deadlineId) {
+  const key = String(deadlineId);
+  const source = state.deadlineChecklistProgress[key];
+
+  if (!source || typeof source !== "object") {
+    return {};
+  }
+
+  return source;
+}
+
+function getDeadlineChecklistStats(deadlineId, row) {
+  const sections = getDeadlineChecklistSections(row);
+  const progress = getDeadlineChecklistProgress(deadlineId);
+
+  let total = 0;
+  let done = 0;
+
+  sections.forEach((section) => {
+    section.items.forEach((_, index) => {
+      total += 1;
+      const taskKey = getDeadlineTaskKey(section.id, index);
+      if (progress[taskKey]) {
+        done += 1;
+      }
+    });
+  });
+
+  return {
+    total,
+    done,
+    pct: total > 0 ? Math.round((done / total) * 100) : 0
+  };
+}
+
+function markAllDeadlineTasks(deadlineId, row, checked) {
+  const key = String(deadlineId);
+
+  if (!checked) {
+    delete state.deadlineChecklistProgress[key];
+    return;
+  }
+
+  const next = {};
+  getDeadlineChecklistSections(row).forEach((section) => {
+    section.items.forEach((_, index) => {
+      next[getDeadlineTaskKey(section.id, index)] = true;
+    });
+  });
+
+  state.deadlineChecklistProgress[key] = next;
+}
+
+function syncDeadlineDoneByChecklist(deadlineId, row) {
+  const stats = getDeadlineChecklistStats(deadlineId, row);
+  const isDone = stats.total > 0 && stats.done >= stats.total;
+  const exists = state.doneDeadlines.includes(deadlineId);
+
+  if (isDone && !exists) {
+    state.doneDeadlines.push(deadlineId);
+  }
+
+  if (!isDone && exists) {
+    state.doneDeadlines = state.doneDeadlines.filter((id) => id !== deadlineId);
+  }
+}
+
+function getReminderTimeline(dateString, leadDays = REMINDER_LEAD_DAYS) {
+  const target = new Date(dateString);
+
+  return [...leadDays]
+    .sort((a, b) => b - a)
+    .map((daysBefore) => {
+      const date = new Date(target);
+      date.setDate(target.getDate() - daysBefore);
+
+      const today = new Date();
+      const dayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const reminderDayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+      let tone = "upcoming";
+      if (reminderDayStart.getTime() < dayStart.getTime()) {
+        tone = "past";
+      } else if (reminderDayStart.getTime() === dayStart.getTime()) {
+        tone = "today";
+      }
+
+      return {
+        daysBefore,
+        date,
+        tone,
+        label: daysBefore === 0 ? "В день срока" : `За ${daysBefore} ${getLandingDayWord(daysBefore)}`
+      };
+    });
+}
+
+function getReminderChannelLabels(settings) {
+  const labels = [];
+  if (settings.channels.telegram) labels.push("Telegram");
+  if (settings.channels.whatsapp) labels.push("WhatsApp");
+  if (settings.channels.email) labels.push("Email");
+  return labels;
+}
+
+function buildDeadlineHandoffText(row) {
+  const due = getLandingDeadlineDueInfo(row.date);
+  const settings = getDeadlineReminderSettings(row.id);
+  const channels = getReminderChannelLabels(settings);
+  const sections = getDeadlineChecklistSections(row);
+  const progress = getDeadlineChecklistProgress(row.id);
+
+  const lines = [];
+  lines.push(`${row.title}`);
+  lines.push(`Срок: ${formatDate(row.date)} (${due.text})`);
+  lines.push(`Режим: ${getLandingDeadlineRegimeLabel(row.regime)} · Тип: ${getLandingDeadlineTypeLabel(row.type)}`);
+  lines.push(`Каналы напоминаний: ${channels.length ? channels.join(", ") : "не выбраны"}`);
+  lines.push("");
+
+  sections.forEach((section) => {
+    lines.push(`${section.title}:`);
+    section.items.forEach((item, index) => {
+      const key = getDeadlineTaskKey(section.id, index);
+      lines.push(`- ${progress[key] ? "[x]" : "[ ]"} ${item}`);
+    });
+    lines.push("");
+  });
+
+  return lines.join("\n").trim();
+}
+
+function buildReminderPlanText(row, settings) {
+  const timeline = getReminderTimeline(row.date, settings.leadDays);
+  const channels = getReminderChannelLabels(settings);
+
+  const lines = [];
+  lines.push(`План напоминаний: ${row.title}`);
+  lines.push(`Срок: ${formatDate(row.date)}`);
+  lines.push(`Каналы: ${channels.length ? channels.join(", ") : "не выбраны"}`);
+  lines.push("");
+
+  timeline.forEach((item) => {
+    lines.push(`- ${item.label}: ${item.date.toLocaleDateString("ru-KZ")}`);
+  });
+
+  return lines.join("\n");
+}
+
+async function copyTextToClipboard(text) {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (_error) {
+    // fallback below
+  }
+
+  try {
+    const field = document.createElement("textarea");
+    field.value = text;
+    field.setAttribute("readonly", "readonly");
+    field.style.position = "fixed";
+    field.style.opacity = "0";
+    document.body.appendChild(field);
+    field.select();
+    const copied = document.execCommand("copy");
+    field.remove();
+    return Boolean(copied);
+  } catch (_error) {
+    return false;
+  }
+}
+
+function getLandingDeadlineRegimeLabel(regime) {
+  if (regime === "simplified") return "Упрощенка (910)";
+  if (regime === "our") return "ОУР";
+  if (regime === "self") return "Самозанятый";
+  return "Все режимы";
+}
+
+function getLandingDeadlineTypeLabel(type) {
+  return type === "payment" ? "Платеж" : "Отчет";
+}
+
+function getLandingDayWord(days) {
+  const mod10 = days % 10;
+  const mod100 = days % 100;
+  if (mod10 === 1 && mod100 !== 11) return "день";
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return "дня";
+  return "дней";
+}
+
+function getLandingDeadlineDueInfo(dateString) {
+  const now = new Date();
+  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const target = new Date(dateString);
+  const targetStart = new Date(target.getFullYear(), target.getMonth(), target.getDate());
+  const days = Math.max(0, Math.ceil((targetStart - dayStart) / 86400000));
+
+  if (days === 0) return { text: "Сегодня", tone: "urgent" };
+  if (days === 1) return { text: "Завтра", tone: "urgent" };
+  if (days <= 7) return { text: `Через ${days} ${getLandingDayWord(days)}`, tone: "urgent" };
+  if (days <= 14) return { text: `Через ${days} ${getLandingDayWord(days)}`, tone: "soon" };
+
+  return { text: `Через ${days} ${getLandingDayWord(days)}`, tone: "" };
+}
+
+function renderLandingDeadlineModal(deadlineId) {
+  if (
+    !els.deadlineModal ||
+    !els.deadlineModalDate ||
+    !els.deadlineModalTitle ||
+    !els.deadlineModalMeta ||
+    !els.deadlineModalChecklist ||
+    !els.deadlineModalSubscribe ||
+    !els.deadlineModalHint
+  ) {
+    return;
+  }
+
+  const row = DEADLINES_2026.find((item) => item.id === deadlineId);
+  if (!row) return;
+
+  const due = getLandingDeadlineDueInfo(row.date);
+  const sections = getDeadlineChecklistSections(row);
+  const progress = getDeadlineChecklistProgress(row.id);
+  const stats = getDeadlineChecklistStats(row.id, row);
+  const isSubscribed = state.deadlineReminderIds.includes(row.id);
+  const typeClass = row.type === "payment" ? "payment" : "report";
+  const reminderSettings = getDeadlineReminderSettings(row.id);
+  const reminderChannels = getReminderChannelLabels(reminderSettings);
+  const selectedLeadDays = new Set((reminderSettings.leadDays || []).map((x) => Number(x)).filter((x) => Number.isFinite(x)));
+  const reminderTimeline = getReminderTimeline(row.date, REMINDER_LEAD_DAYS);
+
+  const renderSectionList = (section) =>
+    section.items
+      .map((item, index) => {
+        const taskKey = getDeadlineTaskKey(section.id, index);
+        const checked = Boolean(progress[taskKey]);
+
+        return `
+          <li class="deadline-task-item ${checked ? "done" : ""}">
+            <label>
+              <input type="checkbox" data-deadline-task="${taskKey}" data-deadline-id="${row.id}" ${checked ? "checked" : ""} />
+              <span>${escapeHtml(item)}</span>
+            </label>
+          </li>
+        `;
+      })
+      .join("");
+
+  els.deadlineModalDate.textContent = `${formatDateShort(row.date)} · ${due.text}`;
+  els.deadlineModalTitle.textContent = row.title;
+  els.deadlineModalMeta.innerHTML = `
+    <span class="deadline-modal-chip ${typeClass}">${getLandingDeadlineTypeLabel(row.type)}</span>
+    <span class="deadline-modal-chip">${getLandingDeadlineRegimeLabel(row.regime)}</span>
+    <span class="deadline-modal-chip progress ${stats.done >= stats.total && stats.total > 0 ? "done" : ""}">${stats.done}/${stats.total}</span>
+  `;
+
+  els.deadlineModalChecklist.innerHTML = sections
+    .map(
+      (section) => `
+        <section class="deadline-modal-col">
+          <h4>${section.title}</h4>
+          <ul>${renderSectionList(section)}</ul>
+        </section>
+      `
+    )
+    .join("");
+
+  els.deadlineModalSubscribe.dataset.deadlineSubscribe = String(row.id);
+  const canToggleReminders = canUseFeature("deadline_reminders");
+
+  els.deadlineModalSubscribe.classList.toggle("subscribed", canToggleReminders && isSubscribed);
+  if (canToggleReminders) {
+    els.deadlineModalSubscribe.textContent = isSubscribed ? "Напоминания включены" : "Подписаться на напоминания";
+    els.deadlineModalHint.textContent = isSubscribed
+      ? `Цепочка активна (-7/-3/-1/0). Каналы: ${reminderChannels.length ? reminderChannels.join(", ") : "не выбраны"}.`
+      : "Включите напоминания, чтобы не пропустить дедлайн.";
+  } else {
+    els.deadlineModalSubscribe.textContent = "Напоминания в Pro";
+    els.deadlineModalHint.textContent = "Во Free умные напоминания недоступны. Доступ открывается в Trial/Pro.";
+  }
+
+  if (els.deadlineModalReminderPanel) {
+    const timelineHtml = reminderTimeline
+      .map((item) => {
+        const toneClass = item.tone ? ` ${item.tone}` : "";
+        const activeClass = selectedLeadDays.has(item.daysBefore) ? " active" : "";
+        return `<button type="button" class="deadline-reminder-pill${toneClass}${activeClass}" data-reminder-lead="${item.daysBefore}" data-deadline-id="${row.id}" ${canToggleReminders ? "" : "disabled"}>${item.label} · ${item.date.toLocaleDateString("ru-KZ")}</button>`;
+      })
+      .join("");
+
+    els.deadlineModalReminderPanel.innerHTML = `
+      <form id="deadlineReminderForm" class="deadline-reminder-form">
+        <input type="hidden" name="deadlineId" value="${row.id}" />
+        <div class="deadline-reminder-channel-grid ${canToggleReminders ? "" : "disabled"}">
+          <label><input type="checkbox" name="channelTelegram" ${reminderSettings.channels.telegram ? "checked" : ""} ${canToggleReminders ? "" : "disabled"} /> Telegram</label>
+          <label><input type="checkbox" name="channelWhatsapp" ${reminderSettings.channels.whatsapp ? "checked" : ""} ${canToggleReminders ? "" : "disabled"} /> WhatsApp</label>
+          <label><input type="checkbox" name="channelEmail" ${reminderSettings.channels.email ? "checked" : ""} ${canToggleReminders ? "" : "disabled"} /> Email</label>
+        </div>
+
+        <div class="deadline-reminder-contact-grid ${canToggleReminders ? "" : "disabled"}">
+          <label>Telegram
+            <input name="contactTelegram" type="text" value="${escapeHtml(reminderSettings.contacts.telegram)}" placeholder="@username" ${canToggleReminders ? "" : "disabled"} />
+          </label>
+          <label>WhatsApp
+            <input name="contactWhatsapp" type="text" value="${escapeHtml(reminderSettings.contacts.whatsapp)}" placeholder="+7 7XX XXX XX XX" ${canToggleReminders ? "" : "disabled"} />
+          </label>
+          <label>Email
+            <input name="contactEmail" type="email" value="${escapeHtml(reminderSettings.contacts.email)}" placeholder="you@email.com" ${canToggleReminders ? "" : "disabled"} />
+          </label>
+        </div>
+
+        <div class="deadline-reminder-timeline">${timelineHtml}</div>
+
+        <div class="deadline-reminder-actions">
+          <button class="btn btn-ghost btn-xs" type="submit" ${canToggleReminders ? "" : "disabled"}>Сохранить каналы</button>
+          <button type="button" class="btn btn-ghost btn-xs" data-action="copy-reminder-plan" data-deadline-reminder-plan="${row.id}">Копировать план</button>
+          <button type="button" class="btn btn-primary btn-xs" data-action="copy-deadline-handoff" data-deadline-handoff="${row.id}">Передать бухгалтеру</button>
+        </div>
+      </form>
+    `;
+  }
+}
+function renderLandingDeadlines() {
+  if (!els.landingDeadlines) return;
+
+  const upcoming = DEADLINES_2026
+    .filter((row) => new Date(row.date) >= new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()))
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  const source = upcoming.length > 0 ? upcoming : [...DEADLINES_2026].sort((a, b) => new Date(a.date) - new Date(b.date));
+  const rows = source.slice(0, 3);
+
+  if (!rows.length) {
+    els.landingDeadlines.innerHTML = '<p class="deadline-empty">Сроки скоро появятся.</p>';
+    return;
+  }
+
+  els.landingDeadlines.innerHTML = rows
+    .map((row) => {
+      const typeClass = row.type === "payment" ? "payment" : "report";
+      const due = getLandingDeadlineDueInfo(row.date);
+      const dueClass = due.tone ? ` ${due.tone}` : "";
+      const cardClass = due.tone === "urgent" ? " urgent" : "";
+      const isSubscribed = state.deadlineReminderIds.includes(row.id);
+      const checklistStats = getDeadlineChecklistStats(row.id, row);
+
+      return `
+        <article class="deadline-card ${typeClass}${cardClass}">
+          <div class="deadline-top">
+            <div class="deadline-date">${formatDateShort(row.date)}</div>
+            <div class="deadline-due${dueClass}">${due.text}</div>
+          </div>
+          <h3>${escapeHtml(row.title)}</h3>
+          <div class="deadline-meta">
+            <span class="deadline-type">${getLandingDeadlineTypeLabel(row.type)}</span>
+            <span>${getLandingDeadlineRegimeLabel(row.regime)}</span>
+          </div>
+          <div class="deadline-card-actions">
+            <button type="button" class="deadline-open-btn" data-deadline-expand="${row.id}">Что делать по этому сроку</button>
+            ${isSubscribed ? '<span class="deadline-reminder-flag">Напоминания включены</span>' : ""}
+            ${checklistStats.total > 0 ? `<span class="deadline-checklist-flag">${checklistStats.done}/${checklistStats.total} шагов</span>` : ""}
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function renderSidebarActive() {
+  document.querySelectorAll("#sidebarNav [data-page], #mobileTabbar [data-page]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.page === state.page);
+  });
+}
+
+function getTotalIncome() {
+  return state.incomes.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+}
+
+function getCurrentMonthIncome() {
+  const now = new Date();
+  const month = now.getMonth();
+  const year = now.getFullYear();
+
+  return state.incomes
+    .filter((row) => {
+      const dateObj = new Date(row.date);
+      return dateObj.getMonth() === month && dateObj.getFullYear() === year;
+    })
+    .reduce((sum, row) => sum + Number(row.amount || 0), 0);
+}
+
+function getCurrentTax() {
+  const income = getCurrentMonthIncome();
+  return calcByRegime(state.regime, income, state.calcExpenses);
+}
+
+function getMonthlyData() {
+  const year = new Date().getFullYear();
+  const buckets = Array.from({ length: 12 }, (_, index) => ({
+    name: MONTHS[index],
+    income: 0
+  }));
+
+  state.incomes.forEach((row) => {
+    const date = new Date(row.date);
+    if (date.getFullYear() !== year) return;
+
+    const monthIndex = date.getMonth();
+    if (monthIndex >= 0 && monthIndex < 12) {
+      buckets[monthIndex].income += Number(row.amount || 0);
+    }
+  });
+
+  return buckets;
+}
+
+function getUpcomingDeadlines() {
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
+
+  return DEADLINES_2026
+    .filter((row) => {
+      const dateObj = new Date(row.date);
+      const byRegime = row.regime === "all" || row.regime === state.regime;
+      const byDate = dateObj >= dayStart;
+      const isDone = state.doneDeadlines.includes(row.id);
+      return byRegime && byDate && !isDone;
+    })
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
+}
+
+function getIncomeByMonth(year, monthIndex) {
+  return state.incomes
+    .filter((row) => {
+      const dateObj = new Date(row.date);
+      return dateObj.getFullYear() === year && dateObj.getMonth() === monthIndex;
+    })
+    .reduce((sum, row) => sum + Number(row.amount || 0), 0);
+}
+
+function buildTrend(current, previous, inverse = false) {
+  const delta = current - previous;
+
+  if (previous <= 0 && current <= 0) {
+    return { className: "flat", text: "Без изменений к прошлому месяцу" };
+  }
+
+  if (previous <= 0 && current > 0) {
+    return {
+      className: inverse ? "down" : "up",
+      text: inverse ? "Новая налоговая нагрузка" : "Новый поток дохода"
+    };
+  }
+
+  const pct = Math.max(1, Math.round((Math.abs(delta) / previous) * 100));
+  if (delta === 0) {
+    return { className: "flat", text: "Без изменений к прошлому месяцу" };
+  }
+
+  const arrow = delta > 0 ? "↑" : "↓";
+  const sign = delta > 0 ? "+" : "−";
+  const good = inverse ? delta < 0 : delta > 0;
+
+  return {
+    className: good ? "up" : "down",
+    text: `${arrow} ${sign}${pct}% к прошлому месяцу`
+  };
+}
+
+function getLimitRiskMeta(limitPct, monthsToLimit) {
+  if (limitPct === null || limitPct === undefined) {
+    return { className: "unknown", label: "Без лимита" };
+  }
+
+  if (limitPct >= 90 || (monthsToLimit !== null && monthsToLimit <= 2)) {
+    return { className: "high", label: "Высокий риск" };
+  }
+
+  if (limitPct >= 70 || (monthsToLimit !== null && monthsToLimit <= 6)) {
+    return { className: "medium", label: "Средний риск" };
+  }
+
+  return { className: "low", label: "Низкий риск" };
+}
+function renderDashboard() {
+  els.pageTitle.textContent = PAGE_TITLES[state.page] || PAGE_TITLES.dashboard;
+  renderSidebarActive();
+  els.regimeSelect.value = state.regime;
+  els.accountName.textContent = state.profile.name || state.userEmail;
+  updatePlanUi();
+
+  if (state.page === "dashboard") {
+    renderDashboardPage();
+    return;
+  }
+
+  if (state.page === "income") {
+    renderIncomePage();
+    return;
+  }
+
+  if (state.page === "taxes") {
+    renderTaxesPage();
+    return;
+  }
+
+  if (state.page === "calendar") {
+    renderCalendarPage();
+    return;
+  }
+
+  if (state.page === "calculator") {
+    renderCalculatorPage();
+    return;
+  }
+
+  renderSettingsPage();
+}
+function renderDashboardPage() {
+  const monthlyData = getMonthlyData();
+  const maxIncome = Math.max(...monthlyData.map((x) => x.income), 1);
+
+  const currentIncome = getCurrentMonthIncome();
+  const totalIncome = getTotalIncome();
+  const currentTax = getCurrentTax();
+  const limit = getRegimeLimit(state.regime);
+  const limitPct = limit ? Math.min((totalIncome / limit) * 100, 100) : null;
+  const safeLimitPct = limitPct === null ? null : Math.round(limitPct);
+  const nextDeadline = getUpcomingDeadlines()[0];
+  const recentIncomes = [...state.incomes].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 7);
+
+  const now = new Date();
+  const currentMonthIndex = now.getMonth();
+  const previousMonthDate = new Date(now.getFullYear(), now.getMonth(), 1);
+  previousMonthDate.setMonth(previousMonthDate.getMonth() - 1);
+
+  const previousIncome = getIncomeByMonth(previousMonthDate.getFullYear(), previousMonthDate.getMonth());
+  const previousTax = calcByRegime(state.regime, previousIncome, state.calcExpenses).total;
+
+  const incomeTrend = buildTrend(currentIncome, previousIncome, false);
+  const taxTrend = buildTrend(currentTax.total, previousTax, true);
+
+  const monthsPassed = now.getMonth() + 1;
+  const avgMonthlyIncome = monthsPassed > 0 ? totalIncome / monthsPassed : 0;
+  const annualRunRate = avgMonthlyIncome * 12;
+
+  const remainingToLimit = limit ? Math.max(limit - totalIncome, 0) : null;
+  const monthsToLimit = limit && avgMonthlyIncome > 0 ? Math.ceil(remainingToLimit / avgMonthlyIncome) : null;
+  const riskMeta = getLimitRiskMeta(safeLimitPct, monthsToLimit);
+  const hasAdvancedAnalytics = canUseFeature("advanced_analytics");
+
+  const bars = monthlyData
+    .map((row, index) => {
+      const height = Math.max((row.income / maxIncome) * 170, row.income > 0 ? 8 : 4);
+      const currentClass = index === currentMonthIndex ? " current" : "";
+      return `
+        <div class="chart-item">
+          <div class="chart-bar${currentClass}" style="height:${height}px" title="${row.name}: ${fmt(row.income)}" data-value="${fmt(row.income)}"></div>
+          <span>${row.name}</span>
+        </div>
+      `;
+    })
+    .join("");
+
+  const deadlineDueText = nextDeadline ? getLandingDeadlineDueInfo(nextDeadline.date).text : "Сроков нет";
+
+  els.pageContent.innerHTML = `
+    <div class="grid grid-4 kpi-grid">
+      <article class="card kpi-card">
+        <div class="stat-title">Доход за текущий месяц</div>
+        <div class="stat-value">${fmt(currentIncome)}</div>
+        <div class="kpi-trend ${incomeTrend.className}">${incomeTrend.text}</div>
+        <div class="stat-sub">обновляется по операциям</div>
+      </article>
+      <article class="card kpi-card danger">
+        <div class="stat-title">К уплате налогов</div>
+        <div class="stat-value stat-danger">${fmt(currentTax.total)}</div>
+        <div class="kpi-trend ${taxTrend.className}">${taxTrend.text}</div>
+        <div class="stat-sub">оценочно за месяц</div>
+      </article>
+      <article class="card kpi-card">
+        <div class="stat-title">Доход с начала года</div>
+        <div class="stat-value">${fmt(totalIncome)}</div>
+        <div class="kpi-note">Средний темп: ${fmt(avgMonthlyIncome)} / мес</div>
+        <div class="stat-sub">Run-rate за год: ${fmt(annualRunRate)}</div>
+      </article>
+      <article class="card kpi-card deadline">
+        <div class="stat-title">Ближайший срок</div>
+        <div class="stat-value stat-compact">${nextDeadline ? formatDateShort(nextDeadline.date) : "Нет"}</div>
+        <div class="kpi-note">${deadlineDueText}</div>
+        <div class="stat-sub">${nextDeadline ? nextDeadline.title : "все задачи закрыты"}</div>
+      </article>
+    </div>
+
+    <div class="grid grid-2 mt-16">
+      <article class="card chart-panel">
+        <h3>Доходы по месяцам</h3>
+        <div class="chart-row">${bars}</div>
+      </article>
+      <article class="card taxes-panel">
+        <h3>Разбивка налогов за месяц</h3>
+        ${renderTaxBreakdown(currentTax, state.regime)}
+        <div class="total-box">
+          <span>Итого к уплате</span>
+          <strong>${fmt(currentTax.total)}</strong>
+        </div>
+      </article>
+    </div>
+
+    <div class="grid grid-2 mt-16">
+      <article class="card progress-card">
+        <div class="progress-card-head">
+          <h3>Прогресс до лимита режима</h3>
+          <span class="limit-risk ${riskMeta.className}">${riskMeta.label}</span>
+        </div>
+        ${
+          limit
+            ? `
+            <p class="text-muted progress-meta">${fmt(totalIncome)} из ${fmt(limit)} (${safeLimitPct}%)</p>
+            <div class="progress"><span style="width:${limitPct}%;"></span></div>
+            ${
+              hasAdvancedAnalytics
+                ? `<div class="progress-eta">
+                    <span>Осталось: <b>${fmt(remainingToLimit)}</b></span>
+                    <span>${monthsToLimit ? `При текущем темпе: ~${monthsToLimit} мес.` : "Нужно больше данных по доходам."}</span>
+                  </div>`
+                : `<div class="feature-lock-inline">
+                    <p>Прогноз по темпу и риску доступен в Trial/Pro.</p>
+                    <button type="button" class="btn btn-ghost btn-xs" data-action="open-pro">Открыть тарифы</button>
+                  </div>`
+            }
+          `
+            : "<p class=\"text-muted\">Для ОУР лимит не применяется.</p>"
+        }
+        <p class="text-muted mt-10">Режим: ${regimeLabel(state.regime)}</p>
+      </article>
+      <article class="card income-table-panel">
+        <h3>Последние поступления</h3>
+        <div class="table-wrap">
+          <table class="table dashboard-table">
+            <thead><tr><th>Дата</th><th>Категория</th><th>Сумма</th></tr></thead>
+            <tbody>
+              ${recentIncomes
+                .map(
+                  (row) => `<tr><td>${formatDate(row.date)}</td><td><span class="cat-pill">${escapeHtml(row.category)}</span></td><td>${fmt(row.amount)}</td></tr>`
+                )
+                .join("")}
+            </tbody>
+          </table>
+        </div>
+      </article>
+    </div>
+  `;
+}
+
+
+function getTopIncomeCategory(rows) {
+  const sums = new Map();
+
+  rows.forEach((row) => {
+    const key = String(row.category || "Без категории").trim() || "Без категории";
+    sums.set(key, (sums.get(key) || 0) + Number(row.amount || 0));
+  });
+
+  const top = [...sums.entries()].sort((a, b) => b[1] - a[1])[0];
+  if (!top) return { name: "-", amount: 0 };
+
+  return { name: top[0], amount: top[1] };
+}
+
+function getIncomePeriodStart(period) {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  if (period === "30d") {
+    start.setDate(start.getDate() - 30);
+    return start;
+  }
+
+  if (period === "90d") {
+    start.setDate(start.getDate() - 90);
+    return start;
+  }
+
+  if (period === "ytd") {
+    return new Date(now.getFullYear(), 0, 1);
+  }
+
+  return null;
+}
+
+function getFilteredIncomes(rows, filters) {
+  const query = String(filters.query || "").trim().toLowerCase();
+  const category = String(filters.category || "all");
+  const period = normalizeIncomeFilterPeriod(String(filters.period || "all"));
+  const periodStart = getIncomePeriodStart(period);
+
+  return rows.filter((row) => {
+    const rowDate = new Date(row.date);
+    const byCategory = category === "all" ? true : row.category === category;
+    const byPeriod = periodStart ? rowDate >= periodStart : true;
+
+    if (!query) {
+      return byCategory && byPeriod;
+    }
+
+    const haystack = `${row.date} ${row.category} ${row.comment || ""} ${row.amount}`.toLowerCase();
+    return byCategory && byPeriod && haystack.includes(query);
+  });
+}
+
+function getSortedIncomes(rows, sort) {
+  const normalized = normalizeIncomeFilterSort(sort);
+  const sorted = [...rows];
+
+  if (normalized === "amount_desc") {
+    sorted.sort((a, b) => b.amount - a.amount);
+    return sorted;
+  }
+
+  if (normalized === "amount_asc") {
+    sorted.sort((a, b) => a.amount - b.amount);
+    return sorted;
+  }
+
+  if (normalized === "date_asc") {
+    sorted.sort((a, b) => new Date(a.date) - new Date(b.date));
+    return sorted;
+  }
+
+  sorted.sort((a, b) => new Date(b.date) - new Date(a.date));
+  return sorted;
+}
+function renderIncomePage() {
+  const filters = {
+    ...getDefaultIncomeFilters(),
+    ...(state.incomeFilters || {})
+  };
+
+  const categories = [...new Set(state.incomes.map((row) => String(row.category || "").trim()).filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b, "ru")
+  );
+
+  const filteredRows = getSortedIncomes(getFilteredIncomes(state.incomes, filters), filters.sort);
+  const editingIncome = state.incomeEditId ? state.incomes.find((row) => row.id === state.incomeEditId) : null;
+
+  if (state.incomeEditId && !editingIncome) {
+    state.incomeEditId = null;
+    saveState();
+  }
+
+  const totalIncome = getTotalIncome();
+  const opsCount = state.incomes.length;
+  const avgCheck = opsCount > 0 ? totalIncome / opsCount : 0;
+  const last30Start = getIncomePeriodStart("30d");
+  const last30Income = state.incomes
+    .filter((row) => (last30Start ? new Date(row.date) >= last30Start : true))
+    .reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  const topCategory = getTopIncomeCategory(state.incomes);
+  const filteredTotal = filteredRows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+
+  const currentMonthOps = getIncomeOpsCountForMonth(new Date().toISOString().slice(0, 10));
+  const canUnlimitedIncome = canUseFeature("unlimited_income_ops");
+  const canCreateIncome = Boolean(editingIncome) || canUnlimitedIncome || currentMonthOps < FREE_INCOME_MONTH_LIMIT;
+  const canExport = canUseFeature("exports");
+
+  const categoryOptions = categories
+    .map((category) => `<option value="${escapeHtml(category)}" ${filters.category === category ? "selected" : ""}>${escapeHtml(category)}</option>`)
+    .join("");
+
+  const listOptions = categories.map((category) => `<option value="${escapeHtml(category)}"></option>`).join("");
+
+  els.pageContent.innerHTML = `
+    <div class="grid grid-2 income-layout">
+      <article class="card income-form-card">
+        <div class="income-card-head">
+          <h3>${editingIncome ? "Редактировать операцию" : "Добавить доход"}</h3>
+          ${editingIncome ? '<span class="income-edit-chip">режим редактирования</span>' : ""}
+        </div>
+        <form id="incomeForm" class="stack-form income-form">
+          <input type="hidden" name="editId" value="${editingIncome ? editingIncome.id : ""}" />
+          <div class="form-grid-2">
+            <label>Дата<input name="date" type="date" value="${editingIncome ? editingIncome.date : ""}" required /></label>
+            <label>Сумма (₸)<input id="incomeAmountInput" name="amount" type="number" min="0" step="1000" value="${editingIncome ? Math.round(editingIncome.amount) : ""}" required /></label>
+          </div>
+
+          <div class="amount-presets" aria-label="Быстрый выбор суммы">
+            <button type="button" data-income-preset="50000">50k</button>
+            <button type="button" data-income-preset="100000">100k</button>
+            <button type="button" data-income-preset="250000">250k</button>
+            <button type="button" data-income-preset="500000">500k</button>
+          </div>
+
+          <label>Категория
+            <input name="category" type="text" list="incomeCategoryList" value="${editingIncome ? escapeHtml(editingIncome.category) : ""}" placeholder="Услуги / Продажи" required />
+          </label>
+          <datalist id="incomeCategoryList">${listOptions}</datalist>
+
+          <label>Комментарий
+            <textarea name="comment" rows="3" placeholder="Опционально">${editingIncome ? escapeHtml(editingIncome.comment || "") : ""}</textarea>
+          </label>
+
+          <p class="income-limit-note ${canUnlimitedIncome ? "pro" : canCreateIncome ? "" : "danger"}">
+            ${
+              canUnlimitedIncome
+                ? "Pro: лимит на операции доходов снят."
+                : `Free: ${currentMonthOps}/${FREE_INCOME_MONTH_LIMIT} операций за текущий месяц.`
+            }
+          </p>
+
+          <div class="income-form-actions">
+            <button class="btn btn-primary" type="submit" ${canCreateIncome ? "" : "disabled"}>${editingIncome ? "Сохранить изменения" : "Сохранить операцию"}</button>
+            ${editingIncome ? '<button type="button" class="btn btn-ghost" data-cancel-income-edit>Отменить</button>' : ""}
+          </div>
+        </form>
+      </article>
+
+      <article class="card income-summary-card">
+        <h3>Итого по доходам</h3>
+        <div class="stat-value">${fmt(totalIncome)}</div>
+        <p class="text-muted">Операций в базе: ${opsCount}</p>
+        <p class="text-muted">Текущий режим: ${regimeLabel(state.regime)}</p>
+
+        <div class="income-metrics-grid">
+          <div class="income-metric">
+            <small>Средний чек</small>
+            <strong>${fmt(avgCheck)}</strong>
+          </div>
+          <div class="income-metric">
+            <small>За 30 дней</small>
+            <strong>${fmt(last30Income)}</strong>
+          </div>
+          <div class="income-metric">
+            <small>Топ-категория</small>
+            <strong>${escapeHtml(topCategory.name)}</strong>
+            <span>${fmt(topCategory.amount)}</span>
+          </div>
+        </div>
+      </article>
+    </div>
+
+    <article class="card mt-16 income-journal-card">
+      <div class="income-journal-head">
+        <div>
+          <h3>Журнал доходов</h3>
+          <span>Показано ${filteredRows.length} из ${opsCount} · ${fmt(filteredTotal)}</span>
+        </div>
+        <div class="income-journal-actions">
+          <button class="btn btn-ghost" type="button" data-action="export-income-csv">Экспорт CSV</button>
+          ${canExport ? "" : '<span class="lock-hint">Trial/Pro</span>'}
+        </div>
+      </div>
+
+      <form id="incomeFilterForm" class="income-filters">
+        <label>Поиск
+          <input name="query" type="text" value="${escapeHtml(filters.query)}" placeholder="Комментарий, категория, сумма" />
+        </label>
+        <label>Категория
+          <select name="category">
+            <option value="all" ${filters.category === "all" ? "selected" : ""}>Все категории</option>
+            ${categoryOptions}
+          </select>
+        </label>
+        <label>Период
+          <select name="period">
+            <option value="all" ${filters.period === "all" ? "selected" : ""}>За все время</option>
+            <option value="30d" ${filters.period === "30d" ? "selected" : ""}>30 дней</option>
+            <option value="90d" ${filters.period === "90d" ? "selected" : ""}>90 дней</option>
+            <option value="ytd" ${filters.period === "ytd" ? "selected" : ""}>С начала года</option>
+          </select>
+        </label>
+        <label>Сортировка
+          <select name="sort">
+            <option value="date_desc" ${filters.sort === "date_desc" ? "selected" : ""}>Сначала новые</option>
+            <option value="date_asc" ${filters.sort === "date_asc" ? "selected" : ""}>Сначала старые</option>
+            <option value="amount_desc" ${filters.sort === "amount_desc" ? "selected" : ""}>Сумма по убыванию</option>
+            <option value="amount_asc" ${filters.sort === "amount_asc" ? "selected" : ""}>Сумма по возрастанию</option>
+          </select>
+        </label>
+        <div class="income-filter-actions">
+          <button class="btn btn-primary" type="submit">Применить</button>
+          <button class="btn btn-ghost" type="button" data-reset-income-filters>Сбросить</button>
+        </div>
+      </form>
+
+      <div class="table-wrap income-table-wrap">
+        <table class="table income-table">
+          <thead><tr><th>Дата</th><th>Категория</th><th>Комментарий</th><th>Сумма</th><th></th></tr></thead>
+          <tbody>
+            ${
+              filteredRows.length > 0
+                ? filteredRows
+                    .map(
+                      (row) => `
+                        <tr>
+                          <td>${formatDate(row.date)}</td>
+                          <td><span class="cat-pill">${escapeHtml(row.category)}</span></td>
+                          <td>${escapeHtml(row.comment || "-")}</td>
+                          <td class="amount-cell">${fmt(row.amount)}</td>
+                          <td class="income-row-actions">
+                            <button type="button" class="btn btn-ghost btn-xs" data-edit-income="${row.id}">Изменить</button>
+                            <button type="button" class="btn btn-ghost btn-xs danger" data-delete-income="${row.id}">Удалить</button>
+                          </td>
+                        </tr>
+                      `
+                    )
+                    .join("")
+                : '<tr><td colspan="5" class="empty-row">Нет операций по выбранным фильтрам.</td></tr>'
+            }
+          </tbody>
+        </table>
+      </div>
+    </article>
+  `;
+}
+
+function getTaxPlannerFallbackIncome() {
+  return Math.max(getCurrentMonthIncome(), normalizeIncome(state.calcIncome), 100000);
+}
+
+function getTaxPlannerState() {
+  const fallbackIncome = getTaxPlannerFallbackIncome();
+  const fallbackExpenses = normalizeIncome(state.calcExpenses);
+  const planner = normalizeTaxPlanner(state.taxPlanner, fallbackIncome, fallbackExpenses, 15);
+
+  return {
+    income: planner.income,
+    expenses: state.regime === "our" ? planner.expenses : 0,
+    reservePct: planner.reservePct,
+    ourExpensesDraft: planner.expenses
+  };
+}
+
+function renderTaxesPage() {
+  const monthlyData = getMonthlyData();
+  const planner = getTaxPlannerState();
+
+  const scenarioTax = calcByRegime(state.regime, planner.income, planner.expenses);
+  const effectiveRate = planner.income > 0 ? (scenarioTax.total / planner.income) * 100 : 0;
+  const reserveAmount = scenarioTax.total * (1 + planner.reservePct / 100);
+  const reserveBuffer = Math.max(reserveAmount - scenarioTax.total, 0);
+
+  const now = new Date();
+  const monthsPassed = now.getMonth() + 1;
+  const expenseRatio = planner.income > 0 ? Math.min(planner.ourExpensesDraft / planner.income, 0.95) : 0;
+
+  const ytdTaxTotal = monthlyData
+    .slice(0, monthsPassed)
+    .reduce((sum, row) => {
+      const rowExpenses = state.regime === "our" ? normalizeIncome(row.income * expenseRatio) : 0;
+      return sum + calcByRegime(state.regime, row.income, rowExpenses).total;
+    }, 0);
+
+  const annualForecast = scenarioTax.total * 12;
+
+  const breakdownRows = getTaxLines(scenarioTax, state.regime).map((line) => {
+    const share = scenarioTax.total > 0 ? (line.value / scenarioTax.total) * 100 : 0;
+    const width = line.value > 0 ? Math.max(share, 5) : 0;
+
+    return `
+      <div class="tax-share-row">
+        <div class="tax-share-head">
+          <span>${line.label}</span>
+          <strong>${fmt(line.value)}</strong>
+        </div>
+        <div class="tax-share-track"><span style="width:${Math.min(width, 100)}%"></span></div>
+      </div>
+    `;
+  });
+
+  const compareRows = ["self", "simplified", "our"].map((regimeId) => {
+    const expenses = regimeId === "our" ? planner.ourExpensesDraft : 0;
+    const tax = calcByRegime(regimeId, planner.income, expenses);
+    const availability = getRegimeAvailability(regimeId, planner.income);
+
+    return {
+      regimeId,
+      name: regimeLabel(regimeId),
+      tax,
+      availability
+    };
+  });
+
+  const bestAvailable = [...compareRows]
+    .filter((row) => row.availability.available)
+    .sort((a, b) => a.tax.total - b.tax.total)[0] || compareRows[0];
+
+  const compareCards = compareRows
+    .map((row) => {
+      const isBest = row.regimeId === bestAvailable.regimeId;
+      const delta = row.tax.total - bestAvailable.tax.total;
+      const cardClass = `${isBest ? " best" : ""}${row.availability.available ? "" : " unavailable"}`;
+
+      let deltaText = isBest ? "Минимальная нагрузка в сценарии" : `+${fmt(Math.max(delta, 0))} к лучшему`;
+      if (!row.availability.available) {
+        deltaText = row.availability.reason || "Недоступно по лимиту";
+      }
+
+      return `
+        <article class="tax-compare-card${cardClass}">
+          <div class="tax-compare-title">${row.name}</div>
+          <div class="tax-compare-value">${fmt(row.tax.total)}</div>
+          <div class="tax-compare-note">${deltaText}</div>
+        </article>
+      `;
+    })
+    .join("");
+
+  const forecastRows = monthlyData
+    .map((row, index) => {
+      const rowExpenses = state.regime === "our" ? normalizeIncome(row.income * expenseRatio) : 0;
+      const rowTax = calcByRegime(state.regime, row.income, rowExpenses);
+      const rate = row.income > 0 ? `${(rowTax.total / row.income).toFixed(1)}%` : "-";
+      const currentClass = index === now.getMonth() ? " class=\"current\"" : "";
+
+      return `<tr${currentClass}><td>${row.name}</td><td>${fmt(row.income)}</td><td>${fmt(rowTax.total)}</td><td>${rate}</td></tr>`;
+    })
+    .join("");
+
+  const nextDeadlines = getUpcomingDeadlines().slice(0, 3);
+  const deadlinesHtml = nextDeadlines.length
+    ? nextDeadlines
+        .map(
+          (row) => `
+            <div class="tax-deadline-item">
+              <div>
+                <strong>${formatDateShort(row.date)}</strong>
+                <span>${escapeHtml(row.title)}</span>
+              </div>
+              <em>${getLandingDeadlineDueInfo(row.date).text}</em>
+            </div>
+          `
+        )
+        .join("")
+    : '<p class="text-muted">Ближайших обязательных сроков по текущему режиму нет.</p>';
+
+  els.pageContent.innerHTML = `
+    <div class="grid grid-4 tax-kpi-grid">
+      <article class="card tax-kpi-card">
+        <div class="stat-title">Налог в сценарии</div>
+        <div class="tax-kpi-main">${fmt(scenarioTax.total)}</div>
+        <div class="tax-kpi-meta">${state.regime === "our" ? "с учетом расходов" : "оценка на месяц"}</div>
+      </article>
+      <article class="card tax-kpi-card">
+        <div class="stat-title">Эффективная ставка</div>
+        <div class="tax-kpi-main">${formatPct(effectiveRate)}</div>
+        <div class="tax-kpi-meta">доля налогов от дохода</div>
+      </article>
+      <article class="card tax-kpi-card">
+        <div class="stat-title">Рекомендуемый резерв</div>
+        <div class="tax-kpi-main">${fmt(reserveAmount)}</div>
+        <div class="tax-kpi-meta">запас ${planner.reservePct}% · буфер ${fmt(reserveBuffer)}</div>
+      </article>
+      <article class="card tax-kpi-card">
+        <div class="stat-title">Налоги с начала года</div>
+        <div class="tax-kpi-main">${fmt(ytdTaxTotal)}</div>
+        <div class="tax-kpi-meta">прогноз на 12 мес: ${fmt(annualForecast)}</div>
+      </article>
+    </div>
+
+    <article class="card mt-16 tax-planner-card">
+      <div class="tax-planner-head">
+        <div>
+          <h3>Планировщик налогов</h3>
+          <p>Измените сценарий и сразу увидите нагрузку, резерв и выгодный режим.</p>
+        </div>
+        <button type="button" class="btn btn-ghost btn-xs" data-tax-reset>Сбросить</button>
+      </div>
+
+      <form id="taxPlannerForm" class="tax-planner-form">
+        <div class="tax-form-grid">
+          <label>Доход в месяц (₸)
+            <input name="income" type="number" min="0" step="1000" value="${planner.income}" required />
+          </label>
+          <label>Расходы для ОУР (₸)
+            <input name="expenses" type="number" min="0" step="1000" value="${planner.ourExpensesDraft}" ${state.regime === "our" ? "" : "disabled"} />
+          </label>
+          <label>Запас к резерву (%)
+            <input name="reservePct" type="number" min="0" max="50" step="1" value="${planner.reservePct}" />
+          </label>
+          <button class="btn btn-primary" type="submit">Обновить расчёт</button>
+        </div>
+      </form>
+
+      <div class="tax-presets">
+        <span>Быстрый доход:</span>
+        <button type="button" data-tax-income-preset="200000">200k</button>
+        <button type="button" data-tax-income-preset="500000">500k</button>
+        <button type="button" data-tax-income-preset="1000000">1M</button>
+        <button type="button" data-tax-income-preset="2000000">2M</button>
+      </div>
+
+      <div class="tax-presets${state.regime === "our" ? "" : " disabled"}">
+        <span>Расходы для ОУР:</span>
+        <button type="button" data-tax-expense-ratio="0.2" ${state.regime === "our" ? "" : "disabled"}>20%</button>
+        <button type="button" data-tax-expense-ratio="0.4" ${state.regime === "our" ? "" : "disabled"}>40%</button>
+        <button type="button" data-tax-expense-ratio="0.6" ${state.regime === "our" ? "" : "disabled"}>60%</button>
+      </div>
+
+      <div class="tax-presets">
+        <span>Запас резерва:</span>
+        <button type="button" data-tax-reserve-preset="10">10%</button>
+        <button type="button" data-tax-reserve-preset="15">15%</button>
+        <button type="button" data-tax-reserve-preset="20">20%</button>
+      </div>
+
+      <p class="tax-input-hint ${state.regime === "our" ? "" : "muted"}">
+        ${
+          state.regime === "our"
+            ? "Для ОУР учитываем расходы в сценарии и пересчитываем ИПН по налоговой базе."
+            : "Расходы влияют только на режим ОУР. Переключите режим сверху, чтобы включить этот параметр."
+        }
+      </p>
+    </article>
+
+    <div class="grid grid-2 mt-16">
+      <article class="card tax-breakdown-card">
+        <h3>Структура налоговой нагрузки</h3>
+        <div class="tax-share-list">${breakdownRows.join("")}</div>
+      </article>
+
+      <article class="card tax-compare-panel">
+        <h3>Сравнение режимов для вашего сценария</h3>
+        <div class="tax-compare-grid">${compareCards}</div>
+      </article>
+    </div>
+
+    <article class="card mt-16 tax-forecast-panel">
+      <h3>Помесячный прогноз</h3>
+      <p class="text-muted">Доход берется из журнала, налоги пересчитываются в текущем режиме ${regimeLabel(state.regime)}.</p>
+      <div class="table-wrap">
+        <table class="table tax-forecast-table">
+          <thead><tr><th>Месяц</th><th>Доход</th><th>Налоги</th><th>Эфф. ставка</th></tr></thead>
+          <tbody>${forecastRows}</tbody>
+        </table>
+      </div>
+    </article>
+
+    <article class="card mt-16 tax-deadlines-panel">
+      <div class="tax-deadlines-head">
+        <h3>Что скоро платить</h3>
+        <button class="btn btn-ghost btn-xs" type="button" data-page="calendar">Открыть календарь</button>
+      </div>
+      <div class="tax-deadline-list">${deadlinesHtml}</div>
+    </article>
+  `;
+}
+function getCalendarDueMeta(dateString, done) {
+  if (done) {
+    return { text: "Выполнено", tone: "done" };
+  }
+
+  const now = new Date();
+  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const target = new Date(dateString);
+  const targetStart = new Date(target.getFullYear(), target.getMonth(), target.getDate());
+  const diffDays = Math.ceil((targetStart - dayStart) / 86400000);
+
+  if (diffDays < 0) {
+    return { text: `Просрочено на ${Math.abs(diffDays)} ${getLandingDayWord(Math.abs(diffDays))}`, tone: "overdue" };
+  }
+
+  if (diffDays === 0) {
+    return { text: "Сегодня", tone: "urgent" };
+  }
+
+  if (diffDays <= 7) {
+    return { text: `Через ${diffDays} ${getLandingDayWord(diffDays)}`, tone: "urgent" };
+  }
+
+  if (diffDays <= 21) {
+    return { text: `Через ${diffDays} ${getLandingDayWord(diffDays)}`, tone: "soon" };
+  }
+
+  return { text: `Через ${diffDays} ${getLandingDayWord(diffDays)}`, tone: "normal" };
+}
+
+function getCalendarRowsByRegime() {
+  return DEADLINES_2026
+    .filter((row) => row.regime === state.regime || row.regime === "all")
+    .map((row) => {
+      const done = state.doneDeadlines.includes(row.id);
+      const due = getCalendarDueMeta(row.date, done);
+      const dateObj = new Date(row.date);
+
+      return {
+        ...row,
+        done,
+        due,
+        dateObj,
+        typeLabel: row.type === "payment" ? "Платеж" : "Отчет",
+        regimeLabel: getLandingDeadlineRegimeLabel(row.regime)
+      };
+    })
+    .sort((a, b) => a.dateObj - b.dateObj);
+}
+
+function getFilteredCalendarRows() {
+  const filters = {
+    ...getDefaultCalendarFilters(),
+    ...(state.calendarFilters || {})
+  };
+
+  const now = new Date();
+  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  return getCalendarRowsByRegime().filter((row) => {
+    if (filters.timeframe === "upcoming" && row.dateObj < dayStart) {
+      return false;
+    }
+
+    if (filters.timeframe === "year" && row.dateObj.getFullYear() !== now.getFullYear()) {
+      return false;
+    }
+
+    if (filters.type !== "all" && row.type !== filters.type) {
+      return false;
+    }
+
+    if (filters.status === "pending" && row.done) {
+      return false;
+    }
+
+    if (filters.status === "done" && !row.done) {
+      return false;
+    }
+
+    if (filters.query) {
+      const query = filters.query.toLowerCase();
+      const haystack = `${row.title} ${row.typeLabel} ${row.regimeLabel}`.toLowerCase();
+      if (!haystack.includes(query)) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+}
+
+function renderCalendarPage() {
+  state.calendarFilters = {
+    ...getDefaultCalendarFilters(),
+    ...(state.calendarFilters || {})
+  };
+
+  const rows = getFilteredCalendarRows();
+  const allRegimeRows = getCalendarRowsByRegime();
+
+  const pendingTotal = allRegimeRows.filter((row) => !row.done).length;
+  const doneTotal = allRegimeRows.filter((row) => row.done).length;
+  const urgentTotal = allRegimeRows.filter((row) => !row.done && (row.due.tone === "urgent" || row.due.tone === "overdue")).length;
+
+  const nextPending = allRegimeRows.find((row) => !row.done && row.due.tone !== "done") || null;
+
+  const visiblePending = rows.filter((row) => !row.done).length;
+
+  const timeframeButtons = [
+    { id: "upcoming", label: "Ближайшие" },
+    { id: "year", label: "Этот год" },
+    { id: "all", label: "Все" }
+  ]
+    .map(
+      (item) =>
+        `<button type="button" class="${state.calendarFilters.timeframe === item.id ? "active" : ""}" data-calendar-timeframe="${item.id}">${item.label}</button>`
+    )
+    .join("");
+
+  const typeButtons = [
+    { id: "all", label: "Все типы" },
+    { id: "payment", label: "Платежи" },
+    { id: "report", label: "Отчеты" }
+  ]
+    .map(
+      (item) =>
+        `<button type="button" class="${state.calendarFilters.type === item.id ? "active" : ""}" data-calendar-type="${item.id}">${item.label}</button>`
+    )
+    .join("");
+
+  const statusButtons = [
+    { id: "all", label: "Все" },
+    { id: "pending", label: "Ожидают" },
+    { id: "done", label: "Сделано" }
+  ]
+    .map(
+      (item) =>
+        `<button type="button" class="${state.calendarFilters.status === item.id ? "active" : ""}" data-calendar-status="${item.id}">${item.label}</button>`
+    )
+    .join("");
+
+  const tableRows = rows
+    .map((row) => {
+      const statusBadge = row.done
+        ? '<span class="badge badge-success">Сделано</span>'
+        : '<span class="badge badge-warning">Ожидает</span>';
+
+      const typeTone = row.type === "payment" ? "payment" : "report";
+      const dueTone = row.due.tone;
+      const checklistStats = getDeadlineChecklistStats(row.id, row);
+
+      return `
+        <tr class="calendar-row ${row.done ? "done" : ""} ${dueTone}">
+          <td class="calendar-date-cell">${formatDate(row.date)}</td>
+          <td>
+            <div class="calendar-event-title">${escapeHtml(row.title)}</div>
+            <div class="calendar-event-sub">${escapeHtml(row.regimeLabel)}</div>
+          </td>
+          <td><span class="calendar-type-chip ${typeTone}">${row.typeLabel}</span></td>
+          <td><span class="calendar-due-chip ${dueTone}">${row.due.text}</span></td>
+          <td>${statusBadge}</td>
+          <td class="calendar-actions-cell">
+            <button type="button" class="btn btn-ghost btn-xs" data-deadline-expand="${row.id}">Чеклист ${checklistStats.done}/${checklistStats.total}</button>
+            <button type="button" class="btn btn-ghost btn-xs" data-toggle-deadline="${row.id}">${row.done ? "Снять" : "Отметить"}</button>
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  els.pageContent.innerHTML = `
+    <article class="card calendar-summary-card">
+      <div class="calendar-summary-head">
+        <h3>Календарь сроков по режиму: ${regimeLabel(state.regime)}</h3>
+        <span class="calendar-summary-chip">${rows.length} записей в текущем фильтре</span>
+      </div>
+
+      <div class="calendar-kpi-grid">
+        <div class="calendar-kpi-item">
+          <span>Следующий срок</span>
+          <strong>${nextPending ? formatDateShort(nextPending.date) : "Нет"}</strong>
+          <small>${nextPending ? escapeHtml(nextPending.title) : "Все сроки закрыты"}</small>
+        </div>
+        <div class="calendar-kpi-item">
+          <span>Ожидают</span>
+          <strong>${pendingTotal}</strong>
+          <small>по текущему режиму</small>
+        </div>
+        <div class="calendar-kpi-item">
+          <span>Сделано</span>
+          <strong>${doneTotal}</strong>
+          <small>закрытые обязательства</small>
+        </div>
+        <div class="calendar-kpi-item danger">
+          <span>Срочно</span>
+          <strong>${urgentTotal}</strong>
+          <small>сегодня / просрочено / до 7 дней</small>
+        </div>
+      </div>
+    </article>
+
+    <article class="card mt-16 calendar-filter-card">
+      <div class="calendar-filter-groups">
+        <div class="calendar-filter-group">
+          <p>Период</p>
+          <div class="calendar-chip-group">${timeframeButtons}</div>
+        </div>
+        <div class="calendar-filter-group">
+          <p>Тип</p>
+          <div class="calendar-chip-group">${typeButtons}</div>
+        </div>
+        <div class="calendar-filter-group">
+          <p>Статус</p>
+          <div class="calendar-chip-group">${statusButtons}</div>
+        </div>
+      </div>
+
+      <form id="calendarFilterForm" class="calendar-search-form">
+        <label>
+          Поиск события
+          <input name="query" type="text" value="${escapeHtml(state.calendarFilters.query)}" placeholder="ФНО, ОПВ, ИПН..." />
+        </label>
+        <input type="hidden" name="type" value="${state.calendarFilters.type}" />
+        <input type="hidden" name="status" value="${state.calendarFilters.status}" />
+        <input type="hidden" name="timeframe" value="${state.calendarFilters.timeframe}" />
+        <div class="calendar-filter-actions">
+          <button class="btn btn-primary" type="submit">Применить</button>
+          <button class="btn btn-ghost" type="button" data-reset-calendar-filters>Сбросить</button>
+          <button class="btn btn-ghost" type="button" data-calendar-mark-visible ${visiblePending > 0 ? "" : "disabled"}>Отметить видимые</button>
+        </div>
+      </form>
+    </article>
+
+    <article class="card mt-16 calendar-table-card">
+      <div class="table-wrap">
+        <table class="table calendar-table">
+          <thead><tr><th>Дата</th><th>Событие</th><th>Тип</th><th>Когда</th><th>Статус</th><th></th></tr></thead>
+          <tbody>
+            ${
+              tableRows ||
+              '<tr><td colspan="6" class="empty-row">По текущим фильтрам событий не найдено.</td></tr>'
+            }
+          </tbody>
+        </table>
+      </div>
+    </article>
+  `;
+}
+
+function renderCalculatorPage() {
+  const periodMultiplier = getCalcPeriodMultiplier();
+  const periodLabel = getCalcPeriodLabel();
+  const incomeInputValue = getCalcInputIncome();
+  const expensesInputValue = getCalcInputExpenses();
+
+  const rows = [
+    { id: "self", label: "Самозанятый", taxData: calcSelfEmployed(state.calcIncome), limitLabel: "13.76 млн ₸/год" },
+    { id: "simplified", label: "Упрощенка (910)", taxData: calcSimplified(state.calcIncome), limitLabel: "94.5 млн ₸/год" },
+    { id: "our", label: "ОУР", taxData: calcOUR(state.calcIncome, state.calcExpenses), limitLabel: "Без лимита" }
+  ].map((row) => ({
+    ...row,
+    tax: row.taxData.total,
+    ...getRegimeAvailability(row.id, state.calcIncome)
+  }));
+
+  const availableRows = rows.filter((row) => row.available).sort((a, b) => a.tax - b.tax);
+  const fallbackRows = [...rows].sort((a, b) => a.tax - b.tax);
+  const bestRow = availableRows[0] || fallbackRows[0];
+  const secondRow = availableRows[1] || fallbackRows.find((row) => row.id !== bestRow.id) || null;
+  const bestId = bestRow.id;
+
+  const bestTaxDisplay = bestRow.tax * periodMultiplier;
+  const secondTaxDisplay = secondRow ? secondRow.tax * periodMultiplier : bestTaxDisplay;
+  const savingsDisplay = Math.max(secondTaxDisplay - bestTaxDisplay, 0);
+
+  const currentRow = rows.find((row) => row.id === state.regime) || bestRow;
+  const currentTaxDisplay = currentRow.tax * periodMultiplier;
+  const switchSavings = Math.max(currentTaxDisplay - bestTaxDisplay, 0);
+
+  const incomeLabel = state.calcPeriod === "year" ? "Доход в год (₸)" : "Доход в месяц (₸)";
+  const expenseLabel = state.calcPeriod === "year" ? "Расходы в год (₸) - для ОУР" : "Расходы в месяц (₸) - для ОУР";
+  const expenseRatio = incomeInputValue > 0 ? expensesInputValue / incomeInputValue : 0;
+  const hasIncome = incomeInputValue > 0;
+
+  const incomePresets = [100000, 300000, 500000, 1000000]
+    .map((presetMonthly) => {
+      const displayValue = state.calcPeriod === "year" ? presetMonthly * 12 : presetMonthly;
+      const isActive = Math.abs(displayValue - incomeInputValue) <= 1;
+      const label = state.calcPeriod === "year" ? `${Math.round(presetMonthly / 1000)}k x12` : `${Math.round(presetMonthly / 1000)}k`;
+      return `<button type="button" class="${isActive ? "active" : ""}" data-calc-preset="${presetMonthly}">${label}</button>`;
+    })
+    .join("");
+
+  const expensePresets = [
+    { ratio: 0, label: "0%" },
+    { ratio: 0.2, label: "20%" },
+    { ratio: 0.4, label: "40%" }
+  ]
+    .map((preset) => {
+      const isActive = Math.abs(expenseRatio - preset.ratio) < 0.03;
+      return `<button type="button" class="${isActive ? "active" : ""}" data-calc-expense-ratio="${preset.ratio}">${preset.label}</button>`;
+    })
+    .join("");
+
+  els.pageContent.innerHTML = `
+    <article class="card calc-control-card">
+      <div class="calc-control-head">
+        <h3>Параметры расчета</h3>
+        <div class="calc-period-switch" role="group" aria-label="Период расчета">
+          <button type="button" data-calc-period="month" class="${state.calcPeriod === "month" ? "active" : ""}">В месяц</button>
+          <button type="button" data-calc-period="year" class="${state.calcPeriod === "year" ? "active" : ""}">В год</button>
+        </div>
+      </div>
+
+      <div class="grid grid-2 calc-input-grid">
+        <label>${incomeLabel}
+          <div class="calc-step-input">
+            <button type="button" data-calc-step="-10000" aria-label="Уменьшить доход">−</button>
+            <input id="calcIncomeInput" type="number" value="${incomeInputValue}" min="0" step="1000" />
+            <button type="button" data-calc-step="10000" aria-label="Увеличить доход">+</button>
+          </div>
+        </label>
+
+        <label>${expenseLabel}
+          <input id="calcExpensesInput" type="number" value="${expensesInputValue}" min="0" step="1000" />
+          <div class="calc-expense-presets" role="group" aria-label="Пресеты расходов">
+            ${expensePresets}
+          </div>
+        </label>
+      </div>
+
+      <div class="calc-income-presets" role="group" aria-label="Пресеты дохода">
+        ${incomePresets}
+      </div>
+    </article>
+
+    <article class="card mt-16 calc-summary-card">
+      <div class="calc-summary-main">
+        <div>
+          <p class="calc-summary-kicker">Рекомендация</p>
+          <h3>${hasIncome ? bestRow.label : "Введите доход"}</h3>
+          <p class="text-muted">
+            ${
+              hasIncome
+                ? `Минимальная налоговая нагрузка при текущих параметрах.`
+                : "Укажите сумму дохода и, при необходимости, расходы для ОУР."
+            }
+          </p>
+        </div>
+        <div class="calc-summary-value">${hasIncome ? fmt(bestTaxDisplay) : "—"}</div>
+      </div>
+
+      <div class="calc-summary-grid">
+        <div class="calc-summary-item">
+          <span>Экономия к следующему режиму</span>
+          <strong>${hasIncome ? fmt(savingsDisplay) : "—"}</strong>
+        </div>
+        <div class="calc-summary-item">
+          <span>Ваш текущий режим (${regimeLabel(state.regime)})</span>
+          <strong>${hasIncome ? fmt(currentTaxDisplay) : "—"}</strong>
+        </div>
+        <div class="calc-summary-item">
+          <span>Потенциал при смене режима</span>
+          <strong>${hasIncome ? fmt(switchSavings) : "—"}</strong>
+        </div>
+      </div>
+      <p class="calc-summary-foot">Все суммы показаны ${periodLabel}. Это ориентир, финальная сумма зависит от фактических данных и обязательств.</p>
+    </article>
+
+    <div class="grid grid-3 mt-16 calc-regime-grid">
+      ${rows.map((row) => renderRegimeResultCard(row, bestId, { periodMultiplier, inputIncome: incomeInputValue, bestTax: bestRow.tax, periodLabel })).join("")}
+    </div>
+  `;
+
+  const calcIncomeInput = document.getElementById("calcIncomeInput");
+  const calcExpensesInput = document.getElementById("calcExpensesInput");
+
+  if (calcIncomeInput) {
+    calcIncomeInput.addEventListener("input", () => {
+      state.calcIncome = toCalcStorageValue(calcIncomeInput.value);
+      saveState();
+      renderCalculatorPage();
+      trackEvent("calc_change", { field: "income", period: state.calcPeriod });
+    });
+  }
+
+  if (calcExpensesInput) {
+    calcExpensesInput.addEventListener("input", () => {
+      state.calcExpenses = toCalcStorageValue(calcExpensesInput.value);
+      saveState();
+      renderCalculatorPage();
+      trackEvent("calc_change", { field: "expenses", period: state.calcPeriod });
+    });
+  }
+}
+
+function renderRegimeResultCard(row, bestId, options = {}) {
+  const periodMultiplier = Number(options.periodMultiplier || 1);
+  const inputIncome = Number(options.inputIncome || 0);
+  const bestTax = Number(options.bestTax || row.tax);
+  const periodLabel = options.periodLabel || "в месяц";
+
+  const isBest = row.id === bestId && inputIncome > 0 && row.available;
+  const displayTax = row.tax * periodMultiplier;
+  const deltaToBest = Math.max(displayTax - bestTax * periodMultiplier, 0);
+  const effectiveRate = inputIncome > 0 ? (displayTax / inputIncome) * 100 : 0;
+
+  const limit = getRegimeLimit(row.id);
+  const annualIncome = annualizeIncome(state.calcIncome);
+  let limitChipText = row.limitLabel;
+  let limitChipClass = "ok";
+
+  if (limit) {
+    const diff = limit - annualIncome;
+    if (diff >= 0) {
+      limitChipText = `Запас: ${fmt(diff)} / год`;
+      limitChipClass = "ok";
+    } else {
+      limitChipText = `Превышение: ${fmt(Math.abs(diff))} / год`;
+      limitChipClass = "over";
+    }
+  }
+
+  return `
+    <article class="card regime-result ${isBest ? "best" : ""} ${row.available ? "" : "unavailable"}">
+      ${isBest ? '<span class="badge badge-success top-badge">ВЫГОДНЕЕ</span>' : row.available ? "" : '<span class="badge badge-warning top-badge">Недоступно</span>'}
+      <div class="regime-head">
+        <h3>${row.label}</h3>
+        <span class="regime-limit-chip ${limitChipClass}">${limitChipText}</span>
+      </div>
+      <div class="stat-value ${isBest ? "" : "stat-danger"} stat-xl">${fmt(displayTax)}</div>
+      <p class="text-muted">${periodLabel} · лимит: ${row.limitLabel}</p>
+
+      ${
+        row.available
+          ? `<div class="regime-meta-row">
+               <span class="regime-rate">Нагрузка: ${formatPct(effectiveRate)} от дохода</span>
+               ${!isBest && deltaToBest > 0 ? `<span class="regime-delta">+${fmt(deltaToBest)} к лучшему</span>` : ""}
+             </div>
+             ${renderTaxBreakdown(row.taxData, row.id)}`
+          : `<p class="text-muted">${row.reason}. Рассмотрите другой режим.</p>`
+      }
+    </article>
+  `;
+}
+
+function renderSettingsPage() {
+  refreshSubscriptionState();
+
+  const trialDays = getDaysLeft(state.subscription.trialEndsAt);
+  const planLabel = isProActive() ? "Pro план" : isTrialActive() ? `Trial (${trialDays} дн.)` : "Free план";
+  const planTone = isProActive() ? "active" : isTrialActive() ? "trial" : "free";
+
+  const featureRows = Object.entries(PRO_FEATURES)
+    .map(([key, label]) => {
+      const enabled = canUseFeature(key);
+      return `
+        <li>
+          <span>${label}</span>
+          <b class="feature-state ${enabled ? "enabled" : "locked"}">${enabled ? "Доступно" : "Недоступно"}</b>
+        </li>
+      `;
+    })
+    .join("");
+
+  els.pageContent.innerHTML = `
+    <div class="grid grid-2">
+      <article class="card">
+        <h3>Профиль ИП</h3>
+        <form id="settingsForm" class="stack-form">
+          <label>ФИО / Наименование<input name="name" type="text" value="${escapeHtml(state.profile.name)}" /></label>
+          <label>БИН/ИИН<input name="iin" type="text" value="${escapeHtml(state.profile.iin)}" /></label>
+          <label>Город<input name="city" type="text" value="${escapeHtml(state.profile.city)}" /></label>
+          <label>Вид деятельности<input name="activity" type="text" value="${escapeHtml(state.profile.activity)}" /></label>
+          <button class="btn btn-primary" type="submit">Сохранить профиль</button>
+        </form>
+      </article>
+
+      <article class="card">
+        <h3>Ставки 2025-2026</h3>
+        <table class="table">
+          <tbody>
+            <tr><td>МРП</td><td>${fmt(RATES.MRP)}</td></tr>
+            <tr><td>МЗП</td><td>${fmt(RATES.MZP)}</td></tr>
+            <tr><td>ОПВ</td><td>10%</td></tr>
+            <tr><td>СО</td><td>3.5%</td></tr>
+            <tr><td>ВОСМС</td><td>${fmt(RATES.VOSMS)}/мес</td></tr>
+            <tr><td>Лимит упрощенки</td><td>94.5 млн ₸/год</td></tr>
+            <tr><td>Лимит самозанятого</td><td>13.76 млн ₸/год</td></tr>
+          </tbody>
+        </table>
+      </article>
+    </div>
+
+    <article class="card mt-16 subscription-card">
+      <div class="subscription-head">
+        <h3>Тариф и подписка</h3>
+        <span class="subscription-badge ${planTone}">${planLabel}</span>
+      </div>
+      <p class="text-muted">Free: базовый расчет и учет. Trial/Pro: напоминания, расширенная аналитика и экспорт.</p>
+      <ul class="feature-list">
+        ${featureRows}
+      </ul>
+      <div class="subscription-actions">
+        <button type="button" class="btn btn-primary" data-action="open-pro">Открыть тарифы</button>
+      </div>
+    </article>
+  `;
+}
+
+function getTaxLines(tax, regime) {
+  if (regime === "self") {
+    return [{ label: "ЕСП (фиксированный)", value: tax.esp }];
+  }
+
+  if (regime === "simplified") {
+    return [
+      { label: "ОПВ (10%)", value: tax.opv },
+      { label: "СО (3.5%)", value: tax.so },
+      { label: "ВОСМС", value: tax.vosms },
+      { label: "ИПН (3%/6)", value: tax.ipn },
+      { label: "Соц. налог", value: tax.socTax }
+    ];
+  }
+
+  return [
+    { label: "ОПВ (10%)", value: tax.opv },
+    { label: "СО (3.5%)", value: tax.so },
+    { label: "ВОСМС", value: tax.vosms },
+    { label: "ИПН (10%)", value: tax.ipn }
+  ];
+}
+
+function renderTaxBreakdown(tax, regime) {
+  const lines = getTaxLines(tax, regime);
+
+  return `
+    <div>
+      ${lines
+        .map(
+          (line) =>
+            `<div class="tax-row"><span class="text-muted">${line.label}</span><strong>${fmt(line.value)}</strong></div>`
+        )
+        .join("")}
+    </div>
+  `;
+}
+function toggleDeadlineDone(id) {
+  const row = DEADLINES_2026.find((item) => item.id === id);
+  if (!row) return;
+
+  const isDone = state.doneDeadlines.includes(id);
+
+  if (isDone) {
+    state.doneDeadlines = state.doneDeadlines.filter((x) => x !== id);
+    markAllDeadlineTasks(id, row, false);
+  } else {
+    state.doneDeadlines.push(id);
+    markAllDeadlineTasks(id, row, true);
+  }
+
+  saveState();
+
+  if (state.page === "calendar") {
+    renderCalendarPage();
+  }
+
+  if (state.landingDeadlineOpenId === id) {
+    renderLandingDeadlineModal(id);
+  }
+
+  renderLandingDeadlines();
+  trackEvent("deadline_toggle", { id, done: !isDone });
+}
+
+function regimeLabel(regime) {
+  if (regime === "self") return "Самозанятый";
+  if (regime === "our") return "ОУР";
+  return "Упрощенка (910)";
+}
+
+function formatDate(dateString) {
+  return new Date(dateString).toLocaleDateString("ru-KZ");
+}
+
+function formatDateShort(dateString) {
+  return new Date(dateString).toLocaleDateString("ru-KZ", { day: "numeric", month: "short" });
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function trackEvent(name, payload = {}) {
+  eventCounter += 1;
+
+  if (window.gtag && APP_CONFIG.analytics.googleTagId) {
+    window.gtag("event", name, payload);
+  }
+
+  if (window.plausible && APP_CONFIG.analytics.plausibleDomain) {
+    window.plausible(name, { props: payload });
+  }
+
+  console.info("[event]", eventCounter, name, payload);
+}
+
+function initAnalyticsProviders() {
+  if (APP_CONFIG.analytics.googleTagId) {
+    const script = document.createElement("script");
+    script.async = true;
+    script.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(APP_CONFIG.analytics.googleTagId)}`;
+    document.head.appendChild(script);
+
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = function gtag() {
+      window.dataLayer.push(arguments);
+    };
+
+    window.gtag("js", new Date());
+    window.gtag("config", APP_CONFIG.analytics.googleTagId);
+  }
+
+  if (APP_CONFIG.analytics.plausibleDomain) {
+    const script = document.createElement("script");
+    script.defer = true;
+    script.dataset.domain = APP_CONFIG.analytics.plausibleDomain;
+    script.src = "https://plausible.io/js/script.js";
+    document.head.appendChild(script);
+  }
+}
+
+function readJson(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch (_err) {
+    return null;
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
