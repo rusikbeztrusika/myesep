@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Montserrat:wght@600;700;800&family=Rubik:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=20260313-fix-encoding-01" />
+  <link rel="stylesheet" href="./styles.css?v=20260315-mobile-ux-8" />
 </head>
 <body>
   <div id="publicApp" class="public-app">
@@ -200,6 +200,11 @@
         </div>
       </div>
     </section>
+    <footer class="public-legal-footer">
+      <a href="/privacy-policy.html" target="_blank" rel="noopener noreferrer">Политика конфиденциальности</a>
+      <span aria-hidden="true">·</span>
+      <a href="/terms-of-service.html" target="_blank" rel="noopener noreferrer">Пользовательское соглашение</a>
+    </footer>
   </div>
 
   <div id="dashboardApp" class="dashboard-app hidden">
@@ -241,6 +246,10 @@
           <span id="planBadge"><span class="plan-badge plan-trial">Trial</span></span>
           <div id="sidebarBetaBanner" class="sidebar-beta-banner hidden"></div>
         </div>
+        <div class="sidebar-legal-links">
+          <a href="/privacy-policy.html" target="_blank" rel="noopener noreferrer">Политика конфиденциальности</a>
+          <a href="/terms-of-service.html" target="_blank" rel="noopener noreferrer">Пользовательское соглашение</a>
+        </div>
       </div>
     </aside>
     <div id="sidebarOverlay" class="sidebar-overlay" data-action="close-sidebar"></div>
@@ -248,18 +257,29 @@
     <main class="main-area">
       <header class="main-header">
         <button id="sidebarToggle" class="sidebar-toggle" type="button" data-action="toggle-sidebar" aria-label="Открыть меню"><i class="nav-icon" data-lucide="menu"></i></button>
+        <button id="mobileMenuBtn" class="mobile-menu-btn" type="button" data-action="open-mobile-drawer" aria-label="Открыть меню" style="display:none;">
+          <i class="nav-icon" data-lucide="menu"></i>
+        </button>
         <div class="main-header-title">
+          <div class="mobile-header-brand">MyEsep<span>.kz</span></div>
           <h2 id="pageTitle">Главная</h2>
           <button id="amountsVisibilityBtn" class="amount-visibility-btn hidden" type="button" data-action="toggle-hide-amounts" aria-label="Скрыть суммы" title="Скрыть суммы">
             <i class="nav-icon amount-visibility-icon" data-lucide="eye"></i>
           </button>
-          <button id="calendarReminderToggle" class="calendar-reminder-toggle hidden" type="button" data-action="toggle-calendar-reminders" aria-pressed="false" title="Напоминания: Выкл">
-            <span class="calendar-reminder-toggle-icon" aria-hidden="true">🔔</span>
-            <span class="calendar-reminder-toggle-label">Напоминания</span>
-            <span class="calendar-reminder-toggle-state">Выкл</span>
-          </button>
         </div>
+        <button id="mobileAmountsVisibilityBtn" class="amount-visibility-btn hidden" type="button" data-action="toggle-hide-amounts" aria-label="Скрыть суммы" title="Скрыть суммы" style="display:none;">
+          <i class="nav-icon amount-visibility-icon" data-lucide="eye"></i>
+        </button>
         <div class="header-actions">
+          <div id="calendarReminderToggle" class="calendar-reminder-toggle hidden" title="Напоминания" data-tour-target="header-reminders">
+            <span class="calendar-reminder-toggle-label">Напоминания</span>
+            <button type="button" class="calendar-reminder-switch" data-action="toggle-calendar-reminders" role="switch" aria-checked="false" aria-label="Переключить напоминания">
+              <span class="calendar-reminder-switch-thumb" aria-hidden="true"></span>
+            </button>
+            <button type="button" class="calendar-reminder-settings-btn" data-action="open-reminders-settings" aria-label="Настроить напоминания" title="Настроить напоминания">
+              <i class="calendar-reminder-settings-icon" data-lucide="settings-2" aria-hidden="true"></i>
+            </button>
+          </div>
           <select id="regimeSelect">
             <option value="self">Самозанятый</option>
             <option value="simplified">Упрощенка (910)</option>
@@ -273,14 +293,95 @@
       <section id="pageContent" class="page-content"></section>
     </main>
 
+    <div id="mobileDrawerOverlay" class="hidden" data-action="close-mobile-drawer"></div>
+    <aside id="mobileDrawer" class="hidden" aria-label="Мобильное меню">
+      <button type="button" class="mobile-drawer-close" data-action="close-mobile-drawer" aria-label="Закрыть">×</button>
+      <div class="mobile-drawer-profile">
+        <div id="mobileDrawerAvatar" class="mobile-drawer-avatar" aria-hidden="true">П</div>
+        <div class="mobile-drawer-user-main">
+          <div id="mobileDrawerUserName" class="mobile-drawer-user-name">Пользователь</div>
+          <div id="mobileDrawerUserEmail" class="mobile-drawer-user-email">email@example.com</div>
+        </div>
+        <div id="mobileDrawerPlanBadge" class="mobile-drawer-plan-badge"><span class="plan-badge plan-trial">Trial</span></div>
+      </div>
+      <div class="mobile-drawer-regime-wrap">
+        <div class="mobile-drawer-regime-label">Налоговый режим</div>
+        <div class="mobile-drawer-regime-tabs" role="tablist" aria-label="Выбор налогового режима">
+          <button type="button" class="mobile-drawer-regime-btn" data-action="mobile-drawer-set-regime" data-regime="self" role="tab" aria-pressed="false">Самозанятый</button>
+          <button type="button" class="mobile-drawer-regime-btn" data-action="mobile-drawer-set-regime" data-regime="simplified" role="tab" aria-pressed="false">Упрощёнка</button>
+          <button type="button" class="mobile-drawer-regime-btn" data-action="mobile-drawer-set-regime" data-regime="our" role="tab" aria-pressed="false">ОУР</button>
+        </div>
+      </div>
+      <div class="mobile-drawer-reminders-wrap">
+        <div id="mobileDrawerReminderToggle" class="calendar-reminder-toggle hidden" title="Напоминания">
+          <span class="calendar-reminder-toggle-label">🔔 Напоминания</span>
+          <button type="button" class="calendar-reminder-switch" data-action="toggle-calendar-reminders" role="switch" aria-checked="false" aria-label="Переключить напоминания">
+            <span class="calendar-reminder-switch-thumb" aria-hidden="true"></span>
+          </button>
+          <button type="button" class="calendar-reminder-settings-btn" data-action="open-reminders-settings" aria-label="Настроить напоминания" title="Настроить напоминания">
+            <i class="calendar-reminder-settings-icon" data-lucide="settings-2" aria-hidden="true"></i>
+          </button>
+        </div>
+      </div>
+      <div class="mobile-drawer-nav">
+        <button type="button" class="mobile-drawer-item" data-page="dashboard">
+          <span class="mobile-drawer-item-main"><i class="mobile-drawer-item-icon" data-lucide="home"></i><span>Главная</span></span>
+          <span class="mobile-drawer-item-arrow">›</span>
+        </button>
+
+        <p class="mobile-drawer-group-title">Учет</p>
+        <button type="button" class="mobile-drawer-item" data-page="income">
+          <span class="mobile-drawer-item-main"><i class="mobile-drawer-item-icon" data-lucide="wallet"></i><span>Доходы</span></span>
+          <span class="mobile-drawer-item-arrow">›</span>
+        </button>
+        <button type="button" class="mobile-drawer-item" data-page="taxes">
+          <span class="mobile-drawer-item-main"><i class="mobile-drawer-item-icon" data-lucide="file-check"></i><span>Налоги</span></span>
+          <span class="mobile-drawer-item-arrow">›</span>
+        </button>
+
+        <p class="mobile-drawer-group-title">Планирование</p>
+        <button type="button" class="mobile-drawer-item" data-page="calendar">
+          <span class="mobile-drawer-item-main"><i class="mobile-drawer-item-icon" data-lucide="calendar"></i><span>Календарь</span></span>
+          <span class="mobile-drawer-item-arrow">›</span>
+        </button>
+        <button type="button" class="mobile-drawer-item" data-page="calculator">
+          <span class="mobile-drawer-item-main"><i class="mobile-drawer-item-icon" data-lucide="sliders-horizontal"></i><span>Калькулятор</span></span>
+          <span class="mobile-drawer-item-arrow">›</span>
+        </button>
+
+        <p class="mobile-drawer-group-title">Помощь</p>
+        <button type="button" class="mobile-drawer-item" data-page="knowledge">
+          <span class="mobile-drawer-item-main"><i class="mobile-drawer-item-icon" data-lucide="book-open"></i><span>База знаний</span></span>
+          <span class="mobile-drawer-item-arrow">›</span>
+        </button>
+        <button type="button" class="mobile-drawer-item" data-page="feedback">
+          <span class="mobile-drawer-item-main"><i class="mobile-drawer-item-icon" data-lucide="mail"></i><span>Обратная связь</span></span>
+          <span class="mobile-drawer-item-arrow">›</span>
+        </button>
+        <button type="button" class="mobile-drawer-item" data-page="settings">
+          <span class="mobile-drawer-item-main"><i class="mobile-drawer-item-icon" data-lucide="settings"></i><span>Настройки</span></span>
+          <span class="mobile-drawer-item-arrow">›</span>
+        </button>
+      </div>
+      <div class="mobile-drawer-actions">
+        <button id="mobileDrawerProBtn" type="button" class="mobile-drawer-pro-btn" data-action="open-pro"><i class="mobile-drawer-pro-icon" data-lucide="zap"></i><span>30 дней Pro — бесплатно</span></button>
+        <button type="button" class="mobile-drawer-logout-btn" data-action="logout">
+          <i class="mobile-drawer-item-icon" data-lucide="log-out"></i>
+          <span>Выйти</span>
+        </button>
+      </div>
+      <div class="mobile-drawer-links">
+        <a href="/privacy-policy.html" target="_blank" rel="noopener noreferrer">Политика конфиденциальности</a>
+        <a href="/terms-of-service.html" target="_blank" rel="noopener noreferrer">Пользовательское соглашение</a>
+      </div>
+    </aside>
+
     <nav id="mobileTabbar" class="mobile-tabbar">
-      <button data-page="dashboard">Главная</button>
-      <button data-page="income">Доходы</button>
-      <button data-page="calendar">Сроки</button>
-      <button data-page="knowledge">База</button>
-      <button data-page="calculator">Расчет</button>
-      <button data-page="settings">Профиль</button>
-      <button data-page="feedback">Фидбек</button>
+      <button data-page="dashboard"><i class="mobile-tab-icon" data-lucide="home"></i><span>Главная</span></button>
+      <button data-page="income"><i class="mobile-tab-icon" data-lucide="wallet"></i><span>Доходы</span></button>
+      <button data-page="taxes"><i class="mobile-tab-icon" data-lucide="file-check"></i><span>Налоги</span></button>
+      <button data-page="calendar"><i class="mobile-tab-icon" data-lucide="calendar"></i><span>Сроки</span></button>
+      <button data-page="calculator"><i class="mobile-tab-icon" data-lucide="sliders-horizontal"></i><span>Расчёт</span></button>
     </nav>
   </div>
 
@@ -310,6 +411,12 @@
           <span>Email</span>
           <input id="loginEmail" type="email" placeholder="you@email.com" required />
         </label>
+        <div id="loginLegalConsentWrap" class="login-legal-consent hidden">
+          <label class="login-legal-consent-label" for="loginLegalConsent">
+            <input id="loginLegalConsent" type="checkbox" />
+            <span>Я принимаю <a href="/terms-of-service.html" target="_blank" rel="noopener noreferrer">Пользовательское соглашение</a> и <a href="/privacy-policy.html" target="_blank" rel="noopener noreferrer">Политику конфиденциальности</a>.</span>
+          </label>
+        </div>
         <label class="field-label">
           <span>Пароль</span>
           <input id="loginPassword" type="password" minlength="6" placeholder="Введите пароль" required />
@@ -442,6 +549,20 @@
     </div>
   </div>
 
+  <div id="dashboardKpiSheetModal" class="modal hidden dashboard-kpi-sheet-modal">
+    <div class="modal-card dashboard-kpi-sheet-card" role="dialog" aria-modal="true" aria-label="Расшифровка показателя">
+      <div class="dashboard-kpi-sheet-handle" aria-hidden="true"></div>
+      <div class="modal-head dashboard-kpi-sheet-head">
+        <h3 id="dashboardKpiSheetTitle">Расшифровка</h3>
+        <button type="button" class="icon-btn" data-action="close-dashboard-kpi-sheet" aria-label="Закрыть">&times;</button>
+      </div>
+      <div id="dashboardKpiSheetBody" class="dashboard-kpi-sheet-body"></div>
+      <div class="dashboard-kpi-sheet-actions">
+        <button type="button" class="btn btn-primary" data-action="close-dashboard-kpi-sheet">Понятно</button>
+      </div>
+    </div>
+  </div>
+
   <div id="incomeDeleteModal" class="modal hidden">
     <div class="modal-card income-delete-modal-card">
       <div class="modal-head income-delete-head">
@@ -472,11 +593,38 @@
     </div>
   </div>
 
+  <div id="mobileMoreModal" class="modal hidden mobile-more-modal">
+    <div class="modal-card mobile-more-sheet" role="dialog" aria-modal="true" aria-label="Дополнительные действия">
+      <div class="mobile-more-handle" aria-hidden="true"></div>
+      <div class="mobile-more-head">
+        <h3>Ещё</h3>
+        <button type="button" class="icon-btn" data-action="close-mobile-more" aria-label="Закрыть">&times;</button>
+      </div>
+      <div class="mobile-more-actions">
+        <button type="button" class="btn btn-ghost" data-action="mobile-open-page" data-mobile-page="calculator">Калькулятор</button>
+        <button type="button" class="btn btn-ghost" data-action="mobile-open-page" data-mobile-page="knowledge">База знаний</button>
+        <button type="button" class="btn btn-ghost" data-action="mobile-open-page" data-mobile-page="feedback">Обратная связь</button>
+        <button type="button" class="btn btn-ghost" data-action="mobile-open-page" data-mobile-page="settings">Настройки</button>
+        <button type="button" class="btn btn-primary" data-action="mobile-more-open-pro">Тарифы</button>
+        <button type="button" class="btn btn-ghost mobile-more-logout-btn" data-action="mobile-more-logout">Выйти</button>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./config.js"></script>
-  <script src="./app.js?v=20260313-fix-encoding-01" defer></script>
+  <script src="./app.js?v=20260315-mobile-ux-8" defer></script>
 </body>
 </html>
+
+
+
+
+
+
+
+
+
 
 
 

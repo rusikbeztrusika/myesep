@@ -1,4 +1,4 @@
-const DEFAULT_CONFIG = {
+﻿const DEFAULT_CONFIG = {
   supabaseUrl: "",
   supabaseAnonKey: "",
   feedbackWebhookUrl: "",
@@ -37,12 +37,12 @@ const SELF_SOCIAL_COMPONENT_RATE = 0.01;
 const IPN_RATE_SAMOZANYATY = 0;
 const SELF_IPN_RATE = IPN_RATE_SAMOZANYATY;
 const OPVR_RATE = 0.035;
-const OPVR_RATE_FROM_MZP = OPVR_RATE;
 const VOSMS_BASE = MZP_2026 * VOSMS_BASE_FACTOR;
-const SIMPLIFIED_OPVR = Math.round(MZP_2026 * OPVR_RATE_FROM_MZP);
 const SIMPLIFIED_LIMIT_ANNUAL = MRP_2026 * SIMPLIFIED_LIMIT_ANNUAL_MRP;
 const VYCHET_30MRP = 30 * MRP;
 const OUR_SOC_TAX = 2 * MRP;
+const OPV_MAX_BASE = MZP_2026 * 50;
+const OPV_MAX_AMOUNT = OPV_MAX_BASE * OPV_RATE;
 
 const RATES = {
   MRP,
@@ -50,15 +50,22 @@ const RATES = {
   OPV_RATE,
   SO_RATE,
   OUR_SO_RATE,
+  OPVR_RATE,
   VOSMS: Math.round(VOSMS_BASE * VOSMS_RATE),
-  MAX_OPV_BASE: MZP_2026 * 10
+  MAX_OPV_BASE: OPV_MAX_BASE,
+  MAX_OPV_AMOUNT: OPV_MAX_AMOUNT
 };
-
 const SELF_LIMIT_MONTHLY = RATES.MRP * SELF_LIMIT_MONTHLY_MRP;
 const SELF_LIMIT_ANNUAL = RATES.MRP * SELF_LIMIT_ANNUAL_MRP;
+const IP_MIN_OPV = Math.round(RATES.MZP * RATES.OPV_RATE);
+const IP_MIN_OPVR = Math.round(RATES.MZP * RATES.OPVR_RATE);
+const IP_MIN_SO = Math.round(RATES.MZP * SO_RATE);
+const IP_MIN_VOSMS = Math.round(RATES.VOSMS);
+const IP_MIN_SOCIAL_PAYMENTS_TOTAL = IP_MIN_OPV + IP_MIN_OPVR + IP_MIN_SO + IP_MIN_VOSMS;
 
 const MONTHS = ["Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"];
 const MONTHS_PREPOSITIONAL = ["январе", "феврале", "марте", "апреле", "мае", "июне", "июле", "августе", "сентябре", "октябре", "ноябре", "декабре"];
+const MONTHS_ACCUSATIVE = ["январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"];
 
 const DEADLINES_2026 = [
   { id: 1, date: "2026-02-15", title: "Сдача ФНО 910 за 2-е полугодие 2025", type: "report", regime: "simplified" },
@@ -178,6 +185,12 @@ const ONBOARDING_TOUR_STEPS = [
     icon: "calendar",
     title: "Не пропустите срок оплаты",
     text: "Здесь всегда виден следующий налоговый срок. Зайдите в Календарь чтобы увидеть все даты на год вперёд."
+  },
+  {
+    target: "header-reminders",
+    icon: "bell",
+    title: "Включите напоминания",
+    text: "Переключите тумблер «Напоминания», чтобы получать уведомления о сроках оплаты и ничего не пропустить."
   }
 ];
 
@@ -806,7 +819,7 @@ function renderSidebarBetaBanner() {
     const proDaysLeft = getProDaysLeft(state.subscription);
     const tone = getBetaProBannerTone(proDaysLeft);
     bannerEl.className = `sidebar-beta-banner pro ${tone}`;
-    bannerEl.innerHTML = `<div class="beta-banner-text">? Pro активен — осталось ${proDaysLeft} ${getLandingDayWord(proDaysLeft)}</div>`;
+    bannerEl.innerHTML = `<div class="beta-banner-text">Pro активен — осталось ${proDaysLeft} ${getLandingDayWord(proDaysLeft)}</div>`;
     return;
   }
 
@@ -852,7 +865,15 @@ function exportIncomesCsv() {
     ...(state.incomeFilters || {})
   };
 
-  const rows = getSortedIncomes(getFilteredIncomes(state.incomes, filters), filters.sort);
+  const now = new Date();
+  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const savedMonthStart = parseDashboardMonthKey(state.incomeSelectedMonth);
+  const exportMonthStart = savedMonthStart && savedMonthStart.getTime() <= currentMonthStart.getTime() ? savedMonthStart : currentMonthStart;
+  const monthRows = state.incomes.filter((row) => {
+    const rowDate = new Date(row.date);
+    return rowDate.getFullYear() === exportMonthStart.getFullYear() && rowDate.getMonth() === exportMonthStart.getMonth();
+  });
+  const rows = getSortedIncomes(getFilteredIncomes(monthRows, filters), filters.sort);
   const header = ["Дата", "Категория", "Комментарий", "Сумма"];
 
   const csvRows = [
@@ -886,13 +907,8 @@ function getDefaultIncomeFilters() {
   return {
     query: "",
     category: "all",
-    period: "all",
     sort: "date_desc"
   };
-}
-function normalizeIncomeFilterPeriod(value) {
-  const allowed = ["all", "30d", "90d", "ytd"];
-  return allowed.includes(value) ? value : "all";
 }
 
 function normalizeIncomeFilterSort(value) {
@@ -1093,7 +1109,8 @@ function getDefaultGlobalReminders() {
     email: getReminderDefaultEmail(),
     telegram: "",
     telegramConnected: false,
-    days: [...REMINDER_LEAD_DAYS]
+    days: [...REMINDER_LEAD_DAYS],
+    enabled: true
   };
 }
 
@@ -1107,12 +1124,17 @@ function normalizeGlobalReminders(raw, fallbackEmail = "") {
   const telegramConnected = raw.telegramConnected === true || raw.telegramConnected === "true" || raw.telegramConnected === 1 || raw.telegramConnected === "1" || Boolean(telegram);
   const sourceDays = Array.isArray(raw.days) ? raw.days : REMINDER_LEAD_DAYS;
   const days = [...new Set(sourceDays.map((item) => Number(item)).filter((item) => Number.isFinite(item) && REMINDER_LEAD_DAYS.includes(item)))].sort((a, b) => b - a);
+  const hasEnabled = Object.prototype.hasOwnProperty.call(raw, "enabled");
+  const enabled = hasEnabled
+    ? (raw.enabled === true || raw.enabled === "true" || raw.enabled === 1 || raw.enabled === "1")
+    : true;
 
   return {
     email,
     telegram,
     telegramConnected,
-    days: days.length > 0 ? days : [...REMINDER_LEAD_DAYS]
+    days: days.length > 0 ? days : [...REMINDER_LEAD_DAYS],
+    enabled
   };
 }
 
@@ -1293,10 +1315,13 @@ const state = {
   paywallFeature: "",
   incomeEditId: null,
   incomeFilters: getDefaultIncomeFilters(),
+  incomeSelectedMonth: null,
   calendarFilters: getDefaultCalendarFilters(),
   knowledgeFilters: getDefaultKnowledgeFilters(),
   taxPlanner: getDefaultTaxPlanner(),
   onboarding: createDefaultOnboarding(),
+  dashboardSelectedMonth: new Date().getMonth(),
+  dashboardRecentMonth: null,
   hideAmounts: false
 };
 
@@ -1306,11 +1331,16 @@ let pendingIncomeDeleteId = null;
 let lastRenderedPage = null;
 let calculatorInputRenderTimer = null;
 let appToastTimer = null;
+const CALENDAR_REMINDER_POPOVER_ID = "calendarReminderPopover";
+let incomeTrialBannerDismissed = false;
+let dashboardKpiSheetData = null;
+let mobileTaxPlannerAdvancedOpen = false;
 const onboardingTourState = {
   active: false,
   step: 0,
   swipeStartY: null,
-  page: null
+  page: null,
+  forceOpen: false
 };
 
 const els = {
@@ -1324,6 +1354,8 @@ const els = {
   loginForm: document.getElementById("loginForm"),
   loginEmail: document.getElementById("loginEmail"),
   loginPassword: document.getElementById("loginPassword"),
+  loginLegalConsentWrap: document.getElementById("loginLegalConsentWrap"),
+  loginLegalConsent: document.getElementById("loginLegalConsent"),
   loginAuthMode: document.getElementById("loginAuthMode"),
   loginSubmitBtn: document.getElementById("loginSubmitBtn"),
   loginHelper: document.getElementById("loginHelper"),
@@ -1349,12 +1381,17 @@ const els = {
   taxLoadModal: document.getElementById("taxLoadModal"),
   taxLoadModalTitle: document.getElementById("taxLoadModalTitle"),
   taxLoadModalBody: document.getElementById("taxLoadModalBody"),
+  dashboardKpiSheetModal: document.getElementById("dashboardKpiSheetModal"),
+  dashboardKpiSheetTitle: document.getElementById("dashboardKpiSheetTitle"),
+  dashboardKpiSheetBody: document.getElementById("dashboardKpiSheetBody"),
   incomeDeleteModal: document.getElementById("incomeDeleteModal"),
   incomeDeleteMessage: document.getElementById("incomeDeleteMessage"),
   pageContent: document.getElementById("pageContent"),
   pageTitle: document.getElementById("pageTitle"),
   amountsVisibilityBtn: document.getElementById("amountsVisibilityBtn"),
+  mobileAmountsVisibilityBtn: document.getElementById("mobileAmountsVisibilityBtn"),
   calendarReminderToggle: document.getElementById("calendarReminderToggle"),
+  mobileDrawerReminderToggle: document.getElementById("mobileDrawerReminderToggle"),
   regimeSelect: document.getElementById("regimeSelect"),
   sidebarNav: document.getElementById("sidebarNav"),
   accountName: document.getElementById("accountName"),
@@ -1364,7 +1401,16 @@ const els = {
   betaAccessModal: document.getElementById("betaAccessModal"),
   betaAccessTitle: document.getElementById("betaAccessTitle"),
   betaAccessText: document.getElementById("betaAccessText"),
-  betaAccessPrimary: document.getElementById("betaAccessPrimary")
+  betaAccessPrimary: document.getElementById("betaAccessPrimary"),
+  mobileMoreModal: document.getElementById("mobileMoreModal"),
+  mobileMenuBtn: document.getElementById("mobileMenuBtn"),
+  mobileDrawer: document.getElementById("mobileDrawer"),
+  mobileDrawerOverlay: document.getElementById("mobileDrawerOverlay"),
+  mobileDrawerUserName: document.getElementById("mobileDrawerUserName"),
+  mobileDrawerUserEmail: document.getElementById("mobileDrawerUserEmail"),
+  mobileDrawerPlanBadge: document.getElementById("mobileDrawerPlanBadge"),
+  mobileDrawerAvatar: document.getElementById("mobileDrawerAvatar"),
+  mobileDrawerProBtn: document.getElementById("mobileDrawerProBtn")
 };
 
 const PAGE_TITLES = {
@@ -1386,6 +1432,7 @@ async function init() {
   loadState();
   refreshSubscriptionState();
   bindBaseEvents();
+  updateLoginConsentState();
   try {
     renderLandingCards();
   } catch (error) {
@@ -1420,6 +1467,7 @@ async function init() {
     }
   }
 
+  logOpvDebugExample(22543233);
   trackEvent("visit");
 }
 
@@ -1491,9 +1539,18 @@ function loadState() {
   state.reminders = normalizeGlobalReminders(saved.reminders, state.userEmail || "");
   const hasSavedRemindersEnabled = Object.prototype.hasOwnProperty.call(saved, "remindersEnabled");
   const savedRemindersEnabled = saved.remindersEnabled === true || saved.remindersEnabled === "true" || saved.remindersEnabled === 1;
-  state.remindersEnabled = hasSavedRemindersEnabled ? savedRemindersEnabled : Boolean(state.reminders);
+  const hasModelEnabled = state.reminders && Object.prototype.hasOwnProperty.call(state.reminders, "enabled");
+  state.remindersEnabled = hasModelEnabled
+    ? Boolean(state.reminders.enabled)
+    : (hasSavedRemindersEnabled ? savedRemindersEnabled : Boolean(state.reminders));
   if (state.remindersEnabled && !state.reminders) {
     state.reminders = getDefaultGlobalReminders();
+  }
+  if (state.reminders) {
+    state.reminders = {
+      ...state.reminders,
+      enabled: Boolean(state.remindersEnabled)
+    };
   }
 
   Object.keys(state.deadlineReminderSettings).forEach((id) => {
@@ -1512,11 +1569,11 @@ function loadState() {
   }
 
   const savedFilters = saved.incomeFilters && typeof saved.incomeFilters === "object" ? saved.incomeFilters : {};
+  state.incomeSelectedMonth = String(saved.incomeSelectedMonth || "").trim() || null;
   state.incomeFilters = {
     ...getDefaultIncomeFilters(),
     query: String(savedFilters.query || "").trim(),
     category: String(savedFilters.category || "all"),
-    period: normalizeIncomeFilterPeriod(String(savedFilters.period || "all")),
     sort: normalizeIncomeFilterSort(String(savedFilters.sort || "date_desc"))
   };
 
@@ -1583,6 +1640,7 @@ function saveState() {
       reminders: state.reminders,
       incomeEditId: state.incomeEditId,
       incomeFilters: state.incomeFilters,
+      incomeSelectedMonth: state.incomeSelectedMonth,
       calendarFilters: state.calendarFilters,
       knowledgeFilters: state.knowledgeFilters,
       taxPlanner: state.taxPlanner,
@@ -1606,20 +1664,26 @@ function updateAmountsVisibilityUi() {
     els.dashboardApp.classList.toggle("amounts-hidden", hidden);
   }
 
-  if (!els.amountsVisibilityBtn) {
+  const visibilityButtons = [els.amountsVisibilityBtn, els.mobileAmountsVisibilityBtn].filter(Boolean);
+  if (visibilityButtons.length === 0) {
     return;
   }
 
-  els.amountsVisibilityBtn.classList.toggle("hidden", !isSupportedPage);
+  visibilityButtons.forEach((button) => {
+    button.classList.toggle("hidden", !isSupportedPage);
+  });
+
   if (!isSupportedPage) {
     return;
   }
 
   const iconName = hidden ? "eye-off" : "eye";
   const buttonLabel = hidden ? "Показать суммы" : "Скрыть суммы";
-  els.amountsVisibilityBtn.setAttribute("aria-label", buttonLabel);
-  els.amountsVisibilityBtn.setAttribute("title", buttonLabel);
-  els.amountsVisibilityBtn.innerHTML = `<i class="nav-icon amount-visibility-icon" data-lucide="${iconName}"></i>`;
+  visibilityButtons.forEach((button) => {
+    button.setAttribute("aria-label", buttonLabel);
+    button.setAttribute("title", buttonLabel);
+    button.innerHTML = `<i class="nav-icon amount-visibility-icon" data-lucide="${iconName}"></i>`;
+  });
 
   if (window.lucide && typeof window.lucide.createIcons === "function") {
     window.lucide.createIcons({
@@ -1632,34 +1696,141 @@ function updateAmountsVisibilityUi() {
 }
 
 function updateCalendarReminderToggleUi() {
-  if (!els.calendarReminderToggle) {
+  const toggleNodes = [els.calendarReminderToggle, els.mobileDrawerReminderToggle].filter(Boolean);
+  if (toggleNodes.length === 0) {
     return;
   }
 
-  const titleWrap = els.pageTitle ? els.pageTitle.closest(".main-header-title") : null;
   const visible = state.isLoggedIn;
-  els.calendarReminderToggle.classList.toggle("hidden", !visible);
-
-  if (titleWrap) {
-    titleWrap.classList.toggle("calendar-reminders-mode", visible);
-  }
+  toggleNodes.forEach((toggleNode) => {
+    toggleNode.classList.toggle("hidden", !visible);
+  });
 
   if (!visible) {
     return;
   }
 
-  const enabled = Boolean(state.remindersEnabled);
-  const status = enabled ? "Вкл" : "Выкл";
-
-  els.calendarReminderToggle.classList.toggle("is-on", enabled);
-  els.calendarReminderToggle.classList.toggle("is-off", !enabled);
-  els.calendarReminderToggle.setAttribute("aria-pressed", enabled ? "true" : "false");
-  els.calendarReminderToggle.setAttribute("title", `Напоминания: ${status}`);
-
-  const stateNode = els.calendarReminderToggle.querySelector(".calendar-reminder-toggle-state");
-  if (stateNode) {
-    stateNode.textContent = status;
+  const remindersModel = normalizeGlobalReminders(state.reminders, getReminderDefaultEmail());
+  const enabled = remindersModel ? Boolean(remindersModel.enabled ?? state.remindersEnabled) : Boolean(state.remindersEnabled);
+  state.remindersEnabled = enabled;
+  if (remindersModel && remindersModel.enabled !== enabled) {
+    state.reminders = {
+      ...remindersModel,
+      enabled
+    };
   }
+
+  toggleNodes.forEach((toggleNode) => {
+    toggleNode.classList.toggle("is-on", enabled);
+    toggleNode.classList.toggle("is-off", !enabled);
+    toggleNode.setAttribute("title", enabled ? "Напоминания: включены" : "Напоминания: выключены");
+
+    const switchNode = toggleNode.querySelector(".calendar-reminder-switch");
+    if (switchNode) {
+      switchNode.setAttribute("aria-checked", enabled ? "true" : "false");
+      switchNode.setAttribute("title", enabled ? "Выключить напоминания" : "Включить напоминания");
+    }
+  });
+}
+
+function updateMobileHeaderState() {
+  if (!els.dashboardApp) {
+    return;
+  }
+
+  const showRegimeOnMobile = Boolean(state.isLoggedIn && state.page === "settings");
+  els.dashboardApp.classList.toggle("mobile-show-regime", showRegimeOnMobile);
+}
+
+function isMobileViewport() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return window.innerWidth <= 768;
+}
+
+function syncMobileDrawerProfile() {
+  const profileName = String(state.profile.name || "").trim();
+  const fallbackName = String(state.userEmail || "Пользователь").trim();
+  const displayName = profileName || fallbackName;
+  const initialsSource = profileName || fallbackName;
+  const initials = initialsSource
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("") || "ИП";
+
+  if (els.mobileDrawerUserName) {
+    els.mobileDrawerUserName.textContent = displayName;
+  }
+
+  if (els.mobileDrawerUserEmail) {
+    els.mobileDrawerUserEmail.textContent = state.userEmail || "email@example.com";
+  }
+
+  if (els.mobileDrawerAvatar) {
+    els.mobileDrawerAvatar.textContent = initials;
+  }
+}
+
+function syncMobileDrawerRegimeTabs() {
+  const regimeButtons = document.querySelectorAll('#mobileDrawer [data-action="mobile-drawer-set-regime"]');
+  if (!regimeButtons.length) {
+    return;
+  }
+
+  const allowedRegimes = new Set(["self", "simplified", "our"]);
+  const activeRegime = allowedRegimes.has(state.regime) ? state.regime : "simplified";
+
+  regimeButtons.forEach((button) => {
+    const buttonRegime = String(button.dataset.regime || "").trim();
+    const isActive = buttonRegime === activeRegime;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-pressed", isActive ? "true" : "false");
+    button.setAttribute("aria-selected", isActive ? "true" : "false");
+  });
+}
+
+function openMobileDrawer() {
+  if (!isMobileViewport() || !els.mobileDrawer || !els.mobileDrawerOverlay) {
+    return;
+  }
+
+  syncMobileDrawerProfile();
+  syncMobileDrawerRegimeTabs();
+  updatePlanUi();
+  updateCalendarReminderToggleUi();
+  if (window.lucide && typeof window.lucide.createIcons === "function") {
+    window.lucide.createIcons({
+      attrs: {
+        width: "18",
+        height: "18"
+      }
+    });
+  }
+
+  els.mobileDrawer.classList.remove("hidden");
+  els.mobileDrawerOverlay.classList.remove("hidden");
+  requestAnimationFrame(() => {
+    els.mobileDrawer.classList.add("is-open");
+    els.mobileDrawerOverlay.classList.add("is-visible");
+  });
+}
+
+function closeMobileDrawer() {
+  if (!els.mobileDrawer || !els.mobileDrawerOverlay) {
+    return;
+  }
+
+  els.mobileDrawer.classList.remove("is-open");
+  els.mobileDrawerOverlay.classList.remove("is-visible");
+
+  window.setTimeout(() => {
+    els.mobileDrawer.classList.add("hidden");
+    els.mobileDrawerOverlay.classList.add("hidden");
+  }, 250);
 }
 
 function syncRemindersSettingsFormState(showError = false) {
@@ -1725,6 +1896,91 @@ function openRemindersSettingsModal() {
 
   openModal(els.remindersSetupModal);
 }
+function closeCalendarReminderPopover() {
+  const node = document.getElementById(CALENDAR_REMINDER_POPOVER_ID);
+  if (node && node.parentElement) {
+    node.parentElement.removeChild(node);
+  }
+  document.querySelectorAll(".calendar-reminder-row-btn.is-open").forEach((btn) => {
+    btn.classList.remove("is-open");
+  });
+}
+function formatReminderDaysForPopover(daysInput) {
+  const days = Array.isArray(daysInput)
+    ? daysInput.map((value) => Number(value)).filter((value) => Number.isFinite(value))
+    : [];
+  const uniquePositiveDays = [...new Set(days.filter((value) => value > 0))].sort((a, b) => b - a);
+  if (uniquePositiveDays.length > 0) {
+    return uniquePositiveDays.join(", ");
+  }
+  const uniqueAny = [...new Set(days)].sort((a, b) => b - a);
+  return uniqueAny.length > 0 ? uniqueAny.join(", ") : "7, 3, 1";
+}
+function positionCalendarReminderPopover(anchorEl, popoverEl) {
+  if (!(anchorEl instanceof HTMLElement) || !(popoverEl instanceof HTMLElement)) {
+    return;
+  }
+  const anchorRect = anchorEl.getBoundingClientRect();
+  const margin = 10;
+  const popoverWidth = popoverEl.offsetWidth || 240;
+  const popoverHeight = popoverEl.offsetHeight || 140;
+
+  let left = anchorRect.right - popoverWidth;
+  const maxLeft = Math.max(margin, window.innerWidth - popoverWidth - margin);
+  left = Math.min(Math.max(margin, left), maxLeft);
+
+  let top = anchorRect.bottom + 8;
+  const maxTop = window.innerHeight - popoverHeight - margin;
+  if (top > maxTop) {
+    const topAbove = anchorRect.top - popoverHeight - 8;
+    top = topAbove >= margin ? topAbove : Math.max(margin, maxTop);
+  }
+
+  popoverEl.style.left = `${Math.round(left)}px`;
+  popoverEl.style.top = `${Math.round(top)}px`;
+}
+function openCalendarReminderPopover(anchorEl) {
+  if (!(anchorEl instanceof HTMLElement)) {
+    return;
+  }
+  const anchorId = String(anchorEl.dataset.calendarReminderInfo || "");
+  const existing = document.getElementById(CALENDAR_REMINDER_POPOVER_ID);
+  if (existing && existing.dataset.anchorId === anchorId) {
+    closeCalendarReminderPopover();
+    return;
+  }
+
+  closeCalendarReminderPopover();
+
+  const remindersModel = normalizeGlobalReminders(state.reminders, getReminderDefaultEmail());
+  const enabled = remindersModel
+    ? Boolean(remindersModel.enabled ?? state.remindersEnabled)
+    : Boolean(state.remindersEnabled);
+  const daysLabel = formatReminderDaysForPopover(remindersModel && remindersModel.days);
+
+  const title = enabled ? "🔔 Напоминание активно" : "Напоминания выключены";
+  const text = enabled
+    ? `Вы получите уведомление за ${daysLabel} дней до срока`
+    : "Включите напоминания чтобы получать уведомления о сроках оплаты";
+  const buttonLabel = enabled ? "Настроить →" : "Включить →";
+
+  const popover = document.createElement("div");
+  popover.id = CALENDAR_REMINDER_POPOVER_ID;
+  popover.className = "calendar-reminder-popover";
+  popover.dataset.anchorId = anchorId;
+  popover.innerHTML = `
+    <h4 class="calendar-reminder-popover-title">${escapeHtml(title)}</h4>
+    <p class="calendar-reminder-popover-text">${escapeHtml(text)}</p>
+    <button type="button" class="calendar-reminder-popover-btn" data-action="open-reminders-settings" data-reminders-source="calendar_row_popover">${escapeHtml(buttonLabel)}</button>
+  `;
+
+  document.body.appendChild(popover);
+  anchorEl.classList.add("is-open");
+
+  requestAnimationFrame(() => {
+    positionCalendarReminderPopover(anchorEl, popover);
+  });
+}
 function showAppToast(message) {
   const text = String(message || "").trim();
   if (!text) {
@@ -1768,8 +2024,11 @@ function updateAuthUi() {
     els.publicApp.classList.add("hidden");
     els.dashboardApp.classList.remove("hidden");
     els.accountName.textContent = state.profile.name || state.userEmail;
+    syncMobileDrawerProfile();
+    syncMobileDrawerRegimeTabs();
     updatePlanUi();
     updateCalendarReminderToggleUi();
+    updateMobileHeaderState();
     updateAmountsVisibilityUi();
     return;
   }
@@ -1777,7 +2036,9 @@ function updateAuthUi() {
   els.publicApp.classList.remove("hidden");
   els.dashboardApp.classList.add("hidden");
   els.dashboardApp.classList.remove("sidebar-open");
+  closeMobileDrawer();
   updateCalendarReminderToggleUi();
+  updateMobileHeaderState();
   updateAmountsVisibilityUi();
 }
 
@@ -1798,6 +2059,16 @@ function updatePlanUi() {
     }
   }
 
+  if (els.mobileDrawerPlanBadge) {
+    if (proActive) {
+      els.mobileDrawerPlanBadge.innerHTML = '<span class="plan-badge plan-pro">Pro &#10003;</span>';
+    } else if (trialActive) {
+      els.mobileDrawerPlanBadge.innerHTML = '<span class="plan-badge plan-trial">Trial</span>';
+    } else {
+      els.mobileDrawerPlanBadge.innerHTML = '<span class="plan-badge plan-trial">Trial</span>';
+    }
+  }
+
   if (els.proBtn) {
     els.proBtn.classList.toggle("hidden", !ownerAccount);
     if (ownerAccount) {
@@ -1805,7 +2076,31 @@ function updatePlanUi() {
     }
   }
 
+  if (els.mobileDrawerProBtn) {
+    if (proActive) {
+      const proDaysLeft = getProDaysLeft(state.subscription);
+      els.mobileDrawerProBtn.classList.add("is-active");
+      els.mobileDrawerProBtn.innerHTML = `<i class="mobile-drawer-pro-icon" data-lucide="check-circle"></i><span>Подписка активна · ${proDaysLeft} дн.</span>`;
+      els.mobileDrawerProBtn.setAttribute("aria-label", `Подписка активна, осталось ${proDaysLeft} ${getLandingDayWord(proDaysLeft)}`);
+      els.mobileDrawerProBtn.setAttribute("title", `Осталось ${proDaysLeft} ${getLandingDayWord(proDaysLeft)}`);
+    } else {
+      els.mobileDrawerProBtn.classList.remove("is-active");
+      els.mobileDrawerProBtn.innerHTML = '<i class="mobile-drawer-pro-icon" data-lucide="zap"></i><span>30 дней Pro — бесплатно</span>';
+      els.mobileDrawerProBtn.setAttribute("aria-label", "Активировать 30 дней Pro бесплатно");
+      els.mobileDrawerProBtn.setAttribute("title", "Активировать 30 дней Pro бесплатно");
+    }
+  }
+
   renderSidebarBetaBanner();
+
+  if (window.lucide && typeof window.lucide.createIcons === "function") {
+    window.lucide.createIcons({
+      attrs: {
+        width: "16",
+        height: "16"
+      }
+    });
+  }
 
   if (state.isLoggedIn && state.subscription.expiryNoticePending) {
     showBetaAccessModal("expired");
@@ -1815,6 +2110,12 @@ function updatePlanUi() {
 }
 
 function handleGlobalClick(event) {
+  const clickInsideReminderPopover = Boolean(event.target.closest(`#${CALENDAR_REMINDER_POPOVER_ID}`));
+  const clickReminderInfoButton = Boolean(event.target.closest("[data-calendar-reminder-info]"));
+  if (!clickInsideReminderPopover && !clickReminderInfoButton) {
+    closeCalendarReminderPopover();
+  }
+
   const loginModeBtn = event.target.closest("[data-login-mode]");
   if (loginModeBtn) {
     const mode = loginModeBtn.dataset.loginMode === "signup" ? "signup" : "login";
@@ -1841,6 +2142,49 @@ function handleGlobalClick(event) {
 
     const action = actionEl.dataset.action;
 
+    if (action === "dashboard-recent-month-prev" && state.isLoggedIn && state.page === "dashboard") {
+      const maxMonthIndex = new Date().getMonth();
+      const selectedMonthRaw = Number(state.dashboardSelectedMonth);
+      const selectedMonth = Number.isFinite(selectedMonthRaw)
+        ? Math.min(maxMonthIndex, Math.max(0, Math.trunc(selectedMonthRaw)))
+        : maxMonthIndex;
+      const prevMonth = Math.max(0, selectedMonth - 1);
+      if (prevMonth === selectedMonth) {
+        return;
+      }
+      state.dashboardSelectedMonth = prevMonth;
+      renderDashboard();
+      trackEvent("dashboard_recent_month_prev", { month: state.dashboardSelectedMonth });
+      return;
+    }
+
+    if (action === "dashboard-recent-month-next" && state.isLoggedIn && state.page === "dashboard") {
+      const maxMonthIndex = new Date().getMonth();
+      const selectedMonthRaw = Number(state.dashboardSelectedMonth);
+      const selectedMonth = Number.isFinite(selectedMonthRaw)
+        ? Math.min(maxMonthIndex, Math.max(0, Math.trunc(selectedMonthRaw)))
+        : maxMonthIndex;
+      if (selectedMonth >= maxMonthIndex) {
+        return;
+      }
+      state.dashboardSelectedMonth = Math.min(maxMonthIndex, selectedMonth + 1);
+      renderDashboard();
+      trackEvent("dashboard_recent_month_next", { month: state.dashboardSelectedMonth });
+      return;
+    }
+
+    if (action === "select-dashboard-month" && state.isLoggedIn && state.page === "dashboard") {
+      const monthIndex = Number(actionEl.dataset.monthIndex);
+      const maxMonthIndex = new Date().getMonth();
+      if (!Number.isFinite(monthIndex)) {
+        return;
+      }
+      state.dashboardSelectedMonth = Math.min(maxMonthIndex, Math.max(0, Math.trunc(monthIndex)));
+      renderDashboard();
+      trackEvent("dashboard_month_select", { month: state.dashboardSelectedMonth, source: actionEl.dataset.monthSource || "unknown" });
+      return;
+    }
+
     if (action === "toggle-hide-amounts" && state.isLoggedIn) {
       state.hideAmounts = !state.hideAmounts;
       saveState();
@@ -1850,14 +2194,39 @@ function handleGlobalClick(event) {
     }
 
     if (action === "toggle-calendar-reminders" && state.isLoggedIn) {
-      openRemindersSettingsModal();
-      trackEvent("calendar_reminders_modal_open", { source: "header_toggle", firstSetup: !state.reminders });
+      if (!state.reminders) {
+        openRemindersSettingsModal();
+        trackEvent("calendar_reminders_modal_open", { source: "header_toggle", firstSetup: true });
+        return;
+      }
+
+      const current = normalizeGlobalReminders(state.reminders, getReminderDefaultEmail()) || getDefaultGlobalReminders();
+      const nextEnabled = !Boolean(current.enabled ?? state.remindersEnabled);
+      state.reminders = {
+        ...current,
+        enabled: nextEnabled
+      };
+      state.remindersEnabled = nextEnabled;
+      saveState();
+      updateCalendarReminderToggleUi();
+
+      if (state.page === "calendar") {
+        renderCalendarPage();
+      }
+      if (state.landingDeadlineOpenId) {
+        renderLandingDeadlineModal(state.landingDeadlineOpenId);
+      }
+
+      showAppToast(nextEnabled ? "Напоминания включены" : "Напоминания выключены");
+      trackEvent("calendar_reminders_toggle", { source: "header_switch", enabled: nextEnabled });
       return;
     }
 
     if (action === "open-reminders-settings" && state.isLoggedIn) {
+      closeMobileDrawer();
+      closeCalendarReminderPopover();
       openRemindersSettingsModal();
-      trackEvent("calendar_reminders_modal_open", { source: "inline" });
+      trackEvent("calendar_reminders_modal_open", { source: actionEl.dataset.remindersSource || "header_settings" });
       return;
     }
 
@@ -1892,6 +2261,12 @@ function handleGlobalClick(event) {
 
     if (action === "disable-reminders" && state.isLoggedIn) {
       state.remindersEnabled = false;
+      if (state.reminders) {
+        state.reminders = {
+          ...state.reminders,
+          enabled: false
+        };
+      }
       saveState();
       updateCalendarReminderToggleUi();
 
@@ -1949,6 +2324,127 @@ function handleGlobalClick(event) {
       if (els.dashboardApp) {
         els.dashboardApp.classList.remove("sidebar-open");
       }
+      return;
+    }
+
+    if (action === "open-mobile-drawer" && state.isLoggedIn) {
+      openMobileDrawer();
+      return;
+    }
+
+    if (action === "mobile-drawer-set-regime" && state.isLoggedIn) {
+      const nextRegime = String(actionEl.dataset.regime || "").trim();
+      if (!["self", "simplified", "our"].includes(nextRegime)) {
+        return;
+      }
+
+      if (state.regime === nextRegime) {
+        syncMobileDrawerRegimeTabs();
+        return;
+      }
+
+      state.regime = nextRegime;
+      saveState();
+      renderDashboard();
+      syncMobileDrawerRegimeTabs();
+      trackEvent("regime_change", { regime: state.regime, source: "mobile_drawer" });
+      return;
+    }
+
+    if (action === "close-mobile-drawer") {
+      closeMobileDrawer();
+      return;
+    }
+
+    if (action === "open-dashboard-deadline-calendar" && state.isLoggedIn) {
+      state.page = "calendar";
+      closeMobileDrawer();
+      if (els.dashboardApp) {
+        els.dashboardApp.classList.remove("sidebar-open");
+      }
+      if (els.dashboardKpiSheetModal) {
+        closeModal(els.dashboardKpiSheetModal);
+      }
+      renderDashboard();
+      trackEvent("page_open", { page: state.page, source: "dashboard_deadline_kpi" });
+      return;
+    }
+
+    if (action === "open-dashboard-kpi-sheet" && state.isLoggedIn && state.page === "dashboard") {
+      const kpiKey = String(actionEl.dataset.kpiKey || "");
+      if (!isMobileViewport()) {
+        if (kpiKey === "tax_load") {
+          openTaxLoadModal();
+        }
+        return;
+      }
+
+      openDashboardKpiSheet(kpiKey);
+      trackEvent("dashboard_kpi_sheet_open", { key: kpiKey });
+      return;
+    }
+
+    if (action === "close-dashboard-kpi-sheet") {
+      if (els.dashboardKpiSheetModal) {
+        closeModal(els.dashboardKpiSheetModal);
+      }
+      return;
+    }
+
+    if (action === "open-mobile-more" && state.isLoggedIn) {
+      if (els.mobileMoreModal) {
+        openModal(els.mobileMoreModal);
+      }
+      return;
+    }
+
+    if (action === "close-mobile-more") {
+      if (els.mobileMoreModal) {
+        closeModal(els.mobileMoreModal);
+      }
+      return;
+    }
+
+    if (action === "mobile-open-page" && state.isLoggedIn) {
+      const nextPage = String(actionEl.dataset.mobilePage || "").trim();
+      const allowedPages = new Set(["dashboard", "income", "taxes", "calendar", "calculator", "knowledge", "feedback", "settings"]);
+      if (!allowedPages.has(nextPage)) {
+        return;
+      }
+
+      state.page = nextPage;
+      if (els.mobileMoreModal) {
+        closeModal(els.mobileMoreModal);
+      }
+      if (els.dashboardApp) {
+        els.dashboardApp.classList.remove("sidebar-open");
+      }
+      renderDashboard();
+      trackEvent("page_open", { page: state.page, source: "mobile_more" });
+      return;
+    }
+
+    if (action === "mobile-more-open-pro" && state.isLoggedIn) {
+      if (els.mobileMoreModal) {
+        closeModal(els.mobileMoreModal);
+      }
+
+      if (!isOwnerProAccount()) {
+        showBetaAccessModal("owner_only");
+        return;
+      }
+
+      renderProModal(state.paywallFeature || "");
+      openModal(els.proModal);
+      trackEvent("open_pro_modal", { feature: state.paywallFeature || "", source: "mobile_more" });
+      return;
+    }
+
+    if (action === "mobile-more-logout" && state.isLoggedIn) {
+      if (els.mobileMoreModal) {
+        closeModal(els.mobileMoreModal);
+      }
+      logout();
       return;
     }
 
@@ -2070,6 +2566,34 @@ function handleGlobalClick(event) {
       return;
     }
 
+    if (action === "toggle-income-comment" && state.page === "income") {
+      const commentWrap = document.getElementById("incomeCommentWrap");
+      const commentInput = document.getElementById("incomeCommentInput");
+      const toggleBtn = event.target.closest("[data-action=\"toggle-income-comment\"]");
+
+      if (commentWrap) {
+        commentWrap.classList.add("is-visible");
+      }
+
+      if (toggleBtn) {
+        toggleBtn.classList.add("hidden");
+      }
+
+      if (commentInput) {
+        commentInput.focus();
+      }
+
+      trackEvent("income_comment_show");
+      return;
+    }
+
+    if (action === "dismiss-income-trial-banner" && state.page === "income") {
+      incomeTrialBannerDismissed = true;
+      renderDashboard();
+      trackEvent("income_trial_banner_dismiss");
+      return;
+    }
+
     if (action === "load-dashboard-demo") {
       dashboardDemoMode = true;
       dashboardDemoIncomes = buildDashboardDemoIncomes();
@@ -2093,6 +2617,7 @@ function handleGlobalClick(event) {
       return;
     }
     if (action === "open-pro") {
+      closeMobileDrawer();
       if (!isOwnerProAccount()) {
         showBetaAccessModal("owner_only");
         return;
@@ -2149,13 +2674,36 @@ function handleGlobalClick(event) {
 
       const resetHint = document.getElementById("onboardingTourResetHint");
       if (resetHint) {
-        resetHint.textContent = "Сброшено. Откройте Главную, Доходы, Налоги или Календарь — тур запустится снова.";
+        resetHint.textContent = "Сброшено. Тур запущен на Главной.";
+      }
+
+      if (state.isLoggedIn) {
+        state.page = "dashboard";
+        renderDashboard();
+        startOnboardingTour("dashboard", true);
+        setTimeout(() => {
+          if (!getOnboardingTourRoot()) {
+            onboardingTourState.forceOpen = true;
+            onboardingTourState.active = true;
+            onboardingTourState.page = "dashboard";
+            onboardingTourState.step = 0;
+            onboardingTourState.swipeStartY = null;
+            renderOnboardingTour();
+          }
+
+          if (!getOnboardingTourRoot() && resetHint) {
+            resetHint.textContent = "Не удалось запустить тур автоматически. Обновите страницу и нажмите кнопку снова.";
+          }
+        }, 260);
       }
 
       trackEvent("onboarding_tour_reset");
       return;
     }
     if (action === "open-tax-load-modal") {
+      if (els.dashboardKpiSheetModal) {
+        closeModal(els.dashboardKpiSheetModal);
+      }
       openTaxLoadModal();
       return;
     }
@@ -2268,6 +2816,7 @@ function handleGlobalClick(event) {
     }
 
     if (action === "logout") {
+      closeMobileDrawer();
       logout();
       return;
     }
@@ -2295,6 +2844,16 @@ function handleGlobalClick(event) {
     return;
   }
 
+  if (event.target === els.dashboardKpiSheetModal) {
+    closeModal(els.dashboardKpiSheetModal);
+    return;
+  }
+
+  if (event.target === els.mobileDrawerOverlay) {
+    closeMobileDrawer();
+    return;
+  }
+
   if (event.target === els.incomeDeleteModal) {
     pendingIncomeDeleteId = null;
     closeModal(els.incomeDeleteModal);
@@ -2308,6 +2867,11 @@ function handleGlobalClick(event) {
 
   if (event.target === els.remindersSetupModal) {
     closeModal(els.remindersSetupModal);
+    return;
+  }
+
+  if (event.target === els.mobileMoreModal) {
+    closeModal(els.mobileMoreModal);
     return;
   }
 
@@ -2529,7 +3093,7 @@ function handleGlobalClick(event) {
   const calendarMarkVisibleBtn = event.target.closest("[data-calendar-mark-visible]");
   if (calendarMarkVisibleBtn && state.page === "calendar") {
     const visibleRows = getFilteredCalendarRows();
-    const idsToMark = visibleRows.filter((row) => !row.done).map((row) => row.id);
+    const idsToMark = visibleRows.filter((row) => !row.done && !row.isBeforeRegistration).map((row) => row.id);
     if (idsToMark.length > 0) {
       const set = new Set(state.doneDeadlines);
       idsToMark.forEach((id) => {
@@ -2550,8 +3114,12 @@ function handleGlobalClick(event) {
   }
   const reminderInfoBtn = event.target.closest("[data-calendar-reminder-info]");
   if (reminderInfoBtn && state.page === "calendar") {
-    showAppToast("Напоминания управляются глобально. Настроить > [тумблер в шапке]");
-    trackEvent("calendar_reminder_row_info");
+    openCalendarReminderPopover(reminderInfoBtn);
+    const remindersModel = normalizeGlobalReminders(state.reminders, getReminderDefaultEmail());
+    const enabled = remindersModel
+      ? Boolean(remindersModel.enabled ?? state.remindersEnabled)
+      : Boolean(state.remindersEnabled);
+    trackEvent("calendar_reminder_row_info", { enabled });
     return;
   }
   const subscribeBtn = event.target.closest("[data-deadline-subscribe]");
@@ -2599,8 +3167,12 @@ function handleGlobalClick(event) {
   const pageBtn = event.target.closest("[data-page]");
   if (pageBtn && state.isLoggedIn) {
     state.page = pageBtn.dataset.page;
+    closeMobileDrawer();
     if (els.dashboardApp) {
       els.dashboardApp.classList.remove("sidebar-open");
+    }
+    if (els.mobileMoreModal) {
+      closeModal(els.mobileMoreModal);
     }
     renderDashboard();
     trackEvent("page_open", { page: state.page });
@@ -2673,6 +3245,38 @@ function handleGlobalClick(event) {
     saveState();
     renderDashboard();
     trackEvent("income_edit_cancel");
+    return;
+  }
+
+  const incomeMonthPrevBtn = event.target.closest("[data-action=\"income-month-prev\"]");
+  if (incomeMonthPrevBtn && state.page === "income") {
+    const currentMonthStart = new Date();
+    currentMonthStart.setDate(1);
+    const selectedMonthStart = parseDashboardMonthKey(state.incomeSelectedMonth) || new Date(currentMonthStart);
+    const prevMonthStart = new Date(selectedMonthStart.getFullYear(), selectedMonthStart.getMonth() - 1, 1);
+    state.incomeSelectedMonth = formatDashboardMonthKey(prevMonthStart);
+    saveState();
+    renderDashboard();
+    trackEvent("income_month_prev", { month: state.incomeSelectedMonth });
+    return;
+  }
+
+  const incomeMonthNextBtn = event.target.closest("[data-action=\"income-month-next\"]");
+  if (incomeMonthNextBtn && state.page === "income") {
+    const currentMonthStart = new Date();
+    currentMonthStart.setDate(1);
+    const selectedMonthStart = parseDashboardMonthKey(state.incomeSelectedMonth) || new Date(currentMonthStart);
+    const selectedTime = selectedMonthStart.getTime();
+    const currentTime = currentMonthStart.getTime();
+    if (selectedTime >= currentTime) {
+      return;
+    }
+    const nextMonthStartRaw = new Date(selectedMonthStart.getFullYear(), selectedMonthStart.getMonth() + 1, 1);
+    const nextMonthStart = nextMonthStartRaw.getTime() > currentTime ? currentMonthStart : nextMonthStartRaw;
+    state.incomeSelectedMonth = formatDashboardMonthKey(nextMonthStart);
+    saveState();
+    renderDashboard();
+    trackEvent("income_month_next", { month: state.incomeSelectedMonth });
     return;
   }
 
@@ -2760,6 +3364,12 @@ function syncTaxPlannerFromForm(form) {
 
 function handleGlobalInput(event) {
   if (!(event.target instanceof Element)) {
+    return;
+  }
+
+  const loginFormInput = event.target.closest("#loginForm input");
+  if (loginFormInput) {
+    updateLoginConsentState();
     return;
   }
 
@@ -2865,6 +3475,12 @@ function handleGlobalInput(event) {
 
 function handleGlobalChange(event) {
   if (!(event.target instanceof Element)) {
+    return;
+  }
+
+  const loginFormInput = event.target.closest("#loginForm input");
+  if (loginFormInput) {
+    updateLoginConsentState();
     return;
   }
   const onboardingProfileCitySelect = event.target.closest("#onboardingProfileCity");
@@ -2979,6 +3595,13 @@ async function handleGlobalSubmit(event) {
     const email = (els.loginEmail.value || "").trim();
     const password = (els.loginPassword.value || "").trim();
     const mode = els.loginAuthMode && els.loginAuthMode.value === "signup" ? "signup" : "login";
+    const legalAccepted = Boolean(els.loginLegalConsent && els.loginLegalConsent.checked);
+
+    if (mode === "signup" && !legalAccepted) {
+      setLoginStatus("Подтвердите согласие с Пользовательским соглашением и Политикой конфиденциальности.", true);
+      updateLoginConsentState();
+      return;
+    }
 
     if (mode === "signup") {
       await signup(email, password);
@@ -3117,9 +3740,10 @@ async function handleGlobalSubmit(event) {
     const formData = new FormData(event.target);
 
     state.incomeFilters = {
+      ...getDefaultIncomeFilters(),
+      ...(state.incomeFilters || {}),
       query: String(formData.get("query") || "").trim(),
       category: String(formData.get("category") || "all"),
-      period: normalizeIncomeFilterPeriod(String(formData.get("period") || "all")),
       sort: normalizeIncomeFilterSort(String(formData.get("sort") || "date_desc"))
     };
 
@@ -3180,12 +3804,14 @@ async function handleGlobalSubmit(event) {
       email,
       telegram: current.telegram || "",
       telegramConnected,
-      days: days.length > 0 ? days : [...REMINDER_LEAD_DAYS]
+      days: days.length > 0 ? days : [...REMINDER_LEAD_DAYS],
+      enabled: true
     }, "") || {
       email,
       telegram: current.telegram || "",
       telegramConnected,
-      days: days.length > 0 ? days : [...REMINDER_LEAD_DAYS]
+      days: days.length > 0 ? days : [...REMINDER_LEAD_DAYS],
+      enabled: true
     };
 
     syncRemindersSettingsFormState(false);
@@ -3433,6 +4059,25 @@ function finalizeAuthSession(user, fallbackEmail = "") {
   renderDashboard();
 }
 
+function updateLoginConsentState() {
+  const isSignupMode = Boolean(els.loginAuthMode && els.loginAuthMode.value === "signup");
+
+  if (els.loginLegalConsentWrap) {
+    els.loginLegalConsentWrap.classList.toggle("hidden", !isSignupMode);
+  }
+
+  if (els.loginLegalConsent) {
+    els.loginLegalConsent.required = isSignupMode;
+    els.loginLegalConsent.setAttribute("aria-required", isSignupMode ? "true" : "false");
+  }
+
+  if (els.loginSubmitBtn) {
+    const canSubmit = !isSignupMode || Boolean(els.loginLegalConsent && els.loginLegalConsent.checked);
+    els.loginSubmitBtn.disabled = !canSubmit;
+    els.loginSubmitBtn.setAttribute("aria-disabled", canSubmit ? "false" : "true");
+  }
+}
+
 function setAuthMode(mode, options = {}) {
   const nextMode = mode === "signup" ? "signup" : "login";
   const clearStatus = options.clearStatus !== false;
@@ -3442,7 +4087,7 @@ function setAuthMode(mode, options = {}) {
   }
 
   if (els.loginSubmitBtn) {
-    els.loginSubmitBtn.textContent = nextMode === "signup" ? "Зарегистрироваться" : "Войти";
+    els.loginSubmitBtn.textContent = nextMode === "signup" ? "Продолжить" : "Войти";
   }
 
   if (els.loginHelper) {
@@ -3466,6 +4111,8 @@ function setAuthMode(mode, options = {}) {
   if (clearStatus) {
     setLoginStatus("");
   }
+
+  updateLoginConsentState();
 }
 async function logout() {
   if (supabaseClient) {
@@ -3508,15 +4155,31 @@ function calcSelfEmployed(income) {
   return { esp: total, opv, so, opvr, vosms, ipn, socTax: 0, total, limit: SELF_LIMIT_ANNUAL };
 }
 
+function calcSocialContributionWithCap(income, opv, rate = SO_RATE) {
+  const safeIncome = Math.max(0, Number(income) || 0);
+  const safeOpv = Math.max(0, Number(opv) || 0);
+  const soBaseCap = RATES.MZP * 7;
+  const soBase = Math.min(safeIncome, soBaseCap);
+  const deductibleOpv = Math.min(safeOpv, soBase * RATES.OPV_RATE);
+  const soMinimum = RATES.MZP * rate;
+  const soMaximum = soBaseCap * rate;
+  const soRaw = Math.max((soBase - deductibleOpv) * rate, soMinimum);
+  return Math.min(soRaw, soMaximum);
+}
+
+function calcIpOpvr(income) {
+  const safeIncome = Math.max(0, Number(income) || 0);
+  const opvrBaseIncome = safeIncome <= 0 ? RATES.MZP : safeIncome;
+  const opvrBaseCapped = Math.min(opvrBaseIncome, RATES.MAX_OPV_BASE);
+  return opvrBaseCapped * RATES.OPVR_RATE;
+}
 function calcSimplified(income) {
   const safeIncome = Math.max(0, Number(income) || 0);
   const opvBaseIncome = safeIncome <= 0 ? RATES.MZP : safeIncome;
-  const opv = Math.min(opvBaseIncome * RATES.OPV_RATE, RATES.MAX_OPV_BASE);
-  const soBase = Math.max(safeIncome - opv, 0);
-  const soCalculated = soBase * SIMPLIFIED_SO_RATE;
-  const soMinimum = RATES.MZP * SIMPLIFIED_SO_RATE;
-  const so = safeIncome < RATES.MZP ? Math.max(soCalculated, soMinimum) : soCalculated;
-  const opvr = SIMPLIFIED_OPVR;
+  const opvBaseCapped = Math.min(opvBaseIncome, RATES.MAX_OPV_BASE);
+  const opv = opvBaseCapped * RATES.OPV_RATE;
+  const so = calcSocialContributionWithCap(safeIncome, opv, SIMPLIFIED_SO_RATE);
+  const opvr = calcIpOpvr(safeIncome);
   const vosms = RATES.VOSMS;
   const ipn = safeIncome * SIMPLIFIED_IPN_RATE;
   const socTax = 0;
@@ -3527,10 +4190,10 @@ function calcSimplified(income) {
 function calcOUR(income, expenses = 0) {
   const safeIncome = Math.max(0, Number(income) || 0);
   const safeExpenses = Math.min(Math.max(0, Number(expenses) || 0), safeIncome);
-  const opv = Math.min(safeIncome * RATES.OPV_RATE, RATES.MAX_OPV_BASE);
-  const soBase = Math.max(safeIncome - opv, 0);
-  const so = soBase * RATES.OUR_SO_RATE;
-  const opvr = SIMPLIFIED_OPVR;
+  const opvBaseCapped = Math.min(safeIncome, RATES.MAX_OPV_BASE);
+  const opv = opvBaseCapped * RATES.OPV_RATE;
+  const so = calcSocialContributionWithCap(safeIncome, opv, RATES.OUR_SO_RATE);
+  const opvr = calcIpOpvr(safeIncome);
   const vosms = RATES.VOSMS;
   const taxBase = Math.max(safeIncome - safeExpenses - opv - vosms - VYCHET_30MRP, 0);
   const ipn = taxBase * 0.1;
@@ -3543,6 +4206,24 @@ function calcByRegime(regime, income, expenses = 0) {
   if (regime === "self") return calcSelfEmployed(income);
   if (regime === "our") return calcOUR(income, expenses);
   return calcSimplified(income);
+}
+
+function logOpvDebugExample(income = 22543233) {
+  const safeIncome = Math.max(0, Number(income) || 0);
+  const usedBase = Math.min(safeIncome, RATES.MAX_OPV_BASE);
+  const opv = usedBase * RATES.OPV_RATE;
+
+  if (typeof window !== "undefined") {
+    if (window.__myesepOpvDebugLogged) {
+      return;
+    }
+    window.__myesepOpvDebugLogged = true;
+  }
+
+  console.info(
+    `[OPV debug] income=${fmt(safeIncome)}, used base=${fmt(usedBase)}, rate=${Math.round(RATES.OPV_RATE * 100)}%, OPV=${fmt(opv)}. ` +
+      `Max base=${fmt(RATES.MAX_OPV_BASE)} (50 MZP), max OPV=${fmt(RATES.MAX_OPV_AMOUNT)}.`
+  );
 }
 
 function fmt(value) {
@@ -3765,12 +4446,13 @@ function renderLandingCards() {
   });
 }
 function getDeadlineRegimeForChecklist(row) {
-  if (!row) return state.regime;
-  if (row.regime === "all") return state.regime;
+  const currentRegime = state.taxRegime || state.regime;
+  if (!row) return currentRegime;
+  if (row.regime === "all") return currentRegime;
   if (row.regime === "self" || row.regime === "simplified" || row.regime === "our") {
     return row.regime;
   }
-  return state.regime;
+  return currentRegime;
 }
 
 function getDeadlineIncomeForChecklist(row) {
@@ -3781,15 +4463,28 @@ function getDeadlineIncomeForChecklist(row) {
   return getIncomeByMonth(periodDate.getFullYear(), periodDate.getMonth());
 }
 
-function getLandingDeadlineChecklist(row) {
+function getLandingDeadlineChecklist(row, options = {}) {
+  const title = String((row && row.title) || "");
   const regime = getDeadlineRegimeForChecklist(row);
   const isPayment = row && row.type === "payment";
+  const isFno910Report = Boolean(row && row.type === "report" && /фно\s*910/i.test(title));
+
+  if (isFno910Report) {
+    return [
+      {
+        id: "step-1",
+        title: "Шаг 1 — ФНО 910",
+        items: ["Заполните и отправьте форму 910."],
+        instructionHtml: '<p class="deadline-step-instruction">Заполните и отправьте форму 910 в <a class="deadline-step-inline-link" href="https://cabinet.kgd.gov.kz" target="_blank" rel="noopener noreferrer">Кабинете налогоплательщика</a>.</p>'
+      }
+    ];
+  }
 
   if (!isPayment) {
     return [
       {
         id: "step-1",
-        title: "Шаг 1 — Кабинет налогоплательщика",
+        title: "Шаг 1 — Отчётность",
         items: ["Сдайте отчет по текущему сроку и проверьте квитанцию о приеме."]
       }
     ];
@@ -3803,54 +4498,39 @@ function getLandingDeadlineChecklist(row) {
       {
         id: "step-1",
         title: "Шаг 1 — e-Salyq Business",
-        items: ["Откройте приложение e-Salyq Business, зафиксируйте доход за месяц чеком. Приложение автоматически рассчитает и оплатит все соцплатежи (ОПВ + ОПВР + СО + ВОСМС = 4% от дохода)."]
+        items: ["Все платежи проходят через приложение e-Salyq Business. Если ещё не установили — скачайте:"],
+        instructionHtml: `
+          <div class="deadline-step-links">
+            <a class="deadline-step-store-link" href="https://apps.apple.com/kz/app/e-salyq-business/id1581629395" target="_blank" rel="noopener noreferrer">App Store &rarr;</a>
+            <a class="deadline-step-store-link" href="https://play.google.com/store/apps/details?id=dev.amsmirnov.esalyqbusiness" target="_blank" rel="noopener noreferrer">Google Play &rarr;</a>
+          </div>
+          <p class="deadline-step-instruction">Или оплатите в Kaspi: Платежи -> Штрафы и налоги -> Отчисления самозанятых</p>
+        `
       }
     ];
   }
 
-  if (regime === "our") {
-    const tax = calcOUR(income, state.calcExpenses);
-    const step1Total = Math.round((tax.opv || 0) + (tax.opvr || 0) + (tax.so || 0));
-    const step3Total = Math.round((tax.ipn || 0) + (tax.socTax || 0));
-    const incomeSourceLabel = hasIncome
-      ? "по реальному доходу из журнала"
-      : "по данным журнала (доход за период не найден)";
-
-    return [
-      {
-        id: "step-1",
-        title: "Шаг 1 — e-Salyq Business или банк",
-        items: [`Оплатите ОПВ + ОПВР + СО. Сумма: ОПВ + ОПВР + СО = ${fmt(step1Total)} (${incomeSourceLabel}).`]
-      },
-      {
-        id: "step-2",
-        title: "Шаг 2 — Банк",
-        items: [`Оплатите ВОСМС. Сумма: ${fmt(RATES.VOSMS)} (фиксированная).`]
-      },
-      {
-        id: "step-3",
-        title: "Шаг 3 — e-Salyq Business / налоговая",
-        items: [`Оплатите ИПН и Соц. налог (СН). Сумма: ${fmt(step3Total)} (по расчёту режима ОУР).`]
-      }
-    ];
-  }
-
-  const tax = calcSimplified(income);
-  const step1Total = Math.round((tax.opv || 0) + (tax.opvr || 0) + (tax.so || 0));
+  const tax = regime === "our" ? calcOUR(income, state.calcExpenses) : calcSimplified(income);
+  const fallbackStep1Total = Math.round((tax.opv || 0) + (tax.opvr || 0) + (tax.so || 0));
+  const totalWithoutVosms = Number.isFinite(options.totalWithoutVosms)
+    ? Math.max(0, Math.round(options.totalWithoutVosms))
+    : fallbackStep1Total;
   const incomeSourceLabel = hasIncome
     ? "от реального дохода из журнала"
-    : "от МЗП (если дохода в журнале нет)";
+    : `от минимальной базы (ОПВ ${fmt(IP_MIN_OPV)} + ОПВР ${fmt(IP_MIN_OPVR)} + СО ${fmt(IP_MIN_SO)})`;
 
   return [
     {
       id: "step-1",
-      title: "Шаг 1 — e-Salyq Business или банк",
-      items: [`Оплатите ОПВ + ОПВР + СО через e-Salyq Business или банк (Kaspi/Halyk). Сумма: ОПВ + ОПВР + СО = ${fmt(step1Total)} (${incomeSourceLabel}).`]
+      title: "Шаг 1 — Банк",
+      items: [`Оплатите ОПВ + ОПВР + СО. Сумма: ОПВ + ОПВР + СО = ${fmt(totalWithoutVosms)} (${incomeSourceLabel}).`],
+      instructionHtml: '<p class="deadline-step-instruction">Оплатите через мобильное приложение вашего банка (Kaspi, Halyk или любой другой). Раздел: Платежи -> Штрафы и налоги -> Платежи для ИП</p>'
     },
     {
       id: "step-2",
-      title: "Шаг 2 — Банк (Kaspi / Halyk)",
-      items: [`Оплатите ВОСМС. Сумма: ${fmt(RATES.VOSMS)} (фиксированная).`]
+      title: "Шаг 2 — ВОСМС",
+      items: [`Оплатите ВОСМС. Сумма: ${fmt(RATES.VOSMS)} (фиксированная).`],
+      instructionHtml: '<p class="deadline-step-instruction">Оплатите через мобильное приложение банка. Kaspi: Платежи -> Штрафы и налоги -> Платежи для ИП -> ВОСМС</p>'
     }
   ];
 }
@@ -3864,8 +4544,8 @@ function getLandingDeadlineLiteSteps(row) {
   });
 }
 
-function getDeadlineChecklistSections(row) {
-  return getLandingDeadlineChecklist(row);
+function getDeadlineChecklistSections(row, options = {}) {
+  return getLandingDeadlineChecklist(row, options);
 }
 
 function getDeadlineTaskKey(sectionId, index) {
@@ -3951,12 +4631,16 @@ function getDeadlinePaymentBreakdown(row) {
 
   const periodDate = new Date(deadlineDate.getFullYear(), deadlineDate.getMonth() - 1, 1);
   const income = getIncomeByMonth(periodDate.getFullYear(), periodDate.getMonth());
-  const taxes = calcByRegime(state.regime, income, state.calcExpenses);
+  const activeRegime = state.taxRegime || state.regime;
+  const taxes = calcByRegime(activeRegime, income, state.calcExpenses);
 
   const opv = Math.round(taxes.opv || 0);
   const opvr = Math.round(taxes.opvr || 0);
   const so = Math.round(taxes.so || 0);
   const vosms = Math.round(taxes.vosms || 0);
+
+  const total = opv + opvr + so + vosms;
+  const totalWithoutVosms = total - vosms;
 
   return {
     income,
@@ -3964,7 +4648,8 @@ function getDeadlinePaymentBreakdown(row) {
     opvr,
     so,
     vosms,
-    total: opv + opvr + so + vosms
+    total,
+    totalWithoutVosms
   };
 }
 
@@ -4289,13 +4974,16 @@ function renderLandingDeadlineModal(deadlineId) {
   }
 
   const due = getLandingDeadlineDueInfo(row.date);
-  const sections = getDeadlineChecklistSections(row);
+  const paymentBreakdown = getDeadlinePaymentBreakdown(row);
+  const totalWithoutVosms = paymentBreakdown
+    ? Math.max(0, Math.round(paymentBreakdown.totalWithoutVosms))
+    : null;
+  const sections = getDeadlineChecklistSections(row, { totalWithoutVosms });
   const progress = getDeadlineChecklistProgress(row.id);
   const stats = getDeadlineChecklistStats(row.id, row);
   const typeClass = row.type === "payment" ? "payment" : "report";
   const remindersOn = Boolean(state.remindersEnabled);
   const globalReminderChannels = getGlobalReminderChannels(state.reminders);
-  const paymentBreakdown = getDeadlinePaymentBreakdown(row);
   const isProgressDone = stats.total > 0 && stats.done >= stats.total;
   const progressLabel = `Выполнено ${stats.done} из ${stats.total} шагов`;
   const progressPct = Math.max(0, Math.min(100, stats.pct || 0));
@@ -4332,7 +5020,6 @@ function renderLandingDeadlineModal(deadlineId) {
             <div class="deadline-payment-row"><span>СО</span><strong>${fmt(paymentBreakdown.so)}</strong></div>
             <div class="deadline-payment-row"><span>ВОСМС</span><strong>${fmt(paymentBreakdown.vosms)}</strong></div>
             <div class="deadline-payment-total"><span>Итого</span><strong>${fmt(paymentBreakdown.total)}</strong></div>
-            <a class="btn btn-ghost btn-xs deadline-payment-cta" href="https://esalyqbusiness.kz" target="_blank" rel="noopener noreferrer">Открыть e-Salyq Business ></a>
           </section>`
         : ""
     }
@@ -4362,6 +5049,7 @@ function renderLandingDeadlineModal(deadlineId) {
         <section class="deadline-modal-col">
           <h4>${section.title}</h4>
           <ul>${renderSectionList(section)}</ul>
+          ${section.instructionHtml || ""}
         </section>
       `
     )
@@ -4480,7 +5168,7 @@ function getDeadlineCountWord(count) {
 }
 
 function renderSidebarActive() {
-  document.querySelectorAll("#sidebarNav [data-page], #mobileTabbar [data-page]").forEach((button) => {
+  document.querySelectorAll("#sidebarNav [data-page], #mobileTabbar [data-page], #mobileDrawer [data-page]").forEach((button) => {
     button.classList.toggle("active", button.dataset.page === state.page);
   });
 
@@ -4533,6 +5221,29 @@ function getCurrentTax(incomes = state.incomes) {
   return calcByRegime(state.regime, income, state.calcExpenses);
 }
 
+function formatDashboardMonthKey(dateObj) {
+  if (!(dateObj instanceof Date) || Number.isNaN(dateObj.getTime())) {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  }
+  return `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function parseDashboardMonthKey(monthKey) {
+  const match = String(monthKey || "").trim().match(/^(\d{4})-(\d{2})$/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]) - 1;
+  if (!Number.isFinite(year) || !Number.isFinite(month) || month < 0 || month > 11) return null;
+  return new Date(year, month, 1);
+}
+
+function formatMonthYearLabel(dateObj) {
+  if (!(dateObj instanceof Date) || Number.isNaN(dateObj.getTime())) return "";
+  const raw = new Intl.DateTimeFormat("ru-KZ", { month: "long", year: "numeric" }).format(dateObj);
+  return raw ? `${raw.charAt(0).toUpperCase()}${raw.slice(1)}` : "";
+}
+
 function getTaxLoadPayNow(regime, tax) {
   const opv = Number((tax && tax.opv) || 0);
   const so = Number((tax && tax.so) || 0);
@@ -4547,10 +5258,15 @@ function getTaxLoadPayNow(regime, tax) {
   return opv + so + opvr + vosms;
 }
 
+function getTaxDueDateLabelByMonth(monthIndex, year = new Date().getFullYear()) {
+  const safeMonth = Number.isFinite(Number(monthIndex)) ? Math.min(11, Math.max(0, Math.trunc(Number(monthIndex)))) : new Date().getMonth();
+  const dueDate = new Date(year, safeMonth + 1, 25);
+  return new Intl.DateTimeFormat("ru-KZ", { day: "numeric", month: "long" }).format(dueDate);
+}
+
 function getNextTaxDueDateLabel() {
   const now = new Date();
-  const dueDate = new Date(now.getFullYear(), now.getMonth() + 1, 25);
-  return new Intl.DateTimeFormat("ru-KZ", { day: "numeric", month: "long" }).format(dueDate);
+  return getTaxDueDateLabelByMonth(now.getMonth(), now.getFullYear());
 }
 
 function getTaxLoadModalModel(regime, tax, income = 0) {
@@ -4590,7 +5306,7 @@ function getTaxLoadModalModel(regime, tax, income = 0) {
       payNowRows: [
         { label: income <= 0 ? "ОПВ (10% от МЗП, минимум)" : "ОПВ (10% от дохода)", value: opv },
         { label: "СО (5% от дохода - ОПВ)", value: so },
-        { label: "ОПВР (3.5% от МЗП)", value: opvr },
+        { label: income <= 0 ? "ОПВР (3.5% от МЗП, минимум)" : "ОПВР (3.5% от дохода, до 50 МЗП)", value: opvr },
         { label: "ВОСМС (5% от 1.4 МЗП)", value: vosms }
       ],
       payNowTotalLabel: "Итого сейчас",
@@ -4614,7 +5330,7 @@ function getTaxLoadModalModel(regime, tax, income = 0) {
     payNowTitle: "Платить ежемесячно",
     payNowRows: [
       { label: "ОПВ (10% от дохода)", value: opv },
-      { label: "ОПВР (3.5% от МЗП)", value: opvr },
+      { label: "ОПВР (3.5% от дохода, до 50 МЗП)", value: opvr },
       { label: "СО (5% от дохода - ОПВ)", value: so },
       { label: "ВОСМС (5% от 1.4 МЗП)", value: vosms },
       { label: "СН", value: socTax }
@@ -4683,7 +5399,7 @@ function openTaxLoadModal() {
 
   els.taxLoadModalBody.innerHTML = `
     <section class="tax-load-highlight" aria-live="polite">
-      <p>? ${fmt(opvAmount)} из этой суммы — ваши деньги на пенсионном счёте, не уходят государству</p>
+      <p>${fmt(opvAmount)} из этой суммы — ваши деньги на пенсионном счёте, не уходят государству</p>
     </section>
     ${infoSectionHtml}
     <section class="tax-load-section tax-load-section-now">
@@ -4700,6 +5416,63 @@ function openTaxLoadModal() {
   openModal(els.taxLoadModal);
   trackEvent("open_tax_load_modal", { regime: state.regime, payNow: Math.round(model.payNowTotal || 0), total: Math.round(tax.total || 0) });
 }
+
+function openDashboardKpiSheet(kpiKey) {
+  if (!els.dashboardKpiSheetModal || !els.dashboardKpiSheetTitle || !els.dashboardKpiSheetBody) {
+    return;
+  }
+
+  const model = dashboardKpiSheetData;
+  if (!model) {
+    return;
+  }
+
+  let title = "Расшифровка";
+  let bodyHtml = "";
+
+  if (kpiKey === "income_current") {
+    title = "Доход за текущий месяц";
+    bodyHtml = `
+      <div class="dashboard-kpi-sheet-main amount-sensitive">${fmt(model.currentIncome)}</div>
+      <div class="kpi-trend ${escapeHtml(model.incomeTrendClass || "flat")}">${escapeHtml(model.incomeTrendText || "Без изменений")}</div>
+      <p class="dashboard-kpi-sheet-note">Сумма считается по операциям в журнале доходов за текущий месяц.</p>
+    `;
+  } else if (kpiKey === "tax_load") {
+    title = model.taxLoadTitle || "Заплатить в этом месяце";
+    bodyHtml = `
+      <div class="dashboard-kpi-sheet-main stat-danger amount-sensitive">${fmt(model.taxLoadPayNow || 0)}</div>
+      <p class="dashboard-kpi-sheet-note">К уплате до ${escapeHtml(model.taxDueDateLabel || "")}.</p>
+      <div class="dashboard-kpi-sheet-list">
+        ${(model.taxRows || []).map((row) => `
+          <div class="dashboard-kpi-sheet-row">
+            <span>${escapeHtml(row.label)}</span>
+            <strong class="amount-sensitive">${fmt(row.value || 0)}</strong>
+          </div>
+        `).join("")}
+      </div>
+      <p class="dashboard-kpi-sheet-note">ИПН: <span class="amount-sensitive">${fmt(model.taxLoadIpnReserve || 0)}</span> (откладывать ежемесячно).</p>
+    `;
+  } else if (kpiKey === "income_ytd") {
+    title = "Доход с начала года";
+    bodyHtml = `
+      <div class="dashboard-kpi-sheet-main amount-sensitive">${fmt(model.totalIncome || 0)}</div>
+      <p class="dashboard-kpi-sheet-note">Средний темп: <span class="amount-sensitive">${fmt(model.avgMonthlyIncome || 0)}</span> / мес.</p>
+      <p class="dashboard-kpi-sheet-note">Прогноз за год: <span class="amount-sensitive">${fmt(model.annualRunRate || 0)}</span>.</p>
+    `;
+  } else if (kpiKey === "next_deadline") {
+    title = "Ближайший срок";
+    bodyHtml = `
+      <div class="dashboard-kpi-sheet-main">${escapeHtml(model.nextDeadlineDate || "Нет")}</div>
+      <p class="dashboard-kpi-sheet-note">${escapeHtml(model.nextDeadlineTitle || "Все задачи закрыты")}</p>
+      <p class="dashboard-kpi-sheet-note">${escapeHtml(model.nextDeadlineDueText || "")}</p>
+    `;
+  }
+
+  els.dashboardKpiSheetTitle.textContent = title;
+  els.dashboardKpiSheetBody.innerHTML = bodyHtml;
+  openModal(els.dashboardKpiSheetModal);
+}
+
 function getMonthlyData(incomes = state.incomes) {
   const year = new Date().getFullYear();
   const buckets = Array.from({ length: 12 }, (_, index) => ({
@@ -4803,13 +5576,12 @@ function buildTrend(current, previous, inverse = false) {
     return { className: "flat", text: "Без изменений к прошлому месяцу" };
   }
 
-  const arrow = delta > 0 ? "^" : "v";
   const sign = delta > 0 ? "+" : "-";
   const good = inverse ? delta < 0 : delta > 0;
 
   return {
     className: good ? "up" : "down",
-    text: `${arrow} ${sign}${pct}% к прошлому месяцу`
+    text: `${sign}${pct}% к прошлому месяцу`
   };
 }
 
@@ -4896,6 +5668,38 @@ function markOnboardingTourDone(page = state.page) {
   }
 }
 
+function startOnboardingTour(page = "dashboard", forceOpen = false) {
+  if (!state.isLoggedIn) {
+    return;
+  }
+
+  if (page) {
+    state.page = page;
+  }
+
+  if (forceOpen) {
+    setOnboardingTourForced(true);
+  }
+  onboardingTourState.forceOpen = Boolean(forceOpen) || onboardingTourState.forceOpen;
+
+  onboardingTourState.active = true;
+  onboardingTourState.page = state.page;
+  onboardingTourState.step = 0;
+  onboardingTourState.swipeStartY = null;
+
+  const trySync = (attempt = 0) => {
+    syncOnboardingTour();
+    if (getOnboardingTourRoot() || attempt >= 4) {
+      return;
+    }
+    setTimeout(() => trySync(attempt + 1), 90);
+  };
+
+  requestAnimationFrame(() => {
+    trySync(0);
+  });
+}
+
 function shouldShowOnboardingTour() {
   if (!state.isLoggedIn || shouldShowOnboarding()) {
     return false;
@@ -4905,8 +5709,9 @@ function shouldShowOnboardingTour() {
     return false;
   }
 
+  const forced = onboardingTourState.forceOpen || isOnboardingTourForced();
+
   if (state.page === "dashboard") {
-    const forced = isOnboardingTourForced();
     if ((state.incomes || []).length > 0 && !forced) {
       return false;
     }
@@ -4933,6 +5738,9 @@ function clearOnboardingTourHighlight() {
   document.querySelectorAll("[data-tour-highlight='true']").forEach((node) => {
     node.classList.remove("onboarding-tour-highlight");
     node.removeAttribute("data-tour-highlight");
+    if (node instanceof HTMLElement) {
+      node.style.zIndex = "";
+    }
   });
 }
 
@@ -4984,6 +5792,9 @@ function closeOnboardingTour(markDone = false, reason = "close") {
   onboardingTourState.step = 0;
   onboardingTourState.swipeStartY = null;
   onboardingTourState.page = null;
+  if (markDone) {
+    onboardingTourState.forceOpen = false;
+  }
 
   if (markDone) {
     markOnboardingTourDone(donePage);
@@ -5031,20 +5842,83 @@ function onOnboardingTourTouchEnd(event) {
   }
 }
 
+function applyOnboardingTourInlineLayout(root, isMobile) {
+  if (!root) return;
+
+  const overlay = root.querySelector(".onboarding-tour-overlay");
+  const panel = root.querySelector(".onboarding-tour-panel");
+  if (!overlay || !panel) return;
+
+  Object.assign(root.style, {
+    position: "",
+    inset: "",
+    zIndex: "",
+    pointerEvents: "none"
+  });
+
+  Object.assign(overlay.style, {
+    position: "fixed",
+    inset: "0",
+    zIndex: "12010",
+    pointerEvents: "auto"
+  });
+
+  Object.assign(panel.style, {
+    position: "fixed",
+    zIndex: "12030",
+    pointerEvents: "auto"
+  });
+
+  if (isMobile) {
+    Object.assign(panel.style, {
+      left: "12px",
+      right: "12px",
+      bottom: "12px",
+      top: "",
+      width: "auto",
+      minHeight: "0",
+      maxHeight: "min(62vh, 520px)",
+      transform: ""
+    });
+  } else {
+    Object.assign(panel.style, {
+      width: "min(480px, calc(100vw - 32px))",
+      maxWidth: "480px",
+      minHeight: "",
+      maxHeight: "",
+      top: "50%",
+      left: "50%",
+      transform: "translate(-50%, -50%)",
+      right: "",
+      bottom: ""
+    });
+  }
+}
+
 function renderOnboardingTour() {
-  if (!shouldShowOnboardingTour()) {
+  const canShowByRules = shouldShowOnboardingTour();
+  if (!canShowByRules && !onboardingTourState.forceOpen) {
     closeOnboardingTour(false, "hidden");
     return;
   }
 
-  const resolved = resolveOnboardingTourStep();
-  if (!resolved) {
+  let resolved = resolveOnboardingTourStep();
+  if (!resolved && !onboardingTourState.forceOpen) {
     closeOnboardingTour(true, "missing_targets");
     return;
   }
 
-  const { index, step, targetNode } = resolved;
   const steps = getActiveOnboardingTourSteps();
+  if (!resolved) {
+    const fallbackIndex = Math.max(0, Math.min(onboardingTourState.step, steps.length - 1));
+    resolved = {
+      index: fallbackIndex,
+      step: steps[fallbackIndex] || ONBOARDING_TOUR_STEPS[0],
+      targetNode: null
+    };
+  }
+
+  const { index, step, targetNode } = resolved;
   const isMobile = window.matchMedia("(max-width: 768px)").matches;
   const isLastStep = index === steps.length - 1;
   const actionLabel = isLastStep ? "Начать работу" : "Далее";
@@ -5053,10 +5927,13 @@ function renderOnboardingTour() {
     .map((_, dotIndex) => `<span class="onboarding-tour-dot${dotIndex === index ? " active" : ""}" aria-hidden="true"></span>`)
     .join("");
 
-  ensureOnboardingTourTargetVisible(targetNode);
   clearOnboardingTourHighlight();
-  targetNode.classList.add("onboarding-tour-highlight");
-  targetNode.setAttribute("data-tour-highlight", "true");
+  if (targetNode) {
+    ensureOnboardingTourTargetVisible(targetNode);
+    targetNode.classList.add("onboarding-tour-highlight");
+    targetNode.setAttribute("data-tour-highlight", "true");
+    targetNode.style.zIndex = "12020";
+  }
 
   let root = getOnboardingTourRoot();
   if (!root) {
@@ -5083,6 +5960,8 @@ function renderOnboardingTour() {
     </article>
   `;
 
+  applyOnboardingTourInlineLayout(root, isMobile);
+
   document.body.classList.add("onboarding-tour-active");
 
   const panel = root.querySelector(".onboarding-tour-panel");
@@ -5105,7 +5984,7 @@ function renderOnboardingTour() {
 }
 
 function syncOnboardingTour() {
-  const shouldShow = shouldShowOnboardingTour();
+  const shouldShow = shouldShowOnboardingTour() || onboardingTourState.forceOpen;
   const pageChanged = onboardingTourState.page && onboardingTourState.page !== state.page;
 
   if (shouldShow) {
@@ -5142,6 +6021,7 @@ function renderDashboard() {
     els.accountName.textContent = state.profile.name || state.userEmail;
     updatePlanUi();
     updateCalendarReminderToggleUi();
+    updateMobileHeaderState();
     renderOnboardingPage();
     updateAmountsVisibilityUi();
     return;
@@ -5150,15 +6030,22 @@ function renderDashboard() {
   els.pageTitle.textContent = PAGE_TITLES[state.page] || PAGE_TITLES.dashboard;
   renderSidebarActive();
   els.regimeSelect.value = state.regime;
+  syncMobileDrawerRegimeTabs();
   els.accountName.textContent = state.profile.name || state.userEmail;
   updatePlanUi();
   updateCalendarReminderToggleUi();
+  updateMobileHeaderState();
 
   if (state.page !== "dashboard" && state.page !== "income" && state.page !== "taxes" && state.page !== "calendar" && (onboardingTourState.active || getOnboardingTourRoot())) {
     closeOnboardingTour(false, "page_change");
   }
 
   if (state.page === "dashboard") {
+    const enteringDashboardPage = lastRenderedPage !== "dashboard";
+    if (enteringDashboardPage) {
+      state.dashboardSelectedMonth = new Date().getMonth();
+      state.dashboardRecentMonth = null;
+    }
     lastRenderedPage = "dashboard";
     renderDashboardPage();
     updateAmountsVisibilityUi();
@@ -5237,10 +6124,34 @@ function renderDashboardPage() {
   const limitPct = limit ? Math.min((totalIncome / limit) * 100, 100) : null;
   const safeLimitPct = limitPct === null ? null : Math.round(limitPct);
   const nextDeadline = getUpcomingDeadlines()[0];
-  const recentIncomes = [...dashboardIncomes].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 7);
-
   const now = new Date();
   const currentMonthIndex = now.getMonth();
+  const hasSelectedMonth = state.dashboardSelectedMonth !== null && state.dashboardSelectedMonth !== undefined && state.dashboardSelectedMonth !== "";
+  const selectedMonthRaw = hasSelectedMonth ? Number(state.dashboardSelectedMonth) : Number.NaN;
+  const selectedMonthIndex = Number.isFinite(selectedMonthRaw)
+    ? Math.min(currentMonthIndex, Math.max(0, Math.trunc(selectedMonthRaw)))
+    : currentMonthIndex;
+  state.dashboardSelectedMonth = selectedMonthIndex;
+  const selectedMonthDate = new Date(now.getFullYear(), selectedMonthIndex, 1);
+  const selectedMonthLabel = formatMonthYearLabel(selectedMonthDate);
+  const selectedMonthIsCurrent = selectedMonthIndex >= currentMonthIndex;
+  const selectedMonthLabelPlain = String(MONTHS_ACCUSATIVE[selectedMonthIndex] || "этот месяц").toLowerCase("ru-KZ");
+  const currentMonthLabelPlain = String(MONTHS_ACCUSATIVE[currentMonthIndex] || "этот месяц").toLowerCase("ru-KZ");
+  const selectedMonthContextNote = selectedMonthIndex !== currentMonthIndex
+    ? `<p class="dashboard-tax-month-context">Данные за ${escapeHtml(selectedMonthLabelPlain)}. Текущий месяц: ${escapeHtml(currentMonthLabelPlain)}.</p>`
+    : "";
+  const selectedMonthLabelAccusative = MONTHS_ACCUSATIVE[selectedMonthIndex] || "этот месяц";
+  const selectedMonthData = monthlyData[selectedMonthIndex] || { income: 0, entries: 0 };
+  const selectedIncome = Math.max(0, Number(selectedMonthData.income || 0));
+  const selectedMonthHasIncome = selectedIncome > 0;
+  const selectedTaxRaw = calcByRegime(state.regime, selectedIncome, state.calcExpenses);
+  const selectedTax = selectedMonthHasIncome
+    ? selectedTaxRaw
+    : { opv: 0, so: 0, opvr: 0, vosms: 0, ipn: 0, socTax: 0, total: 0 };
+  const monthTabsHtml = Array.from({ length: currentMonthIndex + 1 }, (_, index) => {
+    const activeClass = index === selectedMonthIndex ? " active" : "";
+    return `<button type="button" class="dashboard-month-tab${activeClass}" data-action="select-dashboard-month" data-month-index="${index}" data-month-source="tabs">${MONTHS[index]}</button>`;
+  }).join("");
   const previousMonthDate = new Date(now.getFullYear(), now.getMonth(), 1);
   previousMonthDate.setMonth(previousMonthDate.getMonth() - 1);
 
@@ -5286,10 +6197,12 @@ function renderDashboardPage() {
   const bars = monthlyData
     .map((row, index) => {
       const height = Math.max((row.income / maxIncome) * 170, row.income > 0 ? 8 : 4);
-      const currentClass = index === currentMonthIndex ? " current" : "";
+      const activeClass = index === selectedMonthIndex ? " is-active" : "";
+      const barClass = index === selectedMonthIndex ? " is-active" : " is-muted";
+      const monthLabel = MONTHS_ACCUSATIVE[index] || row.name;
       return `
-        <div class="chart-item">
-          <div class="chart-bar${currentClass}" style="height:${height}px" title="${row.name}: ${fmt(row.income)}" data-value="${fmt(row.income)}"></div>
+        <div class="chart-item${activeClass}" data-action="select-dashboard-month" data-month-index="${index}" data-month-source="chart" title="Показать налоги за ${monthLabel}">
+          <div class="chart-bar${barClass}" style="height:${height}px" title="${row.name}: ${fmt(row.income)}" data-value="${fmt(row.income)}"></div>
           <span>${row.name}</span>
         </div>
       `;
@@ -5312,11 +6225,148 @@ function renderDashboardPage() {
   const deadlineIncomeHint = state.incomes.length === 0
     ? '<div class="stat-sub deadline-income-hint">добавьте доход чтобы рассчитать сумму</div>'
     : "";
+  const isMobileKpiMode = isMobileViewport();
+  const formatMobileKpiAmount = (value) => {
+    const numeric = Number(value || 0);
+    const abs = Math.abs(numeric);
+    if (abs >= 1000000) {
+      const mln = abs / 1000000;
+      const digits = mln >= 100 ? 0 : 1;
+      const mlnText = new Intl.NumberFormat("ru-RU", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: digits
+      }).format(mln);
+      return `${numeric < 0 ? "-" : ""}${mlnText} млн ₸`;
+    }
+    return fmt(numeric);
+  };
+  const getMobileKpiValueSizeClass = (valueText) => {
+    const compactLength = String(valueText || "").replace(/\s+/g, "").length;
+    if (compactLength >= 12) return " kpi-value-mobile-s";
+    if (compactLength >= 9) return " kpi-value-mobile-m";
+    return "";
+  };
+  const incomeKpiTitle = isMobileKpiMode ? "Доход за месяц" : "Доход за текущий месяц";
+  const incomeYtdKpiTitle = isMobileKpiMode ? "С начала года" : "Доход с начала года";
+  const incomeKpiValueText = isMobileKpiMode ? formatMobileKpiAmount(currentIncome) : fmt(currentIncome);
+  const taxLoadKpiValueText = isMobileKpiMode ? formatMobileKpiAmount(taxLoadPayNow) : fmt(taxLoadPayNow);
+  const incomeYtdKpiValueText = isMobileKpiMode ? formatMobileKpiAmount(totalIncome) : fmt(totalIncome);
+  const incomeYtdAvgKpiValueText = isMobileKpiMode ? formatMobileKpiAmount(avgMonthlyIncome) : fmt(avgMonthlyIncome);
+  const incomeKpiValueClass = isMobileKpiMode ? getMobileKpiValueSizeClass(incomeKpiValueText) : "";
+  const taxLoadKpiValueClass = isMobileKpiMode ? getMobileKpiValueSizeClass(taxLoadKpiValueText) : "";
+  const incomeYtdKpiValueClass = isMobileKpiMode ? getMobileKpiValueSizeClass(incomeYtdKpiValueText) : "";
+  const mobileDeadlineTitle = (() => {
+    if (!nextDeadline) return "все задачи закрыты";
+    const source = String(nextDeadline.title || "").trim();
+    return source || "все задачи закрыты";
+  })();
+  const MONTHS_GENITIVE = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
+  const mobileDeadlineDateLabel = nextDeadline
+    ? (() => {
+      const dateObj = new Date(nextDeadline.date);
+      return `${dateObj.getDate()} ${MONTHS_GENITIVE[dateObj.getMonth()] || ""}`.trim();
+    })()
+    : "Нет срока";
   const taxLoadEmptyHint = showZeroIncomeMinimumNote
     ? "минимум при нулевом доходе"
     : showSelfZeroIncomeHint
       ? "добавьте доход чтобы увидеть расчёт"
       : "";
+  const taxLoadDueDateLabel = getNextTaxDueDateLabel();
+  const kpiActionClass = isMobileKpiMode ? " kpi-card-actionable" : "";
+  const incomeKpiActionAttrs = isMobileKpiMode
+    ? 'data-action="open-dashboard-kpi-sheet" data-kpi-key="income_current" role="button" tabindex="0" aria-label="Открыть расшифровку дохода за текущий месяц"'
+    : "";
+  const taxKpiActionAttrs = 'data-action="open-tax-load-modal" role="button" tabindex="0" aria-label="Открыть полную расшифровку налоговой нагрузки"';
+  const incomeYtdKpiActionAttrs = isMobileKpiMode
+    ? 'data-action="open-dashboard-kpi-sheet" data-kpi-key="income_ytd" role="button" tabindex="0" aria-label="Открыть расшифровку дохода с начала года"'
+    : "";
+  const deadlineKpiActionAttrs = isMobileKpiMode
+    ? 'data-action="open-dashboard-kpi-sheet" data-kpi-key="next_deadline" role="button" tabindex="0" aria-label="Открыть расшифровку ближайшего срока"'
+    : "";
+  const mobileIncomeYtdKpiMarkup = isMobileKpiMode
+    ? `
+      <article class="card kpi-card kpi-card-compact-row kpi-card-ytd-row${kpiActionClass}" ${incomeYtdKpiActionAttrs}>
+        <div class="kpi-row-main">
+          <div class="kpi-row-copy">
+            <div class="stat-title">${incomeYtdKpiTitle}</div>
+            <div class="kpi-note">темп: <span class="amount-sensitive">${incomeYtdAvgKpiValueText}</span> / мес</div>
+          </div>
+          <div class="stat-value amount-sensitive${incomeYtdKpiValueClass}">${incomeYtdKpiValueText}</div>
+        </div>
+        <div class="kpi-mobile-action-row">
+          <button type="button" class="kpi-mobile-action-btn" data-action="open-dashboard-kpi-sheet" data-kpi-key="income_ytd" aria-label="Открыть расшифровку дохода с начала года">Подробнее &rarr;</button>
+        </div>
+      </article>
+    `
+    : `
+      <article class="card kpi-card${kpiActionClass}" ${incomeYtdKpiActionAttrs}>
+        <div class="stat-title">${incomeYtdKpiTitle}</div>
+        <div class="stat-value amount-sensitive">${fmt(totalIncome)}</div>
+        <div class="kpi-note">Средний темп: <span class="amount-sensitive">${fmt(avgMonthlyIncome)}</span> / мес</div>
+        <div class="stat-sub">Прогноз за год: <span class="amount-sensitive">${fmt(annualRunRate)}</span></div>
+      </article>
+    `;
+  const mobileDeadlineKpiMarkup = isMobileKpiMode
+    ? `
+      <article class="card kpi-card deadline${deadlineCardClass} kpi-card-compact-row kpi-card-deadline-row${kpiActionClass}" data-tour-target="next-deadline" ${deadlineKpiActionAttrs}>
+        <div class="kpi-row-main">
+          <div class="kpi-row-copy">
+            <div class="stat-title">Ближайший срок</div>
+            <div class="stat-sub deadline-mobile-title">${mobileDeadlineTitle}</div>
+          </div>
+          <div class="kpi-deadline-right">
+            <div class="stat-value stat-compact">${mobileDeadlineDateLabel}</div>
+          </div>
+        </div>
+        <div class="kpi-mobile-action-row">
+          <button type="button" class="deadline-mobile-calendar-btn" data-action="open-dashboard-deadline-calendar" aria-label="Перейти в календарь сроков">Перейти в календарь &rarr;</button>
+        </div>
+      </article>
+    `
+    : `
+      <article class="card kpi-card deadline${deadlineCardClass}${kpiActionClass}" data-tour-target="next-deadline" ${deadlineKpiActionAttrs}>
+        <div class="stat-title">Ближайший срок</div>
+        <div class="stat-value stat-compact">${nextDeadline ? mobileDeadlineDateLabel : "Нет"}</div>
+        <div class="${deadlineNoteClass}">${deadlineDueText}</div>
+        <div class="stat-sub">${nextDeadline ? nextDeadline.title : "все задачи закрыты"}</div>
+        ${deadlineIncomeHint}
+      </article>
+    `;
+  const isSimplifiedRegime = state.regime === "simplified";
+  const isOurRegime = state.regime === "our";
+  const isSelfRegime = state.regime === "self";
+  const taxRowsForKpiSheet = [
+    { label: isSelfRegime ? "ОПВ (1%)" : "ОПВ", value: Number(currentTax.opv || 0) },
+    { label: isSelfRegime ? "СО (1%)" : "СО", value: Number(currentTax.so || 0) },
+    { label: isSelfRegime ? "ОПВР (1%)" : "ОПВР", value: Number(currentTax.opvr || 0) },
+    { label: isSelfRegime ? "ВОСМС (1%)" : "ВОСМС", value: Number(currentTax.vosms || 0) }
+  ];
+
+  if (isSimplifiedRegime || isOurRegime) {
+    taxRowsForKpiSheet.push({
+      label: "Соц. налог",
+      value: Number(currentTax.socTax || 0)
+    });
+  }
+
+  dashboardKpiSheetData = {
+    currentIncome: Number(currentIncome || 0),
+    incomeTrendClass: incomeTrend.className || "flat",
+    incomeTrendText: incomeTrend.text || "Без изменений",
+    taxLoadTitle,
+    taxLoadPayNow: Number(taxLoadPayNow || 0),
+    taxLoadIpnReserve: Number(taxLoadIpnReserve || 0),
+    taxLoadOpvSavings: Number(taxLoadOpvSavings || 0),
+    taxDueDateLabel: taxLoadDueDateLabel,
+    taxRows: taxRowsForKpiSheet,
+    totalIncome: Number(totalIncome || 0),
+    avgMonthlyIncome: Number(avgMonthlyIncome || 0),
+    annualRunRate: Number(annualRunRate || 0),
+    nextDeadlineDate: nextDeadline ? mobileDeadlineDateLabel : "Нет",
+    nextDeadlineTitle: nextDeadline ? nextDeadline.title : "Все задачи закрыты",
+    nextDeadlineDueText: deadlineDueText
+  };
 
   const welcomeBannerHtml = showWelcomeBanner
     ? `
@@ -5346,121 +6396,313 @@ function renderDashboardPage() {
       </div>
     `;
 
-  const taxSectionHtml = hasDashboardData
-    ? `
-      ${renderTaxBreakdown(currentTax, state.regime, { ipnPeriodNote: true })}
-      <div class="total-box">
-        <span>Итого к уплате</span>
-        <strong class="amount-sensitive">${fmt(currentTax.total)}</strong>
-      </div>
-    `
-    : `
-      <div class="dashboard-empty-state compact">
-        <p>Добавьте доход чтобы увидеть расчёт</p>
+  const taxSectionHtml = (() => {
+    const payNowTitle = `Платить в ${MONTHS_PREPOSITIONAL[selectedMonthIndex] || "этом месяце"}`;
+    const payNowDueDateLabel = getTaxDueDateLabelByMonth(selectedMonthIndex, now.getFullYear());
+    const payNowTotal = Math.max(0, Math.round(getTaxLoadPayNow(state.regime, selectedTax)));
+    const isSimplifiedRegime = state.regime === "simplified";
+    const isOurRegime = state.regime === "our";
+    const isSelfRegime = state.regime === "self";
+    const noIncomeHint = selectedMonthHasIncome ? "" : '<p class="dashboard-tax-empty-note">В этом месяце доходов не добавлено</p>';
+    const payNowRows = [
+      { label: isSelfRegime ? "ОПВ (1%)" : "ОПВ (10%)", value: selectedTax.opv || 0 },
+      { label: isSelfRegime ? "СО (1%)" : "СО (5%)", value: selectedTax.so || 0 },
+      { label: isSelfRegime ? "ОПВР (1%)" : "ОПВР (3.5%)", value: selectedTax.opvr || 0 },
+      { label: isSelfRegime ? "ВОСМС (1%)" : "ВОСМС", value: selectedTax.vosms || 0 }
+    ];
+
+    if (isSimplifiedRegime || isOurRegime) {
+      payNowRows.push({
+        label: "Соц. налог",
+        value: selectedTax.socTax || 0,
+        note: isSimplifiedRegime ? "ИП на упрощёнке освобождены" : ""
+      });
+    }
+
+    const payLaterLabel = isSimplifiedRegime
+      ? "ИПН (4% от дохода)"
+      : isOurRegime
+        ? "ИПН (10% после вычетов)"
+        : "ИПН (0%)";
+    const payLaterValue = isSelfRegime ? 0 : Number(selectedTax.ipn || 0);
+    const payLaterSuffix = isSelfRegime ? "" : "/мес";
+    const payLaterNote = isSimplifiedRegime
+      ? "Платится раз в полгода — в феврале и августе. Рекомендуем откладывать эту сумму каждый месяц на отдельный счёт."
+      : isOurRegime
+        ? "Платится по итогам года. Рекомендуем ежемесячно резервировать сумму на отдельном счёте."
+        : "Для самозанятого ИПН не применяется.";
+
+    return `
+      <div class="dashboard-tax-split">
+        <section class="dashboard-tax-block dashboard-tax-block-now">
+          <h4 class="dashboard-tax-title">${payNowTitle}</h4>
+          ${noIncomeHint}
+          ${payNowRows
+            .map((row) => `
+              <div class="dashboard-tax-row">
+                <span>${escapeHtml(row.label)}${row.note ? ` <small class="dashboard-tax-row-note">${escapeHtml(row.note)}</small>` : ""}</span>
+                <strong class="amount-sensitive">${fmt(row.value)}</strong>
+              </div>
+            `)
+            .join("")}
+          <div class="dashboard-tax-total">
+            <span>Итого к уплате:</span>
+            <strong class="amount-sensitive">${fmt(payNowTotal)}</strong>
+          </div>
+          <p class="dashboard-tax-subnote">Срок — до ${payNowDueDateLabel}</p>
+        </section>
+
+        <div class="dashboard-tax-divider"><span>Не платится сейчас</span></div>
+
+        <section class="dashboard-tax-block dashboard-tax-block-later">
+          <h4 class="dashboard-tax-title">Откладывать на ИПН</h4>
+          <div class="dashboard-tax-row">
+            <span>${payLaterLabel}</span>
+            <strong class="amount-sensitive">${fmt(payLaterValue)}${payLaterSuffix}</strong>
+          </div>
+          <p class="dashboard-tax-subnote">${payLaterNote}</p>
+        </section>
       </div>
     `;
+  })();
+  const recentMonthRows = state.incomes
+    .filter((row) => {
+      const dateObj = new Date(row.date);
+      return dateObj.getFullYear() === selectedMonthDate.getFullYear() && dateObj.getMonth() === selectedMonthDate.getMonth();
+    })
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+  const recentMonthOperationsCount = recentMonthRows.length;
+  const recentMonthTotal = recentMonthRows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  const recentMonthAverageCheck = recentMonthOperationsCount > 0 ? recentMonthTotal / recentMonthOperationsCount : 0;
+  const recentMonthLargestOperation = recentMonthOperationsCount > 0
+    ? recentMonthRows.reduce((max, row) => Math.max(max, Number(row.amount || 0)), 0)
+    : 0;
+  const topCategoryPalette = ["#6C5CE7", "#4A90E2", "#48BB78", "#ED8936"];
+  const topCategories = (() => {
+    if (recentMonthTotal <= 0) return [];
+    const buckets = new Map();
+    recentMonthRows.forEach((row) => {
+      const name = String(row.category || "Без категории").trim() || "Без категории";
+      const amount = Math.max(0, Number(row.amount || 0));
+      buckets.set(name, (buckets.get(name) || 0) + amount);
+    });
 
-  const recentSectionHtml = hasDashboardData
+    return [...buckets.entries()]
+      .map(([name, amount], index) => ({
+        name,
+        amount,
+        percent: recentMonthTotal > 0 ? (amount / recentMonthTotal) * 100 : 0,
+        color: topCategoryPalette[index % topCategoryPalette.length]
+      }))
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 4)
+      .map((row, index) => ({ ...row, color: topCategoryPalette[index % topCategoryPalette.length] }));
+  })();
+
+  const topCategoriesHtml = topCategories.length > 0
+    ? topCategories
+      .map((row) => {
+        const percentLabel = row.percent >= 10 ? row.percent.toFixed(0) : row.percent.toFixed(1);
+        const width = Math.max(8, Math.min(100, row.percent));
+        return `
+          <li class="dashboard-top-category-item">
+            <div class="dashboard-top-category-head">
+              <span>${escapeHtml(row.name)}</span>
+              <strong>${percentLabel}%</strong>
+            </div>
+            <div class="dashboard-top-category-bar"><span style="width:${width}%;background:${row.color};"></span></div>
+          </li>
+        `;
+      })
+      .join("")
+    : '<li class="dashboard-recent-empty-small">Нет данных по категориям за выбранный месяц.</li>';
+
+  const recentMonthSwitcherHtml = `
+    <div class="dashboard-month-switcher" aria-label="Выбор месяца поступлений">
+      <button type="button" class="dashboard-month-nav" data-action="dashboard-recent-month-prev" aria-label="Предыдущий месяц" ${selectedMonthIndex <= 0 ? "disabled" : ""}>&larr;</button>
+      <span class="dashboard-month-switcher-label">${escapeHtml(selectedMonthLabel)}</span>
+      <button type="button" class="dashboard-month-nav" data-action="dashboard-recent-month-next" aria-label="Следующий месяц" ${selectedMonthIsCurrent ? "disabled" : ""}>&rarr;</button>
+    </div>
+  `;
+  const recentMobileCardsHtml = recentMonthRows
+    .map((row) => {
+      const categoryName = String(row.category || "Без категории").trim() || "Без категории";
+      const categoryClass = getIncomeCategoryToneClass(categoryName);
+      const comment = String(row.comment || "").trim();
+      const commentHtml = comment ? `<span class="dashboard-recent-mobile-comment">${escapeHtml(comment)}</span>` : "";
+
+      return `
+        <article class="dashboard-recent-mobile-item">
+          <div class="dashboard-recent-mobile-head">
+            <strong class="dashboard-recent-mobile-amount amount-sensitive">${fmt(row.amount)}</strong>
+            <span class="cat-pill ${categoryClass}">${escapeHtml(categoryName)}</span>
+          </div>
+          <div class="dashboard-recent-mobile-meta">
+            <span class="dashboard-recent-mobile-date">${formatDate(row.date)}</span>
+            ${commentHtml}
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+
+  const recentSectionHtml = recentMonthOperationsCount > 0
     ? `
-      <div class="table-wrap">
-        <table class="table dashboard-table">
-          <thead><tr><th>Дата</th><th>Категория</th><th>Сумма</th></tr></thead>
-          <tbody>
-            ${recentIncomes
-              .map(
-                (row) => `<tr><td>${formatDate(row.date)}</td><td><span class="cat-pill">${escapeHtml(row.category)}</span></td><td><span class="amount-sensitive">${fmt(row.amount)}</span></td></tr>`
-              )
-              .join("")}
-          </tbody>
-        </table>
+      <div class="dashboard-recent-layout">
+        <div class="dashboard-recent-main">
+          ${
+            isMobileKpiMode
+              ? `<div class="dashboard-recent-mobile-list">${recentMobileCardsHtml}</div>`
+              : `<div class="table-wrap dashboard-recent-table-wrap">
+                  <table class="table dashboard-table">
+                    <thead><tr><th>Дата</th><th>Категория</th><th>Сумма</th></tr></thead>
+                    <tbody>
+                      ${recentMonthRows
+                        .map((row) => {
+                          const categoryName = String(row.category || "Без категории").trim() || "Без категории";
+                          const categoryClass = getIncomeCategoryToneClass(categoryName);
+                          return `<tr><td>${formatDate(row.date)}</td><td><span class="cat-pill ${categoryClass}">${escapeHtml(categoryName)}</span></td><td><span class="amount-sensitive">${fmt(row.amount)}</span></td></tr>`;
+                        })
+                        .join("")}
+                    </tbody>
+                  </table>
+                </div>`
+          }
+        </div>
+        <aside class="dashboard-recent-side">
+          <section class="dashboard-recent-side-card">
+            <h4>Топ категорий</h4>
+            <ul class="dashboard-top-categories">${topCategoriesHtml}</ul>
+          </section>
+          <section class="dashboard-recent-side-card">
+            <h4>Статистика месяца</h4>
+            <div class="dashboard-recent-stat-row"><span>Средний чек</span><strong class="amount-sensitive">${fmt(recentMonthAverageCheck)}</strong></div>
+            <div class="dashboard-recent-stat-row"><span>Крупнейшая операция</span><strong class="amount-sensitive">${fmt(recentMonthLargestOperation)}</strong></div>
+            <div class="dashboard-recent-stat-row"><span>Количество операций</span><strong>${recentMonthOperationsCount}</strong></div>
+          </section>
+          <button type="button" class="btn btn-primary dashboard-recent-all-btn" data-page="income">Все операции &rarr;</button>
+        </aside>
       </div>
     `
     : `
-      <div class="dashboard-empty-state compact">
-        <p>Нет записей. Добавьте первый доход.</p>
-        <button type="button" class="btn btn-ghost" data-page="income">+ Добавить</button>
+      <div class="dashboard-recent-layout">
+        <div class="dashboard-recent-main">
+          <div class="dashboard-empty-state compact dashboard-recent-empty-month">
+            <div class="dashboard-recent-empty-icon" aria-hidden="true">📭</div>
+            <p>Нет поступлений за этот месяц</p>
+          </div>
+        </div>
+        <aside class="dashboard-recent-side">
+          <section class="dashboard-recent-side-card">
+            <h4>Топ категорий</h4>
+            <p class="dashboard-recent-empty-small">Нет данных по категориям за выбранный месяц.</p>
+          </section>
+          <section class="dashboard-recent-side-card">
+            <h4>Статистика месяца</h4>
+            <div class="dashboard-recent-stat-row"><span>Средний чек</span><strong class="amount-sensitive">${fmt(0)}</strong></div>
+            <div class="dashboard-recent-stat-row"><span>Крупнейшая операция</span><strong class="amount-sensitive">${fmt(0)}</strong></div>
+            <div class="dashboard-recent-stat-row"><span>Количество операций</span><strong>0</strong></div>
+          </section>
+          <button type="button" class="btn btn-primary dashboard-recent-all-btn" data-page="income">Все операции &rarr;</button>
+        </aside>
       </div>
     `;
 
   els.pageContent.innerHTML = `
     <div class="grid grid-4 kpi-grid">
-      <article class="card kpi-card">
-        <div class="stat-title">Доход за текущий месяц</div>
-        <div class="stat-value amount-sensitive">${fmt(currentIncome)}</div>
-        <div class="kpi-trend ${incomeTrend.className}">${incomeTrend.text}</div>
-        <div class="stat-sub">обновляется по операциям</div>
+      <article class="card kpi-card kpi-card-income-hero${kpiActionClass}" ${incomeKpiActionAttrs}>
+        <div class="income-hero-head">
+          <div class="stat-title">${incomeKpiTitle}</div>
+          <span class="income-hero-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+              <path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h11A2.5 2.5 0 0 1 19 7.5V9h1.5A2.5 2.5 0 0 1 23 11.5v5a2.5 2.5 0 0 1-2.5 2.5H5.5A2.5 2.5 0 0 1 3 16.5z"></path>
+              <circle cx="18.5" cy="13.5" r="1"></circle>
+            </svg>
+          </span>
+        </div>
+        <div class="stat-value amount-sensitive${incomeKpiValueClass}">${incomeKpiValueText}</div>
+        <div class="income-hero-meta">
+          <div class="kpi-trend ${incomeTrend.className}">${incomeTrend.text}</div>
+        </div>
+        ${!isMobileKpiMode
+          ? '<button type="button" class="income-hero-cta" data-page="income" aria-label="Перейти к добавлению дохода">+ Добавить доход</button>'
+          : ""}
       </article>
-      <article class="card kpi-card danger tax-load-kpi" data-tour-target="tax-load" data-action="open-tax-load-modal" role="button" tabindex="0" aria-label="Открыть расшифровку налоговой нагрузки">
+      <article class="card kpi-card danger tax-load-kpi${kpiActionClass}" data-tour-target="tax-load" ${taxKpiActionAttrs}>
         <div class="stat-title">${taxLoadTitle}</div>
-        ${isHighTaxLoad ? '<span class="badge badge-warning tax-load-warning-badge">Высокая нагрузка</span>' : ""}
-        <div class="stat-value stat-danger amount-sensitive">${fmt(taxLoadPayNow)}</div>
-        <div class="tax-load-monthly-note">Ежемесячно: <span class="amount-sensitive">${fmt(taxLoadPayNow)}</span> (без ИПН — он платится раз в полгода)</div>
-        ${taxLoadEmptyHint ? `<div class="stat-sub tax-load-min-note">${taxLoadEmptyHint}</div>` : ""}
-        <div class="stat-sub tax-load-meta-line">${taxLoadIpnReserveLine}</div>
-        <div class="stat-sub tax-load-meta-line">из них <span class="amount-sensitive">${fmt(taxLoadOpvSavings)}</span> — ваши накопления на пенсии</div>
-        <div class="stat-sub tax-load-hint">${infoHintIcon}Нажмите для расшифровки</div>
-        ${isHighTaxLoad ? `<div class="tax-load-warning-hint">${highTaxLoadHint}</div>` : ""}
+        ${!isMobileKpiMode && isHighTaxLoad ? '<span class="badge badge-warning tax-load-warning-badge">Высокая нагрузка</span>' : ""}
+        <div class="stat-value stat-danger amount-sensitive${taxLoadKpiValueClass}">${taxLoadKpiValueText}</div>
+        ${isMobileKpiMode
+          ? `
+            <div class="tax-load-mobile-meta">
+              <div class="stat-sub tax-load-mobile-due">до ${taxLoadDueDateLabel}</div>
+              <div class="tax-load-mobile-cta">Открыть расшифровку &rarr;</div>
+            </div>
+          `
+          : `
+            <div class="tax-load-monthly-note">Ежемесячно: <span class="amount-sensitive">${fmt(taxLoadPayNow)}</span> (без ИПН — он платится раз в полгода)</div>
+            ${taxLoadEmptyHint ? `<div class="stat-sub tax-load-min-note">${taxLoadEmptyHint}</div>` : ""}
+            <div class="stat-sub tax-load-meta-line">${taxLoadIpnReserveLine}</div>
+            <div class="stat-sub tax-load-meta-line">из них <span class="amount-sensitive">${fmt(taxLoadOpvSavings)}</span> — ваши накопления на пенсии</div>
+            <div class="stat-sub tax-load-hint">${infoHintIcon}Нажмите для расшифровки</div>
+            ${isHighTaxLoad ? `<div class="tax-load-warning-hint">${highTaxLoadHint}</div>` : ""}
+          `}
       </article>
-      <article class="card kpi-card">
-        <div class="stat-title">Доход с начала года</div>
-        <div class="stat-value amount-sensitive">${fmt(totalIncome)}</div>
-        <div class="kpi-note">Средний темп: <span class="amount-sensitive">${fmt(avgMonthlyIncome)}</span> / мес</div>
-        <div class="stat-sub">Прогноз за год: <span class="amount-sensitive">${fmt(annualRunRate)}</span></div>
-      </article>
-      <article class="card kpi-card deadline${deadlineCardClass}" data-tour-target="next-deadline">
-        <div class="stat-title">Ближайший срок</div>
-        <div class="stat-value stat-compact">${nextDeadline ? formatDateShort(nextDeadline.date) : "Нет"}</div>
-        <div class="${deadlineNoteClass}">${deadlineDueText}</div>
-        <div class="stat-sub">${nextDeadline ? nextDeadline.title : "все задачи закрыты"}</div>
-        ${deadlineIncomeHint}
-      </article>
+      ${mobileIncomeYtdKpiMarkup}
+      ${mobileDeadlineKpiMarkup}
     </div>
 
     ${welcomeBannerHtml}
 
-    <div class="grid grid-2 mt-16">
-      <article class="card chart-panel" data-tour-target="income-chart">
-        <h3>Доходы по месяцам</h3>
-        ${chartSectionHtml}
-      </article>
+    <div class="grid grid-2 mt-16 dashboard-main-grid">
+      <div class="dashboard-left-column">
+        <article class="card chart-panel chart-panel-stretch" data-tour-target="income-chart">
+          <h3>Доходы по месяцам</h3>
+          <div class="chart-flex-area">
+            ${chartSectionHtml}
+          </div>
+        </article>
+        <article class="card progress-card progress-card-compact">
+          <div class="progress-card-head">
+            <h3>Прогресс до лимита режима</h3>
+            <span class="limit-risk ${riskMeta.className}">${riskMeta.label}</span>
+          </div>
+          ${
+            limit
+              ? `
+              <p class="text-muted progress-meta"><span class="amount-sensitive">${fmt(totalIncome)}</span> из <span class="amount-sensitive">${fmt(limit)}</span> (${safeLimitPct}%)</p>
+              <div class="progress"><span style="width:${limitPct}%;"></span></div>
+              ${
+                hasAdvancedAnalytics
+                  ? `<div class="progress-eta">
+                      <span>Осталось: <b class="amount-sensitive">${fmt(remainingToLimit)}</b></span>
+                      <span>${progressEtaText}</span>
+                    </div>`
+                  : `<div class="feature-lock-inline">
+                      <p>Прогноз по темпу и риску доступен в Pro.</p>
+                      <button type="button" class="btn btn-ghost btn-xs" data-action="open-pro">Открыть тарифы</button>
+                    </div>`
+              }
+            `
+              : "<p class=\"text-muted\">Для ОУР лимит не применяется.</p>"
+          }
+          <p class="text-muted mt-10">Режим: ${regimeLabel(state.regime)}</p>
+        </article>
+      </div>
       <article class="card taxes-panel">
-        <h3>Разбивка налогов за месяц</h3>
+        <h3>Разбивка налогов за ${selectedMonthLabelAccusative}</h3>
+        ${selectedMonthContextNote}
+        <div class="dashboard-month-tabs">${monthTabsHtml}</div>
         ${taxSectionHtml}
       </article>
     </div>
-
-    <div class="grid grid-2 mt-16">
-      <article class="card progress-card">
-        <div class="progress-card-head">
-          <h3>Прогресс до лимита режима</h3>
-          <span class="limit-risk ${riskMeta.className}">${riskMeta.label}</span>
-        </div>
-        ${
-          limit
-            ? `
-            <p class="text-muted progress-meta"><span class="amount-sensitive">${fmt(totalIncome)}</span> из <span class="amount-sensitive">${fmt(limit)}</span> (${safeLimitPct}%)</p>
-            <div class="progress"><span style="width:${limitPct}%;"></span></div>
-            ${
-              hasAdvancedAnalytics
-                ? `<div class="progress-eta">
-                    <span>Осталось: <b class="amount-sensitive">${fmt(remainingToLimit)}</b></span>
-                    <span>${progressEtaText}</span>
-                  </div>`
-                : `<div class="feature-lock-inline">
-                    <p>Прогноз по темпу и риску доступен в Pro.</p>
-                    <button type="button" class="btn btn-ghost btn-xs" data-action="open-pro">Открыть тарифы</button>
-                  </div>`
-            }
-          `
-            : "<p class=\"text-muted\">Для ОУР лимит не применяется.</p>"
-        }
-        <p class="text-muted mt-10">Режим: ${regimeLabel(state.regime)}</p>
-      </article>
-      <article class="card income-table-panel">
+    <article class="card income-table-panel mt-16">
+      <div class="dashboard-recent-head">
         <h3>Последние поступления</h3>
-        ${recentSectionHtml}
-      </article>
-    </div>
+        ${recentMonthSwitcherHtml}
+      </div>
+      ${recentSectionHtml}
+    </article>
   `;
 
   syncOnboardingTour();
@@ -5653,13 +6895,13 @@ function renderOnboardingPage() {
         ? [
             { label: "ОПВ (10%)", value: taxes.opv },
             { label: "СО (5%)", value: taxes.so },
-            { label: "ОПВР (3.5% от МЗП)", value: taxes.opvr },
+            { label: "ОПВР (3.5% от дохода, до 50 МЗП)", value: taxes.opvr },
             { label: "ВОСМС", value: taxes.vosms }
           ]
         : [
             { label: "ОПВ (10%)", value: taxes.opv },
             { label: "СО (5%)", value: taxes.so },
-            { label: "ОПВР (3.5% от МЗП)", value: taxes.opvr },
+            { label: "ОПВР (3.5% от дохода, до 50 МЗП)", value: taxes.opvr },
             { label: "ВОСМС", value: taxes.vosms },
             { label: "СН", value: taxes.socTax }
           ];
@@ -5781,20 +7023,16 @@ function getIncomePeriodStart(period) {
 function getFilteredIncomes(rows, filters) {
   const query = String(filters.query || "").trim().toLowerCase();
   const category = String(filters.category || "all");
-  const period = normalizeIncomeFilterPeriod(String(filters.period || "all"));
-  const periodStart = getIncomePeriodStart(period);
 
   return rows.filter((row) => {
-    const rowDate = new Date(row.date);
     const byCategory = category === "all" ? true : row.category === category;
-    const byPeriod = periodStart ? rowDate >= periodStart : true;
 
     if (!query) {
-      return byCategory && byPeriod;
+      return byCategory;
     }
 
     const haystack = `${row.date} ${row.category} ${row.comment || ""} ${row.amount}`.toLowerCase();
-    return byCategory && byPeriod && haystack.includes(query);
+    return byCategory && haystack.includes(query);
   });
 }
 
@@ -5838,15 +7076,38 @@ function renderIncomePage() {
     ...getDefaultIncomeFilters(),
     ...(state.incomeFilters || {})
   };
+  const defaultIncomeFilters = getDefaultIncomeFilters();
+  const hasActiveIncomeFilters = Boolean(String(filters.query || "").trim())
+    || filters.category !== defaultIncomeFilters.category
+    || filters.sort !== defaultIncomeFilters.sort;
+
+  const now = new Date();
+  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const savedMonthStart = parseDashboardMonthKey(state.incomeSelectedMonth);
+  const selectedMonthStart = savedMonthStart && savedMonthStart.getTime() <= currentMonthStart.getTime() ? savedMonthStart : currentMonthStart;
+  const selectedMonthKey = formatDashboardMonthKey(selectedMonthStart);
+  const selectedMonthLabel = formatMonthYearLabel(selectedMonthStart);
+  const canGoIncomeNextMonth = selectedMonthStart.getTime() < currentMonthStart.getTime();
+
+  if (state.incomeSelectedMonth !== selectedMonthKey) {
+    state.incomeSelectedMonth = selectedMonthKey;
+    saveState();
+  }
 
   const existingCategories = [...new Set(state.incomes.map((row) => String(row.category || "").trim()).filter(Boolean))].sort((a, b) =>
     a.localeCompare(b, "ru")
   );
   const categoryCatalog = [...new Set([...INCOME_CATEGORY_PRESETS, ...existingCategories])].sort((a, b) => a.localeCompare(b, "ru"));
 
-  const filteredRows = getSortedIncomes(getFilteredIncomes(state.incomes, filters), filters.sort);
+  const selectedMonthRows = state.incomes.filter((row) => {
+    const rowDate = new Date(row.date);
+    if (Number.isNaN(rowDate.getTime())) return false;
+    return rowDate.getFullYear() === selectedMonthStart.getFullYear() && rowDate.getMonth() === selectedMonthStart.getMonth();
+  });
+  const filteredRows = getSortedIncomes(getFilteredIncomes(selectedMonthRows, filters), filters.sort);
   const editingIncome = state.incomeEditId ? state.incomes.find((row) => row.id === state.incomeEditId) : null;
   const hasIncomeEntries = state.incomes.length > 0;
+  const monthHasEntries = selectedMonthRows.length > 0;
 
   if (state.incomeEditId && !editingIncome) {
     state.incomeEditId = null;
@@ -5861,25 +7122,58 @@ function renderIncomePage() {
     .filter((row) => (last30Start ? new Date(row.date) >= last30Start : true))
     .reduce((sum, row) => sum + Number(row.amount || 0), 0);
   const topCategory = getTopIncomeCategory(state.incomes);
+  const monthTotal = selectedMonthRows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  const monthOpsCount = selectedMonthRows.length;
   const filteredTotal = filteredRows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
   const maxVisibleAmount = filteredRows.length > 0 ? Math.max(...filteredRows.map((row) => Number(row.amount || 0))) : 0;
 
   const totalOps = getIncomeOpsCountTotal();
-  const canUnlimitedIncome = canUseFeature("unlimited_income_ops");
-  const canCreateIncome = Boolean(editingIncome) || canUnlimitedIncome || totalOps < FREE_INCOME_MONTH_LIMIT;
   const canExport = canUseFeature("exports");
+  const remainingTrialOps = Math.max(0, FREE_INCOME_MONTH_LIMIT - totalOps);
+  const showTrialBanner = !isProActive() && !incomeTrialBannerDismissed && remainingTrialOps <= 2;
+  const previousMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const previousMonthIncome = getIncomeByMonth(previousMonthDate.getFullYear(), previousMonthDate.getMonth(), state.incomes);
+  const currentMonthIncome = getCurrentMonthIncome(state.incomes);
+  const MONTHS_DATIVE = ["январю", "февралю", "марту", "апрелю", "маю", "июню", "июлю", "августу", "сентябрю", "октябрю", "ноябрю", "декабрю"];
+  const previousMonthLabelDative = MONTHS_DATIVE[previousMonthDate.getMonth()] || "прошлому месяцу";
+  let dynamicsClass = "neutral";
+  let dynamicsText = `— без изменений к ${previousMonthLabelDative}`;
+  if (previousMonthIncome > 0) {
+    const diffPct = ((currentMonthIncome - previousMonthIncome) / previousMonthIncome) * 100;
+    const roundedPct = Math.round(Math.abs(diffPct));
+    if (diffPct > 0.01) {
+      dynamicsClass = "up";
+      dynamicsText = `↑ +${roundedPct}% к ${previousMonthLabelDative}`;
+    } else if (diffPct < -0.01) {
+      dynamicsClass = "down";
+      dynamicsText = `↓ -${roundedPct}% к ${previousMonthLabelDative}`;
+    }
+  } else if (currentMonthIncome > 0) {
+    dynamicsClass = "up";
+    dynamicsText = `↑ новый доход к ${previousMonthLabelDative}`;
+  }
 
   const categoryOptions = existingCategories
     .map((category) => `<option value="${escapeHtml(category)}" ${filters.category === category ? "selected" : ""}>${escapeHtml(category)}</option>`)
     .join("");
 
   const editingCategory = editingIncome ? String(editingIncome.category || "").trim() : "";
+  const editingComment = editingIncome ? String(editingIncome.comment || "") : "";
+  const isCommentVisibleByDefault = editingComment.trim().length > 0;
   const selectedCategoryValue = editingCategory && categoryCatalog.includes(editingCategory) ? editingCategory : "";
   const categoryFormOptions = categoryCatalog
     .map((category) => `<option value="${escapeHtml(category)}" ${selectedCategoryValue === category ? "selected" : ""}>${escapeHtml(category)}</option>`)
     .join("");
   const defaultIncomeDate = editingIncome ? editingIncome.date : new Date().toISOString().slice(0, 10);
   const hasFilteredRows = filteredRows.length > 0;
+  const monthEmptyTableMarkup = `
+    <tr>
+      <td colspan="5" class="empty-row empty-row-month">
+        <span>Нет доходов за ${escapeHtml(selectedMonthLabel.toLowerCase())}</span>
+        <button type="button" class="btn btn-primary btn-xs" data-action="focus-first-income">Добавить доход</button>
+      </td>
+    </tr>
+  `;
   const incomeTableRowsMarkup = hasFilteredRows
     ?
         filteredRows
@@ -5895,8 +7189,12 @@ function renderIncomePage() {
                 <td>${escapeHtml(row.comment || "-")}</td>
                 <td class="amount-cell"><span class="amount-sensitive">${fmt(row.amount)}</span></td>
                 <td class="income-row-actions">
-                  <button type="button" class="btn btn-ghost btn-xs" data-edit-income="${row.id}">Изменить</button>
-                  <button type="button" class="btn btn-ghost btn-xs danger" data-delete-income="${row.id}">Удалить</button>
+                  <button type="button" class="icon-action-btn icon-edit" data-edit-income="${row.id}" aria-label="Изменить запись" title="Изменить">
+                    <i data-lucide="pencil" class="income-action-icon" aria-hidden="true"></i>
+                  </button>
+                  <button type="button" class="icon-action-btn icon-delete" data-delete-income="${row.id}" aria-label="Удалить запись" title="Удалить">
+                    <i data-lucide="trash-2" class="income-action-icon" aria-hidden="true"></i>
+                  </button>
                 </td>
               </tr>
             `;
@@ -5907,42 +7205,53 @@ function renderIncomePage() {
             <td colspan="5">Итого: <span class="amount-sensitive">${fmt(filteredTotal)}</span> (${filteredRows.length} операций)</td>
           </tr>
         `
-    : '<tr><td colspan="5" class="empty-row">Нет операций по выбранным фильтрам.</td></tr>';
+    : monthHasEntries
+      ? '<tr><td colspan="5" class="empty-row">Нет операций по выбранным фильтрам.</td></tr>'
+      : monthEmptyTableMarkup;
 
   const incomeCardsMarkup = hasFilteredRows
     ? filteredRows
         .map((row) => {
           const amount = Number(row.amount || 0);
-          const cardClass = amount === maxVisibleAmount ? "income-entry-card-max" : "";
+          const rowClass = amount === maxVisibleAmount ? "income-mobile-row-max" : "";
           const categoryToneClass = getIncomeCategoryToneClass(row.category);
+          const comment = String(row.comment || "").trim();
+          const amountText = fmt(row.amount);
+          const amountLen = amountText.length;
+          const amountSizeClass = amountLen >= 15 ? "income-mobile-row-amount-s" : amountLen >= 12 ? "income-mobile-row-amount-m" : "";
 
           return `
-            <article class="income-entry-card ${cardClass}">
-              <div class="income-entry-main">
-                <span class="income-entry-caption">Сумма</span>
-                <strong class="income-entry-amount amount-sensitive">${fmt(row.amount)}</strong>
+            <article class="income-mobile-row ${rowClass}">
+              <div class="income-mobile-row-main">
+                <div class="income-mobile-row-top">
+                  <span class="cat-pill ${categoryToneClass}">${escapeHtml(row.category)}</span>
+                  <span class="income-mobile-row-date">${formatDate(row.date)}</span>
+                </div>
+                ${comment ? `<div class="income-mobile-row-comment">${escapeHtml(comment)}</div>` : ""}
               </div>
-              <div class="income-entry-line">
-                <span>Дата</span>
-                <strong>${formatDate(row.date)}</strong>
-              </div>
-              <div class="income-entry-line">
-                <span>Категория</span>
-                <span class="cat-pill ${categoryToneClass}">${escapeHtml(row.category)}</span>
-              </div>
-              <div class="income-entry-line">
-                <span>Комментарий</span>
-                <span class="income-entry-comment">${escapeHtml(row.comment || "-")}</span>
-              </div>
-              <div class="income-entry-actions">
-                <button type="button" class="btn btn-ghost btn-xs" data-edit-income="${row.id}">Изменить</button>
-                <button type="button" class="btn btn-ghost btn-xs danger" data-delete-income="${row.id}">Удалить</button>
+              <div class="income-mobile-row-right">
+                <strong class="income-mobile-row-amount amount-sensitive ${amountSizeClass}">${amountText}</strong>
+                <div class="income-mobile-row-actions">
+                  <button type="button" class="icon-action-btn icon-edit" data-edit-income="${row.id}" aria-label="Изменить запись" title="Изменить">
+                    <i data-lucide="pencil" class="income-action-icon" aria-hidden="true"></i>
+                  </button>
+                  <button type="button" class="icon-action-btn icon-delete" data-delete-income="${row.id}" aria-label="Удалить запись" title="Удалить">
+                    <i data-lucide="trash-2" class="income-action-icon" aria-hidden="true"></i>
+                  </button>
+                </div>
               </div>
             </article>
           `;
         })
         .join("")
-    : '<div class="income-cards-empty">Нет операций по выбранным фильтрам.</div>';
+    : monthHasEntries
+      ? '<div class="income-cards-empty">Нет операций по выбранным фильтрам.</div>'
+      : `
+        <div class="income-cards-empty income-cards-empty-month">
+          <p>Нет доходов за ${escapeHtml(selectedMonthLabel.toLowerCase())}</p>
+          <button type="button" class="btn btn-primary btn-xs" data-action="focus-first-income">Добавить доход</button>
+        </div>
+      `;
 
   const incomeMobileTotalMarkup = hasFilteredRows
     ? `
@@ -5966,6 +7275,17 @@ function renderIncomePage() {
         </div>
       </article>
     `
+    }
+
+    ${
+      showTrialBanner
+        ? `
+      <article class="card income-trial-notice" role="status" aria-live="polite">
+        <p>У вас осталось <strong>${remainingTrialOps}</strong> ${remainingTrialOps === 1 ? "операция" : remainingTrialOps >= 2 && remainingTrialOps <= 4 ? "операции" : "операций"} в Trial. <button type="button" class="income-trial-link" data-action="open-pro">Перейдите на Pro для неограниченного учёта →</button></p>
+        <button type="button" class="income-trial-close" data-action="dismiss-income-trial-banner" aria-label="Закрыть уведомление">×</button>
+      </article>
+    `
+        : ""
     }
 
     <div class="grid grid-2 income-layout">
@@ -6000,17 +7320,14 @@ function renderIncomePage() {
             <input id="incomeCategoryCustomInput" name="categoryCustom" type="text" value="" placeholder="Например: Партнерская выплата" />
           </label>
 
-          <label>Комментарий
-            <textarea name="comment" rows="3" placeholder="Опционально">${editingIncome ? escapeHtml(editingIncome.comment || "") : ""}</textarea>
+          ${
+            isCommentVisibleByDefault
+              ? ""
+              : '<button type="button" class="income-comment-toggle" data-action="toggle-income-comment">+ Добавить комментарий</button>'
+          }
+          <label id="incomeCommentWrap" class="income-comment-wrap ${isCommentVisibleByDefault ? "is-visible" : ""}">Комментарий
+            <input id="incomeCommentInput" name="comment" type="text" value="${escapeHtml(editingComment)}" placeholder="Опционально" />
           </label>
-
-          <p class="income-limit-note ${canUnlimitedIncome ? "pro" : canCreateIncome ? "" : "danger"}">
-            ${
-              canUnlimitedIncome
-                ? "Pro: лимит на операции доходов снят."
-                : `Trial: ${totalOps}/${FREE_INCOME_MONTH_LIMIT} операций в бета-версии.`
-            }
-          </p>
 
           <div class="income-form-actions">
             <button class="btn btn-primary income-save-btn" type="submit" data-tour-target="income-save">${editingIncome ? "Сохранить изменения" : "Сохранить операцию"}</button>
@@ -6025,19 +7342,27 @@ function renderIncomePage() {
         <p class="text-muted">Операций в базе: ${opsCount}</p>
         <p class="text-muted">Текущий режим: ${regimeLabel(state.regime)}</p>
 
-        <div class="income-metrics-grid">
-          <div class="income-metric">
-            <small>Средний чек</small>
-            <strong class="amount-sensitive">${fmt(avgCheck)}</strong>
+        <div class="income-metrics-combined">
+          <div class="income-metrics-main">
+            <div class="income-metric-main">
+              <small>Средний чек</small>
+              <strong class="amount-sensitive">${fmt(avgCheck)}</strong>
+            </div>
+            <div class="income-metric-main">
+              <small>Топ-категория</small>
+              <strong>${escapeHtml(topCategory.name)}</strong>
+              <span class="amount-sensitive">${fmt(topCategory.amount)}</span>
+            </div>
           </div>
-          <div class="income-metric">
-            <small>За 30 дней</small>
-            <strong class="amount-sensitive">${fmt(last30Income)}</strong>
-          </div>
-          <div class="income-metric">
-            <small>Топ-категория</small>
-            <strong>${escapeHtml(topCategory.name)}</strong>
-            <span class="amount-sensitive">${fmt(topCategory.amount)}</span>
+          <div class="income-metrics-secondary">
+            <div class="income-metric-inline">
+              <small>За 30 дней</small>
+              <strong class="amount-sensitive">${fmt(last30Income)}</strong>
+            </div>
+            <div class="income-metric-inline income-dynamics ${dynamicsClass}">
+              <small>Динамика</small>
+              <strong>${escapeHtml(dynamicsText)}</strong>
+            </div>
           </div>
         </div>
       </article>
@@ -6050,7 +7375,7 @@ function renderIncomePage() {
       <div class="income-journal-head">
         <div>
           <h3>Журнал доходов</h3>
-          <span>Показано ${filteredRows.length} из ${opsCount} · <span class="amount-sensitive">${fmt(filteredTotal)}</span></span>
+          <span>Показано ${filteredRows.length} из ${monthOpsCount} · <span class="amount-sensitive">${fmt(filteredTotal)}</span></span>
         </div>
         <div class="income-journal-actions">
           <button class="btn btn-ghost" type="button" data-action="export-income-csv">Экспорт CSV</button>
@@ -6058,34 +7383,47 @@ function renderIncomePage() {
         </div>
       </div>
 
-      <form id="incomeFilterForm" class="income-filters">
-        <label>Поиск
-          <input name="query" type="text" value="${escapeHtml(filters.query)}" placeholder="Комментарий, категория, сумма" />
-        </label>
-        <label>Категория
-          <select name="category">
-            <option value="all" ${filters.category === "all" ? "selected" : ""}>Все категории</option>
-            ${categoryOptions}
-          </select>
-        </label>
-        <label>Период
-          <select name="period">
-            <option value="all" ${filters.period === "all" ? "selected" : ""}>За все время</option>
-            <option value="30d" ${filters.period === "30d" ? "selected" : ""}>30 дней</option>
-            <option value="90d" ${filters.period === "90d" ? "selected" : ""}>90 дней</option>
-            <option value="ytd" ${filters.period === "ytd" ? "selected" : ""}>С начала года</option>
-          </select>
-        </label>
-        <label>Сортировка
-          <select name="sort">
-            <option value="date_desc" ${filters.sort === "date_desc" ? "selected" : ""}>Сначала новые</option>
-            <option value="date_asc" ${filters.sort === "date_asc" ? "selected" : ""}>Сначала старые</option>
-            <option value="amount_desc" ${filters.sort === "amount_desc" ? "selected" : ""}>Сумма по убыванию</option>
-            <option value="amount_asc" ${filters.sort === "amount_asc" ? "selected" : ""}>Сумма по возрастанию</option>
-          </select>
-        </label>
-        <div class="income-filter-actions">          <button class="btn btn-ghost" type="button" data-reset-income-filters>Сбросить</button>
+      <div class="income-month-toolbar">
+        <div class="income-month-switcher" aria-label="Выбор месяца журнала доходов">
+          <button type="button" class="btn btn-ghost btn-xs income-month-nav" data-action="income-month-prev" aria-label="Предыдущий месяц">←</button>
+          <strong class="income-month-label">${escapeHtml(selectedMonthLabel)}</strong>
+          <button type="button" class="btn btn-ghost btn-xs income-month-nav" data-action="income-month-next" aria-label="Следующий месяц" ${canGoIncomeNextMonth ? "" : "disabled"}>→</button>
         </div>
+        <div class="income-month-total">${monthOpsCount} операций · <span class="amount-sensitive">${fmt(monthTotal)}</span></div>
+      </div>
+
+      <form id="incomeFilterForm" class="income-filters">
+        <label class="income-filter-field income-filter-search">
+          <span class="income-filter-label">Поиск</span>
+          <div class="income-filter-input-wrap">
+            <input name="query" type="text" value="${escapeHtml(filters.query)}" placeholder="Поиск по комментарию, категории, сумме" />
+          </div>
+        </label>
+        <label class="income-filter-field">
+          <span class="income-filter-label">Категория</span>
+          <div class="income-filter-select-wrap">
+            <select name="category">
+              <option value="all" ${filters.category === "all" ? "selected" : ""}>Все категории</option>
+              ${categoryOptions}
+            </select>
+          </div>
+        </label>
+        <label class="income-filter-field">
+          <span class="income-filter-label">Сортировка</span>
+          <div class="income-filter-select-wrap">
+            <select name="sort">
+              <option value="date_desc" ${filters.sort === "date_desc" ? "selected" : ""}>Сначала новые</option>
+              <option value="date_asc" ${filters.sort === "date_asc" ? "selected" : ""}>Сначала старые</option>
+              <option value="amount_desc" ${filters.sort === "amount_desc" ? "selected" : ""}>Сумма по убыванию</option>
+              <option value="amount_asc" ${filters.sort === "amount_asc" ? "selected" : ""}>Сумма по возрастанию</option>
+            </select>
+          </div>
+        </label>
+        ${
+          hasActiveIncomeFilters
+            ? '<div class="income-filter-actions"><button class="income-filter-reset-link" type="button" data-reset-income-filters>Сбросить</button></div>'
+            : ""
+        }
       </form>
 
       <div class="table-wrap income-table-wrap income-table-desktop">
@@ -6127,6 +7465,10 @@ function renderIncomePage() {
 
     incomeCategorySelect.addEventListener("change", () => syncCategoryMode(true));
     syncCategoryMode(false);
+  }
+
+  if (window.lucide && typeof window.lucide.createIcons === "function") {
+    window.lucide.createIcons();
   }
 
   syncOnboardingTour();
@@ -6198,13 +7540,50 @@ function getTaxPlannerState() {
 function renderTaxesPage() {
   const monthlyData = getMonthlyData();
   const planner = getTaxPlannerState();
+  const getForecastMonthLabel = (index) => {
+    const raw = String(MONTHS_ACCUSATIVE[index] || MONTHS[index] || "").trim();
+    if (!raw) return "";
+    return `${raw.charAt(0).toUpperCase()}${raw.slice(1)}`;
+  };
+  const isMobileTaxesView = isMobileViewport();
+  const formatMobileTaxKpiAmount = (value) => {
+    const numeric = Number(value || 0);
+    const abs = Math.abs(numeric);
+
+    if (abs >= 1000000000) {
+      const bln = abs / 1000000000;
+      const digits = bln >= 100 ? 0 : 1;
+      const blnText = new Intl.NumberFormat("ru-RU", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: digits
+      }).format(bln);
+      return `${numeric < 0 ? "-" : ""}${blnText} млрд ₸`;
+    }
+
+    if (abs >= 1000000) {
+      const mln = abs / 1000000;
+      const digits = mln >= 100 ? 0 : 1;
+      const mlnText = new Intl.NumberFormat("ru-RU", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: digits
+      }).format(mln);
+      return `${numeric < 0 ? "-" : ""}${mlnText} млн ₸`;
+    }
+
+    return fmt(numeric);
+  };
+  const getMobileTaxKpiSizeClass = (valueText) => {
+    const compactLength = String(valueText || "").replace(/\s+/g, "").length;
+    if (compactLength >= 12) return " tax-kpi-value-mobile-s";
+    if (compactLength >= 9) return " tax-kpi-value-mobile-m";
+    return "";
+  };
 
   const scenarioTax = calcByRegime(state.regime, planner.income, planner.expenses);
   const effectiveRate = planner.income > 0 ? (scenarioTax.total / planner.income) * 100 : 0;
   const reserveAmount = scenarioTax.total * (1 + planner.reservePct / 100);
   const realJournalIncome = monthlyData.reduce((sum, row) => sum + Number(row.income || 0), 0);
   const hasRealJournalIncome = realJournalIncome > 0;
-  const reserveMainValue = hasRealJournalIncome ? fmt(reserveAmount) : "нет данных";
 
   const now = new Date();
   const monthsPassed = now.getMonth() + 1;
@@ -6225,6 +7604,15 @@ function renderTaxesPage() {
     : 0;
   const avgRealMonthlyExpenses = state.regime === "our" ? normalizeIncome(avgRealMonthlyIncome * expenseRatio) : 0;
   const annualForecast = hasRealYtdData ? calcByRegime(state.regime, avgRealMonthlyIncome, avgRealMonthlyExpenses).total * 12 : 0;
+  const scenarioTaxDisplay = isMobileTaxesView ? formatMobileTaxKpiAmount(scenarioTax.total) : fmt(scenarioTax.total);
+  const reserveMainValue = hasRealJournalIncome
+    ? (isMobileTaxesView ? formatMobileTaxKpiAmount(reserveAmount) : fmt(reserveAmount))
+    : "нет данных";
+  const ytdTaxDisplay = isMobileTaxesView ? formatMobileTaxKpiAmount(ytdTaxTotal) : fmt(ytdTaxTotal);
+  const annualForecastDisplay = isMobileTaxesView ? formatMobileTaxKpiAmount(annualForecast) : fmt(annualForecast);
+  const scenarioTaxSizeClass = isMobileTaxesView ? getMobileTaxKpiSizeClass(scenarioTaxDisplay) : "";
+  const reserveMainSizeClass = hasRealJournalIncome && isMobileTaxesView ? getMobileTaxKpiSizeClass(reserveMainValue) : "";
+  const ytdTaxSizeClass = isMobileTaxesView ? getMobileTaxKpiSizeClass(ytdTaxDisplay) : "";
 
   const getTaxShareColor = (label) => {
     const key = String(label || "").toUpperCase();
@@ -6308,16 +7696,58 @@ function renderTaxesPage() {
     })
     .join("");
 
-  const forecastRows = monthlyData
-    .map((row, index) => {
-      const rowExpenses = state.regime === "our" ? normalizeIncome(row.income * expenseRatio) : 0;
-      const rowTax = calcByRegime(state.regime, row.income, rowExpenses);
-      const rate = row.income > 0 ? `${((rowTax.total / row.income) * 100).toFixed(1)}%` : "-";
-      const currentClass = index === now.getMonth() ? " class=\"current\"" : "";
-      const isZeroIncome = Number(row.income || 0) <= 0;
-      const taxNote = isZeroIncome ? '<small class="tax-forecast-tax-note">мин. соцплатежи</small>' : "";
+  const forecastItems = monthlyData.map((row, index) => {
+    const rowExpenses = state.regime === "our" ? normalizeIncome(row.income * expenseRatio) : 0;
+    const rowTax = calcByRegime(state.regime, row.income, rowExpenses);
+    const rate = row.income > 0 ? `${((rowTax.total / row.income) * 100).toFixed(1)}%` : "-";
+    const isCurrent = index === now.getMonth();
+    const isZeroIncome = Number(row.income || 0) <= 0;
+    const taxNoteText = isZeroIncome
+      ? state.regime === "simplified"
+        ? `мин. соцплатежи: ${fmt(IP_MIN_SOCIAL_PAYMENTS_TOTAL)}`
+        : "мин. соцплатежи"
+      : "";
 
-      return `<tr${currentClass}><td>${row.name}</td><td><span class="amount-sensitive">${fmt(row.income)}</span></td><td><span class="amount-sensitive">${fmt(rowTax.total)}</span>${taxNote}</td><td>${rate}</td></tr>`;
+    return {
+      monthShort: row.name,
+      monthLong: getForecastMonthLabel(index),
+      income: Number(row.income || 0),
+      taxTotal: Number(rowTax.total || 0),
+      rate,
+      isCurrent,
+      taxNoteText
+    };
+  });
+
+  const forecastRows = forecastItems
+    .map((item) => {
+      const currentClass = item.isCurrent ? ' class="current"' : "";
+      const taxNote = item.taxNoteText ? `<small class="tax-forecast-tax-note">${escapeHtml(item.taxNoteText)}</small>` : "";
+      return `<tr${currentClass}><td>${item.monthShort}</td><td><span class="amount-sensitive">${fmt(item.income)}</span></td><td><span class="amount-sensitive">${fmt(item.taxTotal)}</span>${taxNote}</td><td>${item.rate}</td></tr>`;
+    })
+    .join("");
+
+  const forecastMobileCards = forecastItems
+    .map((item) => {
+      const currentClass = item.isCurrent ? " current" : "";
+      const taxNote = item.taxNoteText ? `<small class="tax-forecast-tax-note">${escapeHtml(item.taxNoteText)}</small>` : "";
+      return `
+        <article class="tax-forecast-mobile-card${currentClass}">
+          <div class="tax-forecast-mobile-head">
+            <strong>${item.monthLong}</strong>
+            <span class="tax-forecast-mobile-rate">${item.rate}</span>
+          </div>
+          <div class="tax-forecast-mobile-row">
+            <span>Доход</span>
+            <strong class="amount-sensitive">${fmt(item.income)}</strong>
+          </div>
+          <div class="tax-forecast-mobile-row">
+            <span>Налоги</span>
+            <strong class="amount-sensitive">${fmt(item.taxTotal)}</strong>
+          </div>
+          ${taxNote}
+        </article>
+      `;
     })
     .join("");
 
@@ -6337,40 +7767,73 @@ function renderTaxesPage() {
         )
         .join("")
     : '<p class="text-muted">Ближайших обязательных сроков по текущему режиму нет.</p>';
-
-  els.pageContent.innerHTML = `
-    <div class="grid grid-4 tax-kpi-grid">
-      <article class="card tax-kpi-card tax-kpi-card-hero" data-tour-target="taxes-kpi">
-        <div class="stat-title">Налог в сценарии</div>
-        <div class="tax-kpi-main amount-sensitive">${fmt(scenarioTax.total)}</div>
-        <div class="tax-kpi-meta">${state.regime === "our" ? "с учетом расходов" : "оценка на месяц"}</div>
-      </article>
-      <article class="card tax-kpi-card">
-        <div class="stat-title">Эффективная ставка</div>
-        <div class="tax-kpi-main">${formatPct(effectiveRate)}</div>
-        <div class="tax-kpi-meta">доля налогов от дохода</div>
-      </article>
-      <article class="card tax-kpi-card">
-        <div class="stat-title">Рекомендуемый резерв</div>
-        <div class="tax-kpi-subtitle">Сколько отложить чтобы покрыть налоги с запасом</div>
-        <div class="tax-kpi-main amount-sensitive${hasRealJournalIncome ? "" : " is-empty"}">${reserveMainValue}</div>
-      </article>
-      <article class="card tax-kpi-card">
-        <div class="stat-title">Налоги с начала года</div>
-        <div class="tax-kpi-main amount-sensitive">${fmt(ytdTaxTotal)}</div>
-        <div class="tax-kpi-meta">${hasRealYtdData ? `прогноз на 12 мес: <span class="amount-sensitive">${fmt(annualForecast)}</span>` : "нет данных"}</div>
-      </article>
+  const isMobileTaxesPlanner = isMobileTaxesView;
+  const isOurPlannerRegime = state.regime === "our";
+  const incomePresetsHtml = `
+    <div class="tax-presets">
+      <span>Быстрый доход:</span>
+      <button type="button" data-tax-income-preset="200000">200k</button>
+      <button type="button" data-tax-income-preset="500000">500k</button>
+      <button type="button" data-tax-income-preset="1000000">1M</button>
+      <button type="button" data-tax-income-preset="2000000">2M</button>
     </div>
-
-    <article class="card mt-16 tax-planner-card" data-tour-target="taxes-planner">
-      <div class="tax-planner-head">
-        <div>
-          <h3>Планировщик налогов</h3>
-          <p>Измените сценарий и сразу увидите нагрузку, резерв и выгодный режим.</p>
+  `;
+  const expensePresetsHtml = `
+    <div class="tax-presets${isOurPlannerRegime ? "" : " disabled"}">
+      <span>Расходы для ОУР:</span>
+      <button type="button" data-tax-expense-ratio="0.2" ${isOurPlannerRegime ? "" : "disabled"}>20%</button>
+      <button type="button" data-tax-expense-ratio="0.4" ${isOurPlannerRegime ? "" : "disabled"}>40%</button>
+      <button type="button" data-tax-expense-ratio="0.6" ${isOurPlannerRegime ? "" : "disabled"}>60%</button>
+    </div>
+  `;
+  const reservePresetsHtml = `
+    <div class="tax-presets">
+      <span>Запас резерва:</span>
+      <button type="button" data-tax-reserve-preset="10">10%</button>
+      <button type="button" data-tax-reserve-preset="15">15%</button>
+      <button type="button" data-tax-reserve-preset="20">20%</button>
+    </div>
+  `;
+  const plannerBodyHtml = isMobileTaxesPlanner
+    ? `
+      <form id="taxPlannerForm" class="tax-planner-form tax-planner-form-mobile">
+        <div class="tax-form-grid tax-form-grid-mobile-main">
+          <label>Доход в месяц (₸)
+            <input name="income" type="number" min="0" step="1" value="${planner.income}" required />
+          </label>
         </div>
-        <button type="button" class="btn btn-ghost btn-xs" data-tax-reset>Сбросить</button>
-      </div>
-
+        ${incomePresetsHtml}
+        <button type="button" class="btn btn-ghost btn-xs tax-mobile-reset-btn" data-tax-reset>Сбросить</button>
+        <details class="tax-mobile-advanced" ${mobileTaxPlannerAdvancedOpen ? "open" : ""}>
+          <summary>
+            <span>Доп. параметры</span>
+            <small>Расходы ОУР и резерв</small>
+          </summary>
+          <div class="tax-mobile-advanced-body">
+            <label>Запас к резерву (%)
+              <input name="reservePct" type="number" min="0" max="50" step="1" value="${planner.reservePct}" />
+            </label>
+            ${reservePresetsHtml}
+            ${
+              isOurPlannerRegime
+                ? `
+                  <label>Расходы для ОУР (₸)
+                    <input name="expenses" type="number" min="0" step="1" value="${planner.ourExpensesDraft}" />
+                  </label>
+                  ${expensePresetsHtml}
+                `
+                : `
+                  <input type="hidden" name="expenses" value="${planner.ourExpensesDraft}" />
+                  <p class="tax-input-hint muted tax-mobile-inline-hint">
+                    Расходы влияют только на режим ОУР. Переключите режим сверху, чтобы включить этот параметр.
+                  </p>
+                `
+            }
+          </div>
+        </details>
+      </form>
+    `
+    : `
       <form id="taxPlannerForm" class="tax-planner-form">
         <div class="tax-form-grid">
           <label>Доход в месяц (₸)
@@ -6384,27 +7847,44 @@ function renderTaxesPage() {
           </label>        </div>
       </form>
 
-      <div class="tax-presets">
-        <span>Быстрый доход:</span>
-        <button type="button" data-tax-income-preset="200000">200k</button>
-        <button type="button" data-tax-income-preset="500000">500k</button>
-        <button type="button" data-tax-income-preset="1000000">1M</button>
-        <button type="button" data-tax-income-preset="2000000">2M</button>
-      </div>
+      ${incomePresetsHtml}
+      ${expensePresetsHtml}
+      ${reservePresetsHtml}
+    `;
 
-      <div class="tax-presets${state.regime === "our" ? "" : " disabled"}">
-        <span>Расходы для ОУР:</span>
-        <button type="button" data-tax-expense-ratio="0.2" ${state.regime === "our" ? "" : "disabled"}>20%</button>
-        <button type="button" data-tax-expense-ratio="0.4" ${state.regime === "our" ? "" : "disabled"}>40%</button>
-        <button type="button" data-tax-expense-ratio="0.6" ${state.regime === "our" ? "" : "disabled"}>60%</button>
-      </div>
+  els.pageContent.innerHTML = `
+    <div class="grid grid-4 tax-kpi-grid">
+      <article class="card tax-kpi-card tax-kpi-card-hero" data-tour-target="taxes-kpi">
+        <div class="stat-title">Налог в сценарии</div>
+        <div class="tax-kpi-main amount-sensitive${scenarioTaxSizeClass}">${scenarioTaxDisplay}</div>
+        <div class="tax-kpi-meta">${state.regime === "our" ? "с учетом расходов" : "оценка на месяц"}</div>
+      </article>
+      <article class="card tax-kpi-card">
+        <div class="stat-title">Эффективная ставка</div>
+        <div class="tax-kpi-main">${formatPct(effectiveRate)}</div>
+        <div class="tax-kpi-meta">доля налогов от дохода</div>
+      </article>
+      <article class="card tax-kpi-card">
+        <div class="stat-title">Рекомендуемый резерв</div>
+        <div class="tax-kpi-main amount-sensitive${hasRealJournalIncome ? "" : " is-empty"}${reserveMainSizeClass}">${reserveMainValue}</div>
+        <div class="tax-kpi-subtitle">Сколько отложить чтобы покрыть налоги с запасом</div>
+      </article>
+      <article class="card tax-kpi-card">
+        <div class="stat-title">Налоги с начала года</div>
+        <div class="tax-kpi-main amount-sensitive${ytdTaxSizeClass}">${ytdTaxDisplay}</div>
+        <div class="tax-kpi-meta">${hasRealYtdData ? `${isMobileTaxesView ? "прогноз: " : "прогноз на 12 мес: "}<span class="amount-sensitive">${annualForecastDisplay}</span>` : "нет данных"}</div>
+      </article>
+    </div>
 
-      <div class="tax-presets">
-        <span>Запас резерва:</span>
-        <button type="button" data-tax-reserve-preset="10">10%</button>
-        <button type="button" data-tax-reserve-preset="15">15%</button>
-        <button type="button" data-tax-reserve-preset="20">20%</button>
+    <article class="card mt-16 tax-planner-card" data-tour-target="taxes-planner">
+      <div class="tax-planner-head">
+        <div>
+          <h3>Планировщик налогов</h3>
+          <p>Измените сценарий и сразу увидите нагрузку, резерв и выгодный режим.</p>
+        </div>
+        ${isMobileTaxesPlanner ? "" : '<button type="button" class="btn btn-ghost btn-xs" data-tax-reset>Сбросить</button>'}
       </div>
+      ${plannerBodyHtml}
 
       <p class="tax-input-hint ${state.regime === "our" ? "" : "muted"}">
         ${
@@ -6430,11 +7910,14 @@ function renderTaxesPage() {
     <article class="card mt-16 tax-forecast-panel">
       <h3>Помесячный прогноз</h3>
       <p class="text-muted">Доход берется из журнала, налоги пересчитываются в текущем режиме ${regimeLabel(state.regime)}.</p>
-      <div class="table-wrap">
+      <div class="table-wrap tax-forecast-table-wrap">
         <table class="table tax-forecast-table">
           <thead><tr><th>Месяц</th><th>Доход</th><th>Налоги</th><th>Эфф. ставка</th></tr></thead>
           <tbody>${forecastRows}</tbody>
         </table>
+      </div>
+      <div class="tax-forecast-mobile-list" aria-label="Помесячный прогноз (мобильная версия)">
+        ${forecastMobileCards}
       </div>
     </article>
 
@@ -6446,6 +7929,18 @@ function renderTaxesPage() {
       <div class="tax-deadline-list">${deadlinesHtml}</div>
     </article>
   `;
+
+  if (isMobileTaxesPlanner) {
+    const mobileAdvancedEl = document.querySelector(".tax-mobile-advanced");
+    if (mobileAdvancedEl instanceof HTMLDetailsElement) {
+      mobileTaxPlannerAdvancedOpen = mobileAdvancedEl.open;
+      mobileAdvancedEl.addEventListener("toggle", () => {
+        mobileTaxPlannerAdvancedOpen = mobileAdvancedEl.open;
+      });
+    }
+  } else {
+    mobileTaxPlannerAdvancedOpen = false;
+  }
 
   syncOnboardingTour();
 }
@@ -6536,6 +8031,13 @@ function getRegistrationMonthStart() {
   const registration = toDayStart(state.registrationDate) || getDeadlineTrackingFromDate();
   if (!registration) return null;
   return new Date(registration.getFullYear(), registration.getMonth(), 1);
+}
+
+function isDeadlineBeforeRegistration(dateString) {
+  const registration = toDayStart(state.registrationDate) || getDeadlineTrackingFromDate();
+  const deadlineDate = toDayStart(dateString);
+  if (!registration || !deadlineDate) return false;
+  return deadlineDate < registration;
 }
 
 function getDeadlineCompletionSource(deadlineId) {
@@ -6636,12 +8138,14 @@ function getCalendarRowsByRegime() {
       const done = state.doneDeadlines.includes(row.id);
       const due = getCalendarDueMeta(row.date, done);
       const dateObj = new Date(row.date);
+      const isBeforeRegistration = isDeadlineBeforeRegistration(row.date);
 
       return {
         ...row,
         done,
         due,
         dateObj,
+        isBeforeRegistration,
         typeLabel: row.type === "payment" ? "Платеж" : "Отчет",
         regimeLabel: getLandingDeadlineRegimeLabel(row.regime, state.regime),
         regimeHint: getLandingDeadlineRegimeNote(row.regime, state.regime)
@@ -6672,11 +8176,11 @@ function getFilteredCalendarRows() {
       return false;
     }
 
-    if (filters.status === "pending" && row.done) {
+    if (filters.status === "pending" && (row.done || row.isBeforeRegistration)) {
       return false;
     }
 
-    if (filters.status === "done" && !row.done) {
+    if (filters.status === "done" && (!row.done || row.isBeforeRegistration)) {
       return false;
     }
 
@@ -6693,6 +8197,9 @@ function getFilteredCalendarRows() {
 }
 
 function renderCalendarPage() {
+  closeCalendarReminderPopover();
+  const isMobileCalendar = window.innerWidth <= 768;
+
   state.calendarFilters = {
     ...getDefaultCalendarFilters(),
     ...(state.calendarFilters || {})
@@ -6709,22 +8216,17 @@ function renderCalendarPage() {
   const rows = getFilteredCalendarRows();
   const allRegimeRows = getCalendarRowsByRegime();
 
-  const isSelfIncomeDependentDeadline = (row) =>
-    state.regime === "self" &&
-    row &&
-    row.type === "payment" &&
-    String(row.title || "").includes("Уплата ОПВ, ОПВР, СО, ВОСМС");
-
   const getCalendarDueBadgeMeta = (row) => {
-    if (isSelfIncomeDependentDeadline(row) && row && row.due && row.due.tone === "overdue") {
-      return { text: "Платить если был доход", tone: "neutral" };
+    if (row && row.isBeforeRegistration) {
+      return { text: "Уже прошло", tone: "prereg" };
     }
     return row && row.due ? row.due : { text: "—", tone: "normal" };
   };
 
-  const pendingTotal = allRegimeRows.filter((row) => !row.done).length;
-  const doneTotal = allRegimeRows.filter((row) => row.done).length;
-  const dueStats = allRegimeRows.reduce(
+  const relevantRegimeRows = allRegimeRows.filter((row) => !row.isBeforeRegistration);
+  const pendingTotal = relevantRegimeRows.filter((row) => !row.done).length;
+  const doneTotal = relevantRegimeRows.filter((row) => row.done).length;
+  const dueStats = relevantRegimeRows.reduce(
     (acc, row) => {
       if (row.done) return acc;
       const tone = getCalendarDueBadgeMeta(row).tone;
@@ -6742,11 +8244,11 @@ function renderCalendarPage() {
     : "нет критичных сроков";
 
   const nextPending =
-    allRegimeRows.find((row) => !row.done && row.dateObj >= dayStart) ||
-    allRegimeRows.find((row) => !row.done) ||
+    relevantRegimeRows.find((row) => !row.done && row.dateObj >= dayStart) ||
+    relevantRegimeRows.find((row) => !row.done) ||
     null;
 
-  const visiblePending = rows.filter((row) => !row.done).length;
+  const visiblePending = rows.filter((row) => !row.done && !row.isBeforeRegistration).length;
 
   const timeframeButtons = [
     { id: "upcoming", label: "Ближайшие" },
@@ -6784,11 +8286,13 @@ function renderCalendarPage() {
   const tableRows = rows
     .map((row, index) => {
       const completionSource = getDeadlineCompletionSource(row.id);
-      const statusBadge = row.done
-        ? completionSource === "pre_service"
-          ? '<span class="badge badge-neutral">Выполнено вне сервиса</span>'
-          : '<span class="badge badge-success">Сделано</span>'
-        : '<span class="badge badge-warning">Ожидает</span>';
+      const statusBadge = row.isBeforeRegistration
+        ? '<span class="badge badge-neutral">Отметьте если оплачивали</span>'
+        : row.done
+          ? completionSource === "pre_service"
+            ? '<span class="badge badge-neutral">Выполнено вне сервиса</span>'
+            : '<span class="badge badge-success">Сделано</span>'
+          : '<span class="badge badge-warning">Ожидает</span>';
 
       const typeTone = row.type === "payment" ? "payment" : "report";
       const dueMeta = getCalendarDueBadgeMeta(row);
@@ -6797,7 +8301,7 @@ function renderCalendarPage() {
       const checklistTourTarget = index === 0 ? ' data-tour-target="calendar-checklist-btn"' : '';
 
       return `
-        <tr class="calendar-row ${row.done ? "done" : ""} ${dueTone}">
+        <tr class="calendar-row ${row.done && !row.isBeforeRegistration ? "done" : ""} ${row.isBeforeRegistration ? "prereg" : ""} ${dueTone}">
           <td class="calendar-date-cell">${formatDate(row.date)}</td>
           <td>
             <div class="calendar-event-title">${escapeHtml(row.title)}</div>
@@ -6817,11 +8321,51 @@ function renderCalendarPage() {
     })
     .join("");
 
+  const mobileRows = rows
+    .map((row, index) => {
+      const completionSource = getDeadlineCompletionSource(row.id);
+      const statusBadge = row.isBeforeRegistration
+        ? '<span class="badge badge-neutral">Отметьте если оплачивали</span>'
+        : row.done
+          ? completionSource === "pre_service"
+            ? '<span class="badge badge-neutral">Выполнено вне сервиса</span>'
+            : '<span class="badge badge-success">Сделано</span>'
+          : '<span class="badge badge-warning">Ожидает</span>';
+
+      const typeTone = row.type === "payment" ? "payment" : "report";
+      const dueMeta = getCalendarDueBadgeMeta(row);
+      const dueTone = dueMeta.tone;
+      const checklistStats = getDeadlineChecklistStats(row.id, row);
+      const checklistTourTarget = index === 0 ? ' data-tour-target="calendar-checklist-btn"' : "";
+
+      return `
+        <article class="calendar-mobile-row ${row.done && !row.isBeforeRegistration ? "done" : ""} ${row.isBeforeRegistration ? "prereg" : ""}">
+          <div class="calendar-mobile-row-head">
+            <span class="calendar-mobile-date">${formatDate(row.date)}</span>
+            <span class="calendar-due-chip ${dueTone}">${dueMeta.text}</span>
+          </div>
+          <div class="calendar-mobile-title">${escapeHtml(row.title)}</div>
+          <div class="calendar-mobile-sub">${escapeHtml(row.regimeLabel)}</div>
+          ${row.regimeHint ? `<div class="calendar-mobile-note">${escapeHtml(row.regimeHint)}</div>` : ""}
+          <div class="calendar-mobile-meta">
+            <span class="calendar-type-chip ${typeTone}">${row.typeLabel}</span>
+            ${statusBadge}
+          </div>
+          <div class="calendar-mobile-actions">
+            <button type="button" class="calendar-reminder-row-btn ${state.remindersEnabled ? "on" : "off"}" data-calendar-reminder-info="${row.id}" title="${state.remindersEnabled ? "Напоминания включены глобально" : "Напоминания выключены"}" aria-label="${state.remindersEnabled ? "Напоминания включены глобально" : "Напоминания выключены"}">🔔</button>
+            <button type="button" class="btn btn-ghost btn-xs calendar-mobile-action-btn"${checklistTourTarget} data-deadline-expand="${row.id}">Чеклист ${checklistStats.done}/${checklistStats.total}</button>
+            <button type="button" class="btn btn-ghost btn-xs calendar-mobile-action-btn" data-toggle-deadline="${row.id}">${row.done ? "Снять" : "Отметить"}</button>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+
   els.pageContent.innerHTML = `
     <article class="card calendar-summary-card" data-tour-target="calendar-overview">
       <div class="calendar-summary-head">
-        <h3>Календарь сроков по режиму: ${regimeLabel(state.regime)}</h3>
-        <span class="calendar-summary-chip">${rows.length} записей в текущем фильтре</span>
+        <h3>${isMobileCalendar ? `Календарь сроков: ${regimeLabel(state.regime)}` : `Календарь сроков по режиму: ${regimeLabel(state.regime)}`}</h3>
+        <span class="calendar-summary-chip">${isMobileCalendar ? `${rows.length} событий` : `${rows.length} записей в текущем фильтре`}</span>
       </div>
 
       <div class="calendar-kpi-grid">
@@ -6848,7 +8392,7 @@ function renderCalendarPage() {
       </div>
     </article>
 
-    <article class="card mt-16 calendar-filter-card">
+    <article class="card mt-16 calendar-filter-card ${isMobileCalendar ? "calendar-filter-card-mobile" : ""}">
       <div class="calendar-filter-groups">
         <div class="calendar-filter-group">
           <p>Период</p>
@@ -6864,7 +8408,7 @@ function renderCalendarPage() {
         </div>
       </div>
 
-      <form id="calendarFilterForm" class="calendar-search-form">
+      <form id="calendarFilterForm" class="calendar-search-form ${isMobileCalendar ? "calendar-search-form-mobile-compact" : ""}">
         <label>
           Поиск события
           <input name="query" type="text" value="${escapeHtml(state.calendarFilters.query)}" placeholder="ФНО, ОПВ, ИПН..." />
@@ -6872,14 +8416,15 @@ function renderCalendarPage() {
         <input type="hidden" name="type" value="${state.calendarFilters.type}" />
         <input type="hidden" name="status" value="${state.calendarFilters.status}" />
         <input type="hidden" name="timeframe" value="${state.calendarFilters.timeframe}" />
-        <div class="calendar-filter-actions">          <button class="btn btn-ghost" type="button" data-reset-calendar-filters>Сбросить</button>
-          <button class="btn btn-ghost" type="button" data-calendar-mark-visible ${visiblePending > 0 ? "" : "disabled"}>Отметить видимые</button>
+        <div class="calendar-filter-actions">
+          <button class="btn btn-ghost" type="button" data-reset-calendar-filters>Сбросить</button>
+          <button class="btn btn-ghost" type="button" data-calendar-mark-visible ${visiblePending > 0 ? "" : "disabled"}>${isMobileCalendar ? "Отметить" : "Отметить видимые"}</button>
         </div>
       </form>
     </article>
 
     <article class="card mt-16 calendar-table-card" data-tour-target="calendar-reminder-entry">
-      <div class="table-wrap">
+      <div class="table-wrap calendar-table-wrap-desktop">
         <table class="table calendar-table">
           <thead><tr><th>Дата</th><th>Событие</th><th>Тип</th><th>Когда</th><th>Статус</th><th></th></tr></thead>
           <tbody>
@@ -6890,6 +8435,12 @@ function renderCalendarPage() {
           </tbody>
         </table>
       </div>
+      <div class="calendar-mobile-list" aria-label="Сроки оплаты (мобильная версия)">
+        ${
+          mobileRows ||
+          '<div class="calendar-mobile-empty">По текущим фильтрам событий не найдено.</div>'
+        }
+      </div>
     </article>
   `;
 
@@ -6897,6 +8448,7 @@ function renderCalendarPage() {
 }
 
 function renderCalculatorPage() {
+  const isMobileCalculator = window.innerWidth <= 768;
   const periodMultiplier = getCalcPeriodMultiplier();
   const periodLabel = getCalcPeriodLabel();
   const incomeInputValue = getCalcInputIncome();
@@ -6928,11 +8480,17 @@ function renderCalculatorPage() {
   const isSelfUnavailable = !selfRow.available;
   const selfSavingsTitle = isSelfUnavailable
     ? (selfRow.reason || "Режим недоступен при текущем доходе")
-    : "Экономия если перейти на Самозанятый";
+    : (isMobileCalculator ? "Экономия к Самозанятому" : "Экономия если перейти на Самозанятый");
   const selfSavingsValue = incomeInputValue > 0 && selfRow.available ? fmt(switchToSelfSavings) : "—";
 
   const incomeLabel = state.calcPeriod === "year" ? "Доход в год (₸)" : "Доход в месяц (₸)";
-  const expenseLabel = state.calcPeriod === "year" ? "Расходы в год (₸) - для ОУР" : "Расходы в месяц (₸) - для ОУР";
+  const expenseLabel = state.calcPeriod === "year"
+    ? (isMobileCalculator ? "Расходы в год (₸) · ОУР" : "Расходы в год (₸) - для ОУР")
+    : (isMobileCalculator ? "Расходы в месяц (₸) · ОУР" : "Расходы в месяц (₸) - для ОУР");
+  const calcSummaryFoot = isMobileCalculator
+    ? `Суммы показаны ${periodLabel}. Это ориентир, финальная сумма зависит от фактических данных.`
+    : `Все суммы показаны ${periodLabel}. Это ориентир, финальная сумма зависит от фактических данных и обязательств.`;
+  const currentRegimeHint = isMobileCalculator ? `Текущий: ${regimeLabel(state.regime)}` : `Ваш текущий режим (${regimeLabel(state.regime)})`;
   const expenseRatio = incomeInputValue > 0 ? expensesInputValue / incomeInputValue : 0;
   const hasIncome = incomeInputValue > 0;
   const monthlyIncomeForHint = normalizeIncome(state.calcIncome);
@@ -6971,7 +8529,13 @@ function renderCalculatorPage() {
     .map((presetMonthly) => {
       const displayValue = state.calcPeriod === "year" ? presetMonthly * 12 : presetMonthly;
       const isActive = Math.abs(displayValue - incomeInputValue) <= 1;
-      const label = state.calcPeriod === "year" ? `${Math.round(presetMonthly / 1000)}k x12` : `${Math.round(presetMonthly / 1000)}k`;
+      const presetLabelBase = presetMonthly >= 1000000
+        ? `${Math.round(presetMonthly / 1000000)} млн ₸`
+        : `${Math.round(presetMonthly / 1000)} тыс ₸`;
+      const presetLabelYear = presetMonthly >= 1000000
+        ? `${Math.round(presetMonthly / 1000000)} млн ×12`
+        : `${Math.round(presetMonthly / 1000)} тыс ×12`;
+      const label = state.calcPeriod === "year" ? presetLabelYear : presetLabelBase;
       return `<button type="button" class="${isActive ? "active" : ""}" data-calc-preset="${presetMonthly}">${label}</button>`;
     })
     .join("");
@@ -7036,7 +8600,7 @@ function renderCalculatorPage() {
 
       <div class="calc-summary-grid">
         <div class="calc-summary-item">
-          <span>Ваш текущий режим (${regimeLabel(state.regime)})</span>
+          <span>${currentRegimeHint}</span>
           <strong>${hasIncome ? fmt(currentTaxDisplay) : "—"}</strong>
         </div>
         <div class="calc-summary-item">
@@ -7044,7 +8608,7 @@ function renderCalculatorPage() {
           <strong>${selfSavingsValue}</strong>
         </div>
       </div>
-      <p class="calc-summary-foot">Все суммы показаны ${periodLabel}. Это ориентир, финальная сумма зависит от фактических данных и обязательств.</p>
+      <p class="calc-summary-foot">${calcSummaryFoot}</p>
       <div class="calc-practical-hint ${practicalHintTone}">${practicalHintText}</div>
     </article>
 
@@ -7689,10 +9253,16 @@ function getTaxLines(tax, regime) {
   }
 
   if (regime === "simplified") {
+    const isMinimumScenario =
+      Number(tax.ipn || 0) <= 0 &&
+      Math.round(Number(tax.opv || 0)) === IP_MIN_OPV &&
+      Math.round(Number(tax.opvr || 0)) === IP_MIN_OPVR &&
+      Math.round(Number(tax.so || 0)) === IP_MIN_SO;
+
     return [
-      { label: "ОПВ (10%)", value: tax.opv },
+      { label: isMinimumScenario ? "ОПВ (10% от МЗП, минимум)" : "ОПВ (10%)", value: tax.opv },
       { label: "СО (5%)", value: tax.so },
-      { label: "ОПВР (3.5% от МЗП)", value: tax.opvr },
+      { label: isMinimumScenario ? "ОПВР (3.5% от МЗП, минимум)" : "ОПВР (3.5% от дохода, до 50 МЗП)", value: tax.opvr },
       { label: "ВОСМС", value: tax.vosms },
       { label: "ИПН (4%)", value: tax.ipn },
       { label: "Соц. налог", value: tax.socTax }
@@ -7701,7 +9271,7 @@ function getTaxLines(tax, regime) {
 
   return [
     { label: "ОПВ (10%)", value: tax.opv },
-    { label: "ОПВР (3.5% от МЗП)", value: tax.opvr },
+    { label: "ОПВР (3.5% от дохода, до 50 МЗП)", value: tax.opvr },
     { label: "СО (5%)", value: tax.so },
     { label: "ВОСМС", value: tax.vosms },
     { label: "СН", value: tax.socTax },
@@ -7827,6 +9397,13 @@ function readJson(key) {
     return null;
   }
 }
+
+
+
+
+
+
+
 
 
 
