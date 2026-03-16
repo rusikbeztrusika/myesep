@@ -228,7 +228,7 @@ const ONBOARDING_TOUR_TAXES_STEPS = [
     text: "Меняйте доход и расходы, чтобы сразу видеть как меняются налоги и какой режим выгоднее."
   },
   {
-    target: "taxes-deadlines",
+    target: "taxes-deadline-focus",
     icon: "calendar",
     title: "Не пропустите срок",
     text: "Здесь показано что скоро платить. Полный список дат доступен в Календаре сроков."
@@ -2697,13 +2697,16 @@ function handleGlobalClick(event) {
     }
 
     if (action === "scroll-landing-signup") {
-      const landingSignupBtn = document.querySelector(".landing-final-cta .btn[data-action='open-login']")
-        || document.querySelector(".quick-footer .btn[data-action='open-login']");
+      if (els.deadlineModal && !els.deadlineModal.classList.contains("hidden")) {
+        state.landingDeadlineOpenId = null;
+        saveState();
+        closeModal(els.deadlineModal);
+      }
 
-      if (landingSignupBtn && typeof landingSignupBtn.scrollIntoView === "function") {
-        landingSignupBtn.scrollIntoView({ behavior: "smooth", block: "center" });
-        landingSignupBtn.classList.add("landing-signup-pulse");
-        window.setTimeout(() => landingSignupBtn.classList.remove("landing-signup-pulse"), 900);
+      setAuthMode("signup");
+      openModal(els.loginModal);
+      if (els.loginEmail) {
+        els.loginEmail.focus();
       }
 
       trackEvent("landing_practical_cta_click", { income: Number(els.landingIncome && els.landingIncome.value || 0) || 0 });
@@ -5898,6 +5901,16 @@ function getOnboardingTourStorageKey(page = state.page) {
 
 function getActiveOnboardingTourSteps() {
   if (state.page === "income") {
+    if (state.incomeEditId) {
+      return ONBOARDING_TOUR_INCOME_STEPS.map((step, index) => {
+        if (index !== 0) return step;
+        return {
+          ...step,
+          title: "Форма операции",
+          text: "Здесь можно добавить новую операцию или отредактировать текущую. После сохранения запись сразу попадет в журнал."
+        };
+      });
+    }
     return ONBOARDING_TOUR_INCOME_STEPS;
   }
 
@@ -6145,7 +6158,7 @@ function applyOnboardingTourInlineLayout(root, isMobile) {
 
   Object.assign(panel.style, {
     position: "fixed",
-    zIndex: "12030",
+    zIndex: "2147483647",
     pointerEvents: "auto"
   });
 
@@ -8112,11 +8125,12 @@ function renderTaxesPage() {
     .join("");
 
   const nextDeadlines = getUpcomingDeadlines().slice(0, 3);
+  const deadlinesPanelTourTarget = nextDeadlines.length ? "taxes-deadlines" : "taxes-deadline-focus";
   const deadlinesHtml = nextDeadlines.length
     ? nextDeadlines
         .map(
-          (row) => `
-            <div class="tax-deadline-item">
+          (row, index) => `
+            <div class="tax-deadline-item"${index === 0 ? ' data-tour-target="taxes-deadline-focus"' : ""}>
               <div>
                 <strong>${formatDateShort(row.date)}</strong>
                 <span>${escapeHtml(row.title)}</span>
@@ -8281,7 +8295,7 @@ function renderTaxesPage() {
       </div>
     </article>
 
-    <article class="card mt-16 tax-deadlines-panel" data-tour-target="taxes-deadlines">
+    <article class="card mt-16 tax-deadlines-panel" data-tour-target="${deadlinesPanelTourTarget}">
       <div class="tax-deadlines-head">
         <h3>Что скоро платить</h3>
         <button class="btn btn-ghost btn-xs" type="button" data-page="calendar">Открыть календарь</button>
