@@ -637,6 +637,38 @@ function canUseFeature(featureKey) {
   return isProActive();
 }
 
+let proModalMobileStep = 1;
+
+function setProModalMobileStep(step = 1) {
+  const modalCard = document.querySelector("#proModal .pro-modal-card");
+  const stepper = document.getElementById("proMobileStepper");
+  const stepLabel = document.getElementById("proMobileStepLabel");
+  const prevBtn = stepper ? stepper.querySelector("[data-action='pro-mobile-prev']") : null;
+  const nextBtn = stepper ? stepper.querySelector("[data-action='pro-mobile-next']") : null;
+
+  if (!modalCard || !stepper || !modalCard.classList.contains("pro-mobile-compact")) {
+    return;
+  }
+
+  const safeStep = step === 2 ? 2 : 1;
+  proModalMobileStep = safeStep;
+
+  modalCard.classList.toggle("is-step-1", safeStep === 1);
+  modalCard.classList.toggle("is-step-2", safeStep === 2);
+
+  if (stepLabel) {
+    stepLabel.textContent = `Шаг ${safeStep} из 2`;
+  }
+
+  if (prevBtn) {
+    prevBtn.disabled = safeStep === 1;
+  }
+
+  if (nextBtn) {
+    nextBtn.textContent = safeStep === 1 ? "Подробнее" : "Свернуть";
+  }
+}
+
 function renderProModal(featureKey = "") {
   const titleEl = document.getElementById("proModalTitle");
   const priceEl = document.getElementById("proModalPrice");
@@ -648,12 +680,35 @@ function renderProModal(featureKey = "") {
   const focusTitleEl = document.getElementById("proFocusTitle");
   const focusTextEl = document.getElementById("proFocusText");
   const proofEl = document.getElementById("proProof");
+  const modalCardEl = document.querySelector("#proModal .pro-modal-card");
+  const mobileStepperEl = document.getElementById("proMobileStepper");
+  const listTextNodes = [...document.querySelectorAll("#proModal .pro-list li span:last-child")];
 
   if (!titleEl || !statusEl || !reasonEl || !ctaEl) return;
 
   refreshSubscriptionState();
   const proActive = isProActive();
   const proDaysLeft = proActive ? getProDaysLeft(state.subscription) : 0;
+  const isMobileCompact = isMobileViewport() && !proActive;
+
+  const desktopListCopy = [
+    "Напоминания за 7, 3, 1 день и в день срока",
+    "Неограниченное количество операций доходов.",
+    "Экспорт CSV / Excel для отчётов и бухгалтера",
+    "Прогноз лимита режима и риск-подсветка"
+  ];
+  const mobileListCopy = [
+    "Напоминания о сроках",
+    "Безлимит по операциям дохода",
+    "Экспорт CSV / Excel",
+    "Аналитика и риск-подсветка"
+  ];
+  const activeListCopy = isMobileCompact ? mobileListCopy : desktopListCopy;
+  listTextNodes.forEach((node, index) => {
+    if (node && activeListCopy[index]) {
+      node.textContent = activeListCopy[index];
+    }
+  });
 
 
 
@@ -668,6 +723,15 @@ function renderProModal(featureKey = "") {
 
   if (proofEl) {
     proofEl.classList.toggle("hidden", proActive);
+  }
+  if (modalCardEl) {
+    modalCardEl.classList.toggle("pro-mobile-compact", isMobileCompact);
+    if (!isMobileCompact) {
+      modalCardEl.classList.remove("is-step-1", "is-step-2");
+    }
+  }
+  if (mobileStepperEl) {
+    mobileStepperEl.classList.toggle("hidden", !isMobileCompact);
   }
 
   if (proActive) {
@@ -698,13 +762,20 @@ function renderProModal(featureKey = "") {
     reasonEl.textContent = `${getFeatureTitle(featureKey)}: ${getPaywallReasonText(featureKey)}`;
   } else if (proActive) {
     reasonEl.textContent = "Доступ активен: напоминания, экспорт и аналитика уже работают в вашем аккаунте.";
+  } else if (isMobileCompact) {
+    reasonEl.textContent = "Полный доступ на 30 дней без карты и обязательств.";
   } else {
     reasonEl.textContent = "Получите полный доступ на 30 дней — без карты, без обязательств.";
   }
 
   const context = getPaywallValueContext(featureKey);
   if (focusTitleEl) focusTitleEl.textContent = context.title;
-  if (focusTextEl) focusTextEl.textContent = context.text;
+  if (focusTextEl) {
+    focusTextEl.textContent = isMobileCompact ? "Все налоги, сроки и риски — в одном месте." : context.text;
+  }
+  if (isMobileCompact) {
+    setProModalMobileStep(1);
+  }
 }
 function requireFeature(featureKey, source = "") {
   if (canUseFeature(featureKey)) {
@@ -1958,7 +2029,7 @@ function openCalendarReminderPopover(anchorEl) {
     : Boolean(state.remindersEnabled);
   const daysLabel = formatReminderDaysForPopover(remindersModel && remindersModel.days);
 
-  const title = enabled ? "🔔 Напоминание активно" : "Напоминания выключены";
+  const title = enabled ? "Напоминание активно" : "Напоминания выключены";
   const text = enabled
     ? `Вы получите уведомление за ${daysLabel} дней до срока`
     : "Включите напоминания чтобы получать уведомления о сроках оплаты";
@@ -2385,6 +2456,27 @@ function handleGlobalClick(event) {
       return;
     }
 
+    if (action === "deadline-mobile-step") {
+      const stepIndex = Number(actionEl.dataset.stepIndex);
+      if (!Number.isFinite(stepIndex)) return;
+      setDeadlineMobileStep(stepIndex);
+      return;
+    }
+
+    if (action === "deadline-mobile-step-prev") {
+      if (!els.deadlineModalChecklist) return;
+      const current = Number(els.deadlineModalChecklist.dataset.activeStep || "0");
+      setDeadlineMobileStep(current - 1);
+      return;
+    }
+
+    if (action === "deadline-mobile-step-next") {
+      if (!els.deadlineModalChecklist) return;
+      const current = Number(els.deadlineModalChecklist.dataset.activeStep || "0");
+      setDeadlineMobileStep(current + 1);
+      return;
+    }
+
     if (action === "close-dashboard-kpi-sheet") {
       if (els.dashboardKpiSheetModal) {
         closeModal(els.dashboardKpiSheetModal);
@@ -2635,6 +2727,20 @@ function handleGlobalClick(event) {
       return;
     }
 
+    if (action === "pro-mobile-next") {
+      if (proModalMobileStep === 1) {
+        setProModalMobileStep(2);
+      } else {
+        setProModalMobileStep(1);
+      }
+      return;
+    }
+
+    if (action === "pro-mobile-prev") {
+      setProModalMobileStep(1);
+      return;
+    }
+
     if (action === "activate-beta-pro") {
       activateProDemo("beta_banner");
       return;
@@ -2711,6 +2817,11 @@ function handleGlobalClick(event) {
 
     if (action === "close-tax-load-modal") {
       closeModal(els.taxLoadModal);
+      return;
+    }
+
+    if (action === "tax-load-mobile-tab") {
+      setTaxLoadMobileTab(actionEl.dataset.taxLoadTab || "now");
       return;
     }
 
@@ -3833,7 +3944,7 @@ async function handleGlobalSubmit(event) {
       closeModal(els.remindersSetupModal);
     }
 
-    showAppToast("🔔 Готово — настройки напоминаний сохранены");
+    showAppToast("Готово — настройки напоминаний сохранены");
     trackEvent("calendar_reminders_save", {
       hasEmail: Boolean(next.email),
       hasTelegram: Boolean(next.telegramConnected || next.telegram),
@@ -4975,6 +5086,7 @@ function renderLandingDeadlineModal(deadlineId) {
   }
 
   const due = getLandingDeadlineDueInfo(row.date);
+  const isMobileDeadlineCompact = window.innerWidth <= 768;
   const paymentBreakdown = getDeadlinePaymentBreakdown(row);
   const totalWithoutVosms = paymentBreakdown
     ? Math.max(0, Math.round(paymentBreakdown.totalWithoutVosms))
@@ -5044,17 +5156,72 @@ function renderLandingDeadlineModal(deadlineId) {
     }
   `;
 
-  els.deadlineModalChecklist.innerHTML = sections
-    .map(
-      (section) => `
-        <section class="deadline-modal-col">
-          <h4>${section.title}</h4>
-          <ul>${renderSectionList(section)}</ul>
-          ${section.instructionHtml || ""}
-        </section>
-      `
-    )
-    .join("");
+  const renderSectionInstruction = (section) => {
+    if (!section.instructionHtml) return "";
+    if (!isMobileDeadlineCompact) return section.instructionHtml;
+    return `
+      <details class="deadline-mobile-instruction">
+        <summary>Показать инструкцию</summary>
+        <div class="deadline-mobile-instruction-body">${section.instructionHtml}</div>
+      </details>
+    `;
+  };
+
+  if (isMobileDeadlineCompact && sections.length > 1) {
+    const tabsHtml = sections
+      .map(
+        (section, index) => `
+          <button
+            type="button"
+            class="deadline-mobile-step-tab ${index === 0 ? "active" : ""}"
+            data-action="deadline-mobile-step"
+            data-step-index="${index}"
+            aria-pressed="${index === 0 ? "true" : "false"}"
+            aria-label="Показать ${escapeHtml(section.title)}"
+          >
+            Шаг ${index + 1}
+          </button>
+        `
+      )
+      .join("");
+
+    const panelsHtml = sections
+      .map(
+        (section, index) => `
+          <section class="deadline-modal-col deadline-mobile-step-panel ${index === 0 ? "is-active" : ""}" data-deadline-step-panel="${index}">
+            <h4>${section.title}</h4>
+            <ul>${renderSectionList(section)}</ul>
+            ${renderSectionInstruction(section)}
+          </section>
+        `
+      )
+      .join("");
+
+    els.deadlineModalChecklist.innerHTML = `
+      <div class="deadline-mobile-steps-shell">
+        <div class="deadline-mobile-step-tabs">${tabsHtml}</div>
+        ${panelsHtml}
+        <div class="deadline-mobile-step-nav">
+          <button type="button" class="deadline-mobile-step-nav-btn" data-action="deadline-mobile-step-prev" disabled>Назад</button>
+          <span class="deadline-mobile-step-counter" data-deadline-step-counter>Шаг 1 из ${sections.length}</span>
+          <button type="button" class="deadline-mobile-step-nav-btn" data-action="deadline-mobile-step-next">Далее</button>
+        </div>
+      </div>
+    `;
+    els.deadlineModalChecklist.dataset.activeStep = "0";
+  } else {
+    els.deadlineModalChecklist.innerHTML = sections
+      .map(
+        (section) => `
+          <section class="deadline-modal-col">
+            <h4>${section.title}</h4>
+            <ul>${renderSectionList(section)}</ul>
+            ${renderSectionInstruction(section)}
+          </section>
+        `
+      )
+      .join("");
+  }
 
   els.deadlineModalSubscribe.removeAttribute("data-deadline-subscribe");
   els.deadlineModalSubscribe.dataset.action = "open-reminders-settings";
@@ -5063,7 +5230,9 @@ function renderLandingDeadlineModal(deadlineId) {
   els.deadlineModalSubscribe.removeAttribute("role");
   els.deadlineModalSubscribe.removeAttribute("aria-checked");
   els.deadlineModalSubscribe.setAttribute("aria-pressed", "false");
-  els.deadlineModalSubscribe.innerHTML = remindersOn ? "🔔 Напоминания: Вкл (глобально)" : "🔕 Напоминания: Выкл (настроить)";
+  els.deadlineModalSubscribe.innerHTML = remindersOn
+    ? '<i class="deadline-modal-subscribe-icon" data-lucide="bell" aria-hidden="true"></i><span>Напоминания: Вкл (глобально)</span>'
+    : '<i class="deadline-modal-subscribe-icon" data-lucide="bell-off" aria-hidden="true"></i><span>Напоминания: Выкл (настроить)</span>';
 
   const channelsText = globalReminderChannels.length ? globalReminderChannels.join(", ") : "каналы не заполнены";
   els.deadlineModalHint.textContent = remindersOn
@@ -5074,6 +5243,47 @@ function renderLandingDeadlineModal(deadlineId) {
     els.deadlineModalReminderPanel.innerHTML = "";
     els.deadlineModalReminderPanel.classList.add("hidden");
   }
+
+  if (window.lucide && typeof window.lucide.createIcons === "function") {
+    window.lucide.createIcons();
+  }
+}
+
+function setDeadlineMobileStep(stepIndex) {
+  if (!els.deadlineModalChecklist) return;
+
+  const panels = [...els.deadlineModalChecklist.querySelectorAll("[data-deadline-step-panel]")];
+  if (!panels.length) return;
+
+  const tabs = [...els.deadlineModalChecklist.querySelectorAll("[data-action='deadline-mobile-step']")];
+  const prevBtn = els.deadlineModalChecklist.querySelector("[data-action='deadline-mobile-step-prev']");
+  const nextBtn = els.deadlineModalChecklist.querySelector("[data-action='deadline-mobile-step-next']");
+  const counter = els.deadlineModalChecklist.querySelector("[data-deadline-step-counter]");
+
+  const maxIndex = panels.length - 1;
+  const safeIndex = Math.max(0, Math.min(maxIndex, Number(stepIndex) || 0));
+
+  panels.forEach((panel, index) => {
+    panel.classList.toggle("is-active", index === safeIndex);
+  });
+
+  tabs.forEach((tab, index) => {
+    const isActive = index === safeIndex;
+    tab.classList.toggle("active", isActive);
+    tab.setAttribute("aria-pressed", isActive ? "true" : "false");
+  });
+
+  if (counter) {
+    counter.textContent = `Шаг ${safeIndex + 1} из ${panels.length}`;
+  }
+  if (prevBtn) {
+    prevBtn.disabled = safeIndex === 0;
+  }
+  if (nextBtn) {
+    nextBtn.disabled = safeIndex >= maxIndex;
+  }
+
+  els.deadlineModalChecklist.dataset.activeStep = String(safeIndex);
 }
 function renderLandingDeadlines() {
   if (!els.landingDeadlines) return;
@@ -5364,6 +5574,27 @@ function renderTaxLoadRows(rows) {
     .join("");
 }
 
+function setTaxLoadMobileTab(tabKey) {
+  if (!els.taxLoadModalBody) return;
+  const tabs = [...els.taxLoadModalBody.querySelectorAll("[data-action='tax-load-mobile-tab']")];
+  const panels = [...els.taxLoadModalBody.querySelectorAll("[data-tax-load-panel]")];
+  if (!tabs.length || !panels.length) return;
+
+  const normalized = String(tabKey || "").trim();
+  const fallback = tabs[0]?.dataset.taxLoadTab || "now";
+  const activeKey = tabs.some((tab) => String(tab.dataset.taxLoadTab) === normalized) ? normalized : fallback;
+
+  tabs.forEach((tab) => {
+    const isActive = String(tab.dataset.taxLoadTab) === activeKey;
+    tab.classList.toggle("active", isActive);
+    tab.setAttribute("aria-selected", isActive ? "true" : "false");
+  });
+
+  panels.forEach((panel) => {
+    panel.classList.toggle("is-active", String(panel.dataset.taxLoadPanel) === activeKey);
+  });
+}
+
 function openTaxLoadModal() {
   if (!els.taxLoadModal || !els.taxLoadModalTitle || !els.taxLoadModalBody) {
     return;
@@ -5375,44 +5606,92 @@ function openTaxLoadModal() {
   const model = getTaxLoadModalModel(state.regime, tax, income);
   const payNowAmount = Math.round(model.payNowTotal || 0);
   const opvAmount = Math.round((tax && tax.opv) || 0);
+  const isMobileCompact = isMobileViewport();
+  const modalCard = els.taxLoadModal.querySelector(".tax-load-modal-card");
+  if (modalCard) {
+    modalCard.classList.toggle("tax-load-mobile-compact", isMobileCompact);
+  }
 
   els.taxLoadModalTitle.textContent = `Платить в этом месяце: ${fmt(payNowAmount)}`;
 
-  const payLaterHtml = model.payLaterTitle
+  const payLaterInnerHtml = model.payLaterTitle
     ? `
-      <section class="tax-load-section tax-load-section-later">
-        <h4>${escapeHtml(model.payLaterTitle)}</h4>
-        ${renderTaxLoadRows(model.payLaterRows)}
-        ${model.payLaterNotes.map((line) => `<p>${escapeHtml(line)}</p>`).join("")}
-      </section>
+      <h4>${escapeHtml(model.payLaterTitle)}</h4>
+      ${renderTaxLoadRows(model.payLaterRows)}
+      ${model.payLaterNotes.map((line) => `<p>${escapeHtml(line)}</p>`).join("")}
     `
     : "";
 
   const infoLines = (model.infoLines || []).filter((line) => !String(line).includes("(ОПВ)"));
-  const infoSectionHtml = infoLines.length > 0
+  const infoInnerHtml = infoLines.length > 0
     ? `
-      <section class="tax-load-section tax-load-section-info">
-        <h4>Важно знать</h4>
-        ${infoLines.map((line) => `<p>${escapeHtml(line)}</p>`).join("")}
-      </section>
+      <h4>Важно знать</h4>
+      ${infoLines.map((line) => `<p>${escapeHtml(line)}</p>`).join("")}
     `
     : "";
-
-  els.taxLoadModalBody.innerHTML = `
-    <section class="tax-load-highlight" aria-live="polite">
-      <p>${fmt(opvAmount)} из этой суммы — ваши деньги на пенсионном счёте, не уходят государству</p>
-    </section>
-    ${infoSectionHtml}
-    <section class="tax-load-section tax-load-section-now">
-      <h4>${escapeHtml(model.payNowTitle)}</h4>
-      ${renderTaxLoadRows(model.payNowRows)}
-      <div class="tax-load-total">
-        <span>${escapeHtml(model.payNowTotalLabel)}</span>
-        <strong>${fmt(model.payNowTotal)}</strong>
-      </div>
-    </section>
-    ${payLaterHtml}
+  const payNowInnerHtml = `
+    <h4>${escapeHtml(model.payNowTitle)}</h4>
+    ${renderTaxLoadRows(model.payNowRows)}
+    <div class="tax-load-total">
+      <span>${escapeHtml(model.payNowTotalLabel)}</span>
+      <strong>${fmt(model.payNowTotal)}</strong>
+    </div>
   `;
+
+  if (isMobileCompact) {
+    const tabs = [
+      '<button type="button" class="tax-load-mobile-tab active" data-action="tax-load-mobile-tab" data-tax-load-tab="now" role="tab" aria-selected="true">Сейчас</button>'
+    ];
+    if (payLaterInnerHtml) {
+      tabs.push('<button type="button" class="tax-load-mobile-tab" data-action="tax-load-mobile-tab" data-tax-load-tab="later" role="tab" aria-selected="false">ИПН</button>');
+    }
+    if (infoInnerHtml) {
+      tabs.push('<button type="button" class="tax-load-mobile-tab" data-action="tax-load-mobile-tab" data-tax-load-tab="info" role="tab" aria-selected="false">Важно</button>');
+    }
+
+    els.taxLoadModalBody.innerHTML = `
+      <section class="tax-load-highlight" aria-live="polite">
+        <p>${fmt(opvAmount)} из этой суммы — ваши деньги на пенсионном счёте, не уходят государству</p>
+      </section>
+      <div class="tax-load-mobile-tabs" role="tablist" aria-label="Разделы расшифровки">
+        ${tabs.join("")}
+      </div>
+      <div class="tax-load-mobile-panels">
+        <section class="tax-load-section tax-load-section-now tax-load-mobile-panel is-active" data-tax-load-panel="now">
+          ${payNowInnerHtml}
+        </section>
+        ${payLaterInnerHtml ? `<section class="tax-load-section tax-load-section-later tax-load-mobile-panel" data-tax-load-panel="later">${payLaterInnerHtml}</section>` : ""}
+        ${infoInnerHtml ? `<section class="tax-load-section tax-load-section-info tax-load-mobile-panel" data-tax-load-panel="info">${infoInnerHtml}</section>` : ""}
+      </div>
+    `;
+    setTaxLoadMobileTab("now");
+  } else {
+    const payLaterHtml = payLaterInnerHtml
+      ? `
+        <section class="tax-load-section tax-load-section-later">
+          ${payLaterInnerHtml}
+        </section>
+      `
+      : "";
+    const infoSectionHtml = infoInnerHtml
+      ? `
+        <section class="tax-load-section tax-load-section-info">
+          ${infoInnerHtml}
+        </section>
+      `
+      : "";
+
+    els.taxLoadModalBody.innerHTML = `
+      <section class="tax-load-highlight" aria-live="polite">
+        <p>${fmt(opvAmount)} из этой суммы — ваши деньги на пенсионном счёте, не уходят государству</p>
+      </section>
+      ${infoSectionHtml}
+      <section class="tax-load-section tax-load-section-now">
+        ${payNowInnerHtml}
+      </section>
+      ${payLaterHtml}
+    `;
+  }
 
   openModal(els.taxLoadModal);
   trackEvent("open_tax_load_modal", { regime: state.regime, payNow: Math.round(model.payNowTotal || 0), total: Math.round(tax.total || 0) });
@@ -6341,6 +6620,7 @@ function renderDashboardPage() {
         <div class="${deadlineNoteClass}">${deadlineDueText}</div>
         <div class="stat-sub">${nextDeadline ? nextDeadline.title : "все задачи закрыты"}</div>
         ${deadlineIncomeHint}
+        <button type="button" class="deadline-desktop-calendar-link" data-action="open-dashboard-deadline-calendar" aria-label="Перейти на страницу календаря">Перейти в календарь&nbsp;&rarr;</button>
       </article>
     `;
   const isSimplifiedRegime = state.regime === "simplified";
@@ -6742,6 +7022,15 @@ function renderDashboardPage() {
       ${recentSectionHtml}
     </article>
   `;
+
+  if (window.lucide && typeof window.lucide.createIcons === "function") {
+    window.lucide.createIcons({
+      attrs: {
+        width: "16",
+        height: "16"
+      }
+    });
+  }
 
   syncOnboardingTour();
 }
@@ -7191,6 +7480,33 @@ function renderIncomePage() {
     dynamicsText = `↑ новый доход к ${previousMonthLabelDative}`;
   }
 
+  const formatIncomeMobileAmount = (value) => {
+    const numeric = Number(value || 0);
+    const abs = Math.abs(numeric);
+
+    if (abs >= 1000000000) {
+      const bln = abs / 1000000000;
+      const digits = bln >= 100 ? 0 : 1;
+      const blnText = new Intl.NumberFormat("ru-RU", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: digits
+      }).format(bln);
+      return `${numeric < 0 ? "-" : ""}${blnText} млрд ₸`;
+    }
+
+    if (abs >= 1000000) {
+      const mln = abs / 1000000;
+      const digits = mln >= 100 ? 0 : 1;
+      const mlnText = new Intl.NumberFormat("ru-RU", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: digits
+      }).format(mln);
+      return `${numeric < 0 ? "-" : ""}${mlnText} млн ₸`;
+    }
+
+    return fmt(numeric);
+  };
+
   const categoryOptions = existingCategories
     .map((category) => `<option value="${escapeHtml(category)}" ${filters.category === category ? "selected" : ""}>${escapeHtml(category)}</option>`)
     .join("");
@@ -7255,8 +7571,14 @@ function renderIncomePage() {
           const categoryToneClass = getIncomeCategoryToneClass(row.category);
           const comment = String(row.comment || "").trim();
           const amountText = fmt(row.amount);
-          const amountLen = amountText.length;
-          const amountSizeClass = amountLen >= 15 ? "income-mobile-row-amount-s" : amountLen >= 12 ? "income-mobile-row-amount-m" : "";
+          const compactLength = amountText.replace(/\s+/g, "").length;
+          const useCompactAmount = compactLength >= 13;
+          const amountDisplayText = useCompactAmount ? formatIncomeMobileAmount(row.amount) : amountText;
+          const amountSizeClass = useCompactAmount
+            ? "income-mobile-row-amount-s"
+            : compactLength >= 11
+              ? "income-mobile-row-amount-m"
+              : "";
 
           return `
             <article class="income-mobile-row ${rowClass}">
@@ -7267,8 +7589,8 @@ function renderIncomePage() {
                 </div>
                 ${comment ? `<div class="income-mobile-row-comment">${escapeHtml(comment)}</div>` : ""}
               </div>
-              <div class="income-mobile-row-right">
-                <strong class="income-mobile-row-amount amount-sensitive ${amountSizeClass}">${amountText}</strong>
+              <div class="income-mobile-row-bottom">
+                <strong class="income-mobile-row-amount amount-sensitive ${amountSizeClass}" title="${escapeHtml(amountText)}">${amountDisplayText}</strong>
                 <div class="income-mobile-row-actions">
                   <button type="button" class="icon-action-btn icon-edit" data-edit-income="${row.id}" aria-label="Изменить запись" title="Изменить">
                     <i data-lucide="pencil" class="income-action-icon" aria-hidden="true"></i>
@@ -8350,7 +8672,7 @@ function renderCalendarPage() {
           <td><span class="calendar-due-chip ${dueTone}">${dueMeta.text}</span></td>
           <td>${statusBadge}</td>
           <td class="calendar-actions-cell">
-            <button type="button" class="calendar-reminder-row-btn ${state.remindersEnabled ? "on" : "off"}" data-calendar-reminder-info="${row.id}" title="${state.remindersEnabled ? "Напоминания включены глобально" : "Напоминания выключены"}" aria-label="${state.remindersEnabled ? "Напоминания включены глобально" : "Напоминания выключены"}">🔔</button>
+            <button type="button" class="calendar-reminder-row-btn ${state.remindersEnabled ? "on" : "off"}" data-calendar-reminder-info="${row.id}" title="${state.remindersEnabled ? "Напоминания включены глобально" : "Напоминания выключены"}" aria-label="${state.remindersEnabled ? "Напоминания включены глобально" : "Напоминания выключены"}"><i class="calendar-reminder-row-icon" data-lucide="bell" aria-hidden="true"></i></button>
             <button type="button" class="btn btn-ghost btn-xs"${checklistTourTarget} data-deadline-expand="${row.id}">Чеклист ${checklistStats.done}/${checklistStats.total}</button>
             <button type="button" class="btn btn-ghost btn-xs" data-toggle-deadline="${row.id}">${row.done ? "Снять" : "Отметить"}</button>
           </td>
@@ -8390,7 +8712,7 @@ function renderCalendarPage() {
             ${statusBadge}
           </div>
           <div class="calendar-mobile-actions">
-            <button type="button" class="calendar-reminder-row-btn ${state.remindersEnabled ? "on" : "off"}" data-calendar-reminder-info="${row.id}" title="${state.remindersEnabled ? "Напоминания включены глобально" : "Напоминания выключены"}" aria-label="${state.remindersEnabled ? "Напоминания включены глобально" : "Напоминания выключены"}">🔔</button>
+            <button type="button" class="calendar-reminder-row-btn ${state.remindersEnabled ? "on" : "off"}" data-calendar-reminder-info="${row.id}" title="${state.remindersEnabled ? "Напоминания включены глобально" : "Напоминания выключены"}" aria-label="${state.remindersEnabled ? "Напоминания включены глобально" : "Напоминания выключены"}"><i class="calendar-reminder-row-icon" data-lucide="bell" aria-hidden="true"></i></button>
             <button type="button" class="btn btn-ghost btn-xs calendar-mobile-action-btn"${checklistTourTarget} data-deadline-expand="${row.id}">Чеклист ${checklistStats.done}/${checklistStats.total}</button>
             <button type="button" class="btn btn-ghost btn-xs calendar-mobile-action-btn" data-toggle-deadline="${row.id}">${row.done ? "Снять" : "Отметить"}</button>
           </div>
@@ -8481,6 +8803,15 @@ function renderCalendarPage() {
       </div>
     </article>
   `;
+
+  if (window.lucide && typeof window.lucide.createIcons === "function") {
+    window.lucide.createIcons({
+      attrs: {
+        width: "16",
+        height: "16"
+      }
+    });
+  }
 
   syncOnboardingTour();
 }

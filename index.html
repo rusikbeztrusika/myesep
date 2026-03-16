@@ -314,7 +314,7 @@
       </div>
       <div class="mobile-drawer-reminders-wrap">
         <div id="mobileDrawerReminderToggle" class="calendar-reminder-toggle hidden" title="Напоминания">
-          <span class="calendar-reminder-toggle-label">🔔 Напоминания</span>
+          <span class="calendar-reminder-toggle-label"><i class="calendar-reminder-toggle-label-icon" data-lucide="bell" aria-hidden="true"></i><span>Напоминания</span></span>
           <button type="button" class="calendar-reminder-switch" data-action="toggle-calendar-reminders" role="switch" aria-checked="false" aria-label="Переключить напоминания">
             <span class="calendar-reminder-switch-thumb" aria-hidden="true"></span>
           </button>
@@ -455,6 +455,11 @@
       </div>
 
       <p id="proModalReason" class="pro-reason">Откройте напоминания, экспорт и расширенную аналитику.</p>
+      <div id="proMobileStepper" class="pro-mobile-stepper hidden" aria-live="polite">
+        <button type="button" class="pro-mobile-stepper-btn" data-action="pro-mobile-prev">Назад</button>
+        <span id="proMobileStepLabel" class="pro-mobile-stepper-label">Шаг 1 из 2</span>
+        <button type="button" class="pro-mobile-stepper-btn is-primary" data-action="pro-mobile-next">Подробнее</button>
+      </div>
 
       <article id="proFocusCard" class="pro-focus">
         <p class="pro-focus-label"><span class="icon-inline" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M12 3l7 3v6c0 4.4-3 8.4-7 9-4-0.6-7-4.6-7-9V6l7-3z"></path><path d="M9 12l2 2 4-4"></path></svg></span>Что это даёт вам</p>
@@ -510,7 +515,7 @@
         <button type="button" class="icon-btn" data-action="close-reminders-settings" aria-label="Закрыть">&times;</button>
       </div>
       <div class="reminders-settings-intro" role="note" aria-live="polite">
-        <span class="reminders-settings-intro-icon" aria-hidden="true">🔔</span>
+        <i class="reminders-settings-intro-icon" data-lucide="bell" aria-hidden="true"></i>
         <p>Мы будем напоминать о каждом налоговом сроке по вашему режиму — за 7, 3 и 1 день до срока оплаты. Так вы не пропустите платёж и избежите штрафов.</p>
       </div>
       <form id="remindersSettingsForm" class="reminders-settings-form">
@@ -541,6 +546,7 @@
     <div class="modal-card tax-load-modal-card">
       <div class="modal-head tax-load-modal-head">
         <h3 id="taxLoadModalTitle">Из чего состоят ваши налоги?</h3>
+        <button type="button" class="icon-btn" data-action="close-tax-load-modal" aria-label="Закрыть">&times;</button>
       </div>
       <div id="taxLoadModalBody" class="tax-load-modal-body"></div>
       <div class="tax-load-modal-footer">

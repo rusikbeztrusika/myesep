@@ -1675,6 +1675,19 @@ h3,
   transition: border-color 0.15s ease, background-color 0.15s ease;
 }
 
+.calendar-reminder-toggle-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.calendar-reminder-toggle-label-icon {
+  width: 14px;
+  height: 14px;
+  stroke-width: 1.9;
+  flex-shrink: 0;
+}
+
 .calendar-reminder-switch {
   position: relative;
   width: 40px;
@@ -2668,6 +2681,13 @@ h3,
   transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
 }
 
+.calendar-reminder-row-icon {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.9;
+  pointer-events: none;
+}
+
 .calendar-reminder-row-btn:hover,
 .calendar-reminder-row-btn:focus-visible {
   transform: translateY(-1px);
@@ -3084,9 +3104,11 @@ h3,
 }
 
 #remindersSetupModal .reminders-settings-intro-icon {
-  font-size: 18px;
-  line-height: 1;
-  margin-top: 1px;
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.9;
+  color: #5f74c7;
+  flex-shrink: 0;
 }
 
 #remindersSetupModal .reminders-settings-intro p {
@@ -3652,6 +3674,10 @@ h3,
   color: #5c6d95;
   font-size: 15px;
   line-height: 1.5;
+}
+
+.pro-mobile-stepper {
+  display: none;
 }
 
 .pro-focus {
@@ -4645,6 +4671,13 @@ h3,
   gap: 10px;
 }
 
+#deadlineModal .deadline-modal-subscribe-icon {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.9;
+  flex-shrink: 0;
+}
+
 .kpi-card.kpi-card-income-hero .income-hero-icon {
   width: 34px;
   height: 34px;
@@ -4835,6 +4868,34 @@ h3,
   color: #3e4f7f;
   font-size: 13px;
   font-weight: 600;
+}
+
+.deadline-desktop-calendar-link {
+  margin-top: 8px;
+  align-self: flex-start;
+  border: 1px solid #e0b15e;
+  background: #fff6e8;
+  padding: 8px 12px;
+  border-radius: 999px;
+  color: #b86a12;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
+}
+
+.deadline-desktop-calendar-link:hover,
+.deadline-desktop-calendar-link:focus-visible {
+  background: #ffefcf;
+  border-color: #d39a3f;
+  color: #9f5b0a;
+  transform: translateY(-1px);
+  text-decoration: none;
+  outline: none;
 }
 
 .kpi-trend {
@@ -6805,6 +6866,61 @@ h3,
     padding: 5px 9px;
   }
 
+  #proModal .pro-modal-card.pro-mobile-compact {
+    max-height: min(86vh, 700px);
+    overflow: hidden;
+    display: grid;
+    grid-template-rows: auto auto auto 1fr auto auto;
+    gap: 8px;
+  }
+
+  #proModal .pro-modal-card.pro-mobile-compact .modal-head {
+    margin-bottom: 0;
+  }
+
+  #proModal .pro-modal-card.pro-mobile-compact .pro-reason {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.35;
+  }
+
+  #proModal .pro-modal-card.pro-mobile-compact .pro-mobile-stepper {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 8px;
+  }
+
+  #proModal .pro-modal-card.pro-mobile-compact .pro-mobile-stepper-btn {
+    min-height: 30px;
+    border-radius: 999px;
+    border: 1px solid #d4defa;
+    background: #f3f6ff;
+    color: #5c6d95;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 0 10px;
+    cursor: pointer;
+  }
+
+  #proModal .pro-modal-card.pro-mobile-compact .pro-mobile-stepper-btn:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  #proModal .pro-modal-card.pro-mobile-compact .pro-mobile-stepper-btn.is-primary {
+    border-color: transparent;
+    background: linear-gradient(135deg, #6276ff, #8c66ff);
+    color: #ffffff;
+  }
+
+  #proModal .pro-modal-card.pro-mobile-compact .pro-mobile-stepper-label {
+    justify-self: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: #697aa6;
+  }
+
   #proModal .pro-focus h4 {
     font-size: 18px;
   }
@@ -6828,6 +6944,56 @@ h3,
   #proModal #proModalCta {
     min-height: 48px;
     font-size: 15px;
+  }
+
+  #proModal .pro-modal-card.pro-mobile-compact .pro-focus {
+    margin: 0;
+    padding: 10px;
+    gap: 4px;
+  }
+
+  #proModal .pro-modal-card.pro-mobile-compact .pro-focus h4 {
+    font-size: 17px;
+    line-height: 1.2;
+  }
+
+  #proModal .pro-modal-card.pro-mobile-compact .pro-focus p {
+    font-size: 13px;
+    line-height: 1.35;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  #proModal .pro-modal-card.pro-mobile-compact .pro-list {
+    margin: 0;
+    min-height: 0;
+    overflow: auto;
+    gap: 6px;
+  }
+
+  #proModal .pro-modal-card.pro-mobile-compact .pro-list li {
+    padding: 8px 9px;
+    font-size: 13px;
+  }
+
+  #proModal .pro-modal-card.pro-mobile-compact.is-step-1 .pro-list li:nth-child(n + 3) {
+    display: none;
+  }
+
+  #proModal .pro-modal-card.pro-mobile-compact.is-step-1 .pro-proof {
+    display: none;
+  }
+
+  #proModal .pro-modal-card.pro-mobile-compact.is-step-1 .pro-secondary-link,
+  #proModal .pro-modal-card.pro-mobile-compact.is-step-1 .pro-cta-meta {
+    display: none;
+  }
+
+  #proModal .pro-modal-card.pro-mobile-compact.is-step-2 .pro-reason,
+  #proModal .pro-modal-card.pro-mobile-compact.is-step-2 .pro-focus {
+    display: none;
   }
 
   .public-nav,
@@ -8619,6 +8785,10 @@ h3,
 }
 
 #taxLoadModal .tax-load-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
   margin-bottom: 12px;
 }
 
@@ -8632,6 +8802,19 @@ h3,
 #taxLoadModal .tax-load-modal-body {
   display: grid;
   gap: 12px;
+}
+
+#taxLoadModal .tax-load-mobile-tabs {
+  display: none;
+}
+
+#taxLoadModal .tax-load-mobile-panels {
+  display: grid;
+  gap: 12px;
+}
+
+#taxLoadModal .tax-load-mobile-panel {
+  display: block;
 }
 
 
@@ -8760,6 +8943,134 @@ h3,
   #taxLoadModal .tax-load-modal-footer .btn {
     width: 100%;
     min-height: 46px;
+  }
+}
+
+@media (max-width: 768px) {
+  #taxLoadModal .tax-load-modal-card.tax-load-mobile-compact {
+    width: min(94vw, 540px) !important;
+    max-height: min(88vh, 760px) !important;
+    overflow: hidden !important;
+    padding: 14px !important;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    gap: 10px;
+  }
+
+  #taxLoadModal .tax-load-modal-card.tax-load-mobile-compact .tax-load-modal-head {
+    margin-bottom: 0;
+    align-items: center;
+  }
+
+  #taxLoadModal .tax-load-modal-card.tax-load-mobile-compact .tax-load-modal-head h3 {
+    font-size: clamp(16px, 5.8vw, 24px);
+    line-height: 1.2;
+  }
+
+  #taxLoadModal .tax-load-modal-card.tax-load-mobile-compact .tax-load-modal-body {
+    min-height: 0;
+    overflow: hidden;
+    display: grid;
+    grid-template-rows: auto auto 1fr;
+    gap: 8px;
+  }
+
+  #taxLoadModal .tax-load-modal-card.tax-load-mobile-compact .tax-load-highlight {
+    padding: 9px 10px;
+    border-radius: 12px;
+  }
+
+  #taxLoadModal .tax-load-modal-card.tax-load-mobile-compact .tax-load-highlight p {
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  #taxLoadModal .tax-load-modal-card.tax-load-mobile-compact .tax-load-mobile-tabs {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  #taxLoadModal .tax-load-modal-card.tax-load-mobile-compact .tax-load-mobile-tab {
+    min-height: 34px;
+    padding: 0 8px;
+    border-radius: 999px;
+    border: 1px solid #d4defa;
+    background: #f2f6ff;
+    color: #52659a;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  #taxLoadModal .tax-load-modal-card.tax-load-mobile-compact .tax-load-mobile-tab.active {
+    color: #ffffff;
+    border-color: transparent;
+    background: linear-gradient(135deg, #6276ff, #8c66ff);
+  }
+
+  #taxLoadModal .tax-load-modal-card.tax-load-mobile-compact .tax-load-mobile-panels {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  #taxLoadModal .tax-load-modal-card.tax-load-mobile-compact .tax-load-mobile-panel {
+    display: none;
+  }
+
+  #taxLoadModal .tax-load-modal-card.tax-load-mobile-compact .tax-load-mobile-panel.is-active {
+    display: block;
+  }
+
+  #taxLoadModal .tax-load-modal-card.tax-load-mobile-compact .tax-load-section {
+    padding: 10px;
+    border-radius: 12px;
+  }
+
+  #taxLoadModal .tax-load-modal-card.tax-load-mobile-compact .tax-load-section h4 {
+    margin: 0 0 7px;
+    font-size: 16px;
+    line-height: 1.2;
+  }
+
+  #taxLoadModal .tax-load-modal-card.tax-load-mobile-compact .tax-load-row {
+    gap: 8px;
+    padding: 5px 0;
+  }
+
+  #taxLoadModal .tax-load-modal-card.tax-load-mobile-compact .tax-load-row span {
+    font-size: 12px;
+    line-height: 1.3;
+  }
+
+  #taxLoadModal .tax-load-modal-card.tax-load-mobile-compact .tax-load-row strong {
+    font-size: 12px;
+  }
+
+  #taxLoadModal .tax-load-modal-card.tax-load-mobile-compact .tax-load-total {
+    margin-top: 6px;
+    padding-top: 8px;
+  }
+
+  #taxLoadModal .tax-load-modal-card.tax-load-mobile-compact .tax-load-total span,
+  #taxLoadModal .tax-load-modal-card.tax-load-mobile-compact .tax-load-total strong {
+    font-size: 13px;
+  }
+
+  #taxLoadModal .tax-load-modal-card.tax-load-mobile-compact .tax-load-section p {
+    margin-top: 6px;
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  #taxLoadModal .tax-load-modal-card.tax-load-mobile-compact .tax-load-modal-footer {
+    margin-top: 0;
+  }
+
+  #taxLoadModal .tax-load-modal-card.tax-load-mobile-compact .tax-load-modal-footer .btn {
+    min-height: 40px;
   }
 }
 
@@ -9046,9 +9357,9 @@ h3,
   background: #f8fbff;
   padding: 8px 10px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 7px;
+  align-items: stretch;
 }
 
 .income-mobile-row.income-mobile-row-max {
@@ -9089,10 +9400,11 @@ h3,
   color: #93a2c2;
 }
 
-.income-mobile-row-right {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.income-mobile-row-bottom {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -9103,6 +9415,8 @@ h3,
   line-height: 1.02;
   letter-spacing: -0.012em;
   white-space: nowrap;
+  min-width: 0;
+  text-align: right;
 }
 
 .income-mobile-row-amount-m {
@@ -9117,6 +9431,7 @@ h3,
   display: flex;
   align-items: center;
   gap: 4px;
+  flex: 0 0 auto;
 }
 
 .income-mobile-total {
@@ -9237,8 +9552,13 @@ h3,
     white-space: nowrap;
   }
 
+  .income-mobile-row-bottom {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
   .income-mobile-row-amount {
-    font-size: clamp(20px, 6.3vw, 25px);
+    font-size: clamp(18px, 5.8vw, 24px);
   }
 
   .income-mobile-row-actions .icon-action-btn {
@@ -10639,8 +10959,13 @@ body.onboarding-tour-active {
     white-space: nowrap;
   }
 
+  .income-mobile-row-bottom {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
   .income-mobile-row-amount {
-    font-size: clamp(20px, 6.3vw, 25px);
+    font-size: clamp(18px, 5.8vw, 24px);
   }
 
   .income-mobile-row-actions .icon-action-btn {
@@ -11424,7 +11749,9 @@ h4,
   }
 
   #mobileDrawerReminderToggle .calendar-reminder-toggle-label {
-    display: inline;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     font-size: 15px;
     font-weight: 600;
     line-height: 1;
@@ -12181,6 +12508,31 @@ h4,
   .stack-form textarea {
     min-height: 42px;
     font-size: 16px;
+  }
+
+  .income-form-card {
+    overflow: hidden;
+  }
+
+  .income-form .form-grid-2,
+  .income-form .form-grid-2 > label {
+    min-width: 0;
+  }
+
+  .income-form input[type="date"] {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    font-size: 15px;
+  }
+
+  .income-form input[type="date"]::-webkit-date-and-time-value {
+    min-width: 0;
+  }
+
+  .income-form input[type="date"]::-webkit-datetime-edit {
+    padding: 0;
   }
 
   .stack-form textarea {
@@ -13077,9 +13429,105 @@ h4,
     padding: 8px 10px;
   }
 
-#deadlineModal .deadline-modal-footer p {
+  #deadlineModal .deadline-modal-footer p {
     font-size: 12px;
     line-height: 1.35;
+  }
+
+  #deadlineModal .deadline-mobile-steps-shell {
+    display: grid;
+    gap: 8px;
+  }
+
+  #deadlineModal .deadline-mobile-step-tabs {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+    gap: 6px;
+  }
+
+  #deadlineModal .deadline-mobile-step-tab {
+    min-height: 30px;
+    border-radius: 999px;
+    border: 1px solid rgba(168, 184, 239, 0.45);
+    background: rgba(144, 160, 222, 0.12);
+    color: #d7e4ff;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 0 10px;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+
+  #deadlineModal .deadline-mobile-step-tab.active {
+    background: rgba(108, 92, 231, 0.38);
+    border-color: rgba(150, 138, 255, 0.78);
+    color: #ffffff;
+  }
+
+  #deadlineModal .deadline-mobile-step-panel {
+    display: none;
+  }
+
+  #deadlineModal .deadline-mobile-step-panel.is-active {
+    display: block;
+  }
+
+  #deadlineModal .deadline-mobile-step-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  #deadlineModal .deadline-mobile-step-nav-btn {
+    min-height: 30px;
+    border-radius: 9px;
+    border: 1px solid rgba(168, 184, 239, 0.45);
+    background: rgba(144, 160, 222, 0.12);
+    color: #dbe6ff;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 0 10px;
+    cursor: pointer;
+  }
+
+  #deadlineModal .deadline-mobile-step-nav-btn:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  #deadlineModal .deadline-mobile-step-counter {
+    color: #b6c6ee;
+    font-size: 11px;
+    font-weight: 700;
+    text-align: center;
+    min-width: 86px;
+  }
+
+  #deadlineModal .deadline-mobile-instruction {
+    margin-top: 8px;
+    border: 1px solid rgba(176, 192, 248, 0.35);
+    border-radius: 10px;
+    background: rgba(166, 182, 245, 0.08);
+    padding: 8px 10px;
+  }
+
+  #deadlineModal .deadline-mobile-instruction summary {
+    list-style: none;
+    cursor: pointer;
+    color: #d6e3ff;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  #deadlineModal .deadline-mobile-instruction summary::-webkit-details-marker {
+    display: none;
+  }
+
+  #deadlineModal .deadline-mobile-instruction-body {
+    margin-top: 8px;
   }
 }
 
@@ -13325,7 +13773,7 @@ h4,
 
   .calendar-filter-card-mobile {
     display: grid;
-    grid-template-columns: minmax(0, 0.88fr) minmax(0, 1.12fr);
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
     gap: 10px;
     align-items: start;
   }
@@ -13352,22 +13800,26 @@ h4,
 
   .calendar-filter-card-mobile .calendar-chip-group {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1.28fr) minmax(0, 1fr) minmax(0, 0.82fr);
     flex-wrap: nowrap;
     overflow: visible;
     white-space: nowrap;
     padding-bottom: 0;
-    gap: 5px;
+    gap: 4px;
   }
 
   .calendar-filter-card-mobile .calendar-chip-group button {
-    min-height: 28px;
-    padding: 4px 6px;
-    font-size: 11px;
-    line-height: 1.1;
+    min-height: 30px;
+    padding: 4px;
+    font-size: 10px;
+    line-height: 1;
     width: 100%;
     justify-content: center;
     min-width: 0;
+    letter-spacing: 0;
+    white-space: nowrap;
+    overflow: visible;
+    text-overflow: clip;
   }
 
   .calendar-search-form-mobile-compact {
