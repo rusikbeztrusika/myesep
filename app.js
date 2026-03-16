@@ -2033,6 +2033,7 @@ function updateAuthUi() {
     return;
   }
 
+  document.body.classList.remove("onboarding-page-active");
   els.publicApp.classList.remove("hidden");
   els.dashboardApp.classList.add("hidden");
   els.dashboardApp.classList.remove("sidebar-open");
@@ -5850,9 +5851,9 @@ function applyOnboardingTourInlineLayout(root, isMobile) {
   if (!overlay || !panel) return;
 
   Object.assign(root.style, {
-    position: "",
-    inset: "",
-    zIndex: "",
+    position: "static",
+    inset: "auto",
+    zIndex: "auto",
     pointerEvents: "none"
   });
 
@@ -5873,16 +5874,16 @@ function applyOnboardingTourInlineLayout(root, isMobile) {
     Object.assign(panel.style, {
       left: "12px",
       right: "12px",
-      bottom: "12px",
+      bottom: "calc(12px + env(safe-area-inset-bottom))",
       top: "",
       width: "auto",
       minHeight: "0",
-      maxHeight: "min(62vh, 520px)",
+      maxHeight: "min(66vh, 560px)",
       transform: ""
     });
   } else {
     Object.assign(panel.style, {
-      width: "min(480px, calc(100vw - 32px))",
+      width: "calc(100vw - 32px)",
       maxWidth: "480px",
       minHeight: "",
       maxHeight: "",
@@ -6011,6 +6012,10 @@ function handleGlobalKeyDown(event) {
 }
 function renderDashboard() {
   if (shouldShowOnboarding()) {
+    document.body.classList.add("onboarding-page-active");
+    if (els.dashboardApp) {
+      els.dashboardApp.classList.add("onboarding-mode");
+    }
     if (onboardingTourState.active || getOnboardingTourRoot()) {
       closeOnboardingTour(false, "onboarding_flow");
     }
@@ -6026,6 +6031,11 @@ function renderDashboard() {
     updateAmountsVisibilityUi();
     return;
   }
+
+  if (els.dashboardApp) {
+    els.dashboardApp.classList.remove("onboarding-mode");
+  }
+  document.body.classList.remove("onboarding-page-active");
 
   els.pageTitle.textContent = PAGE_TITLES[state.page] || PAGE_TITLES.dashboard;
   renderSidebarActive();
@@ -6320,7 +6330,7 @@ function renderDashboardPage() {
           </div>
         </div>
         <div class="kpi-mobile-action-row">
-          <button type="button" class="deadline-mobile-calendar-btn" data-action="open-dashboard-deadline-calendar" aria-label="Перейти в календарь сроков">Перейти в календарь &rarr;</button>
+          <button type="button" class="deadline-mobile-calendar-btn" data-action="open-dashboard-deadline-calendar" aria-label="Перейти в календарь сроков">Перейти в календарь&nbsp;&rarr;</button>
         </div>
       </article>
     `
@@ -6386,6 +6396,75 @@ function renderDashboardPage() {
       </article>
     `
     : "";
+  const shouldSplitMobileKpiForWelcome = isMobileKpiMode && showWelcomeBanner;
+  const welcomeBannerOutsideKpi = showWelcomeBanner && !shouldSplitMobileKpiForWelcome ? welcomeBannerHtml : "";
+
+  const incomeKpiCardMarkup = `
+      <article class="card kpi-card kpi-card-income-hero${kpiActionClass}" ${incomeKpiActionAttrs}>
+        <div class="income-hero-head">
+          <div class="stat-title">${incomeKpiTitle}</div>
+          <span class="income-hero-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+              <path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h11A2.5 2.5 0 0 1 19 7.5V9h1.5A2.5 2.5 0 0 1 23 11.5v5a2.5 2.5 0 0 1-2.5 2.5H5.5A2.5 2.5 0 0 1 3 16.5z"></path>
+              <circle cx="18.5" cy="13.5" r="1"></circle>
+            </svg>
+          </span>
+        </div>
+        <div class="stat-value amount-sensitive${incomeKpiValueClass}">${incomeKpiValueText}</div>
+        <div class="income-hero-meta">
+          <div class="kpi-trend ${incomeTrend.className}">${incomeTrend.text}</div>
+        </div>
+        ${!isMobileKpiMode
+          ? '<button type="button" class="income-hero-cta" data-page="income" aria-label="Перейти к добавлению дохода">+ Добавить доход</button>'
+          : ""}
+      </article>
+  `;
+
+  const taxLoadKpiCardMarkup = `
+      <article class="card kpi-card danger tax-load-kpi${kpiActionClass}" data-tour-target="tax-load" ${taxKpiActionAttrs}>
+        <div class="stat-title">${taxLoadTitle}</div>
+        ${!isMobileKpiMode && isHighTaxLoad ? '<span class="badge badge-warning tax-load-warning-badge">Высокая нагрузка</span>' : ""}
+        <div class="stat-value stat-danger amount-sensitive${taxLoadKpiValueClass}">${taxLoadKpiValueText}</div>
+        ${isMobileKpiMode
+          ? `
+            <div class="tax-load-mobile-meta">
+              <div class="stat-sub tax-load-mobile-due">до ${taxLoadDueDateLabel}</div>
+              <div class="tax-load-mobile-cta">Открыть расшифровку&nbsp;&rarr;</div>
+            </div>
+          `
+          : `
+            <div class="tax-load-monthly-note">Ежемесячно: <span class="amount-sensitive">${fmt(taxLoadPayNow)}</span> (без ИПН — он платится раз в полгода)</div>
+            ${taxLoadEmptyHint ? `<div class="stat-sub tax-load-min-note">${taxLoadEmptyHint}</div>` : ""}
+            <div class="stat-sub tax-load-meta-line">${taxLoadIpnReserveLine}</div>
+            <div class="stat-sub tax-load-meta-line">из них <span class="amount-sensitive">${fmt(taxLoadOpvSavings)}</span> — ваши накопления на пенсии</div>
+            <div class="stat-sub tax-load-hint">${infoHintIcon}Нажмите для расшифровки</div>
+            ${isHighTaxLoad ? `<div class="tax-load-warning-hint">${highTaxLoadHint}</div>` : ""}
+          `}
+      </article>
+  `;
+
+  const kpiSectionHtml = shouldSplitMobileKpiForWelcome
+    ? `
+      <div class="grid grid-4 kpi-grid kpi-grid-mobile-primary">
+        ${incomeKpiCardMarkup}
+        ${taxLoadKpiCardMarkup}
+      </div>
+      <div class="kpi-grid-mobile-welcome">
+        ${welcomeBannerHtml}
+      </div>
+      <div class="grid grid-4 kpi-grid kpi-grid-mobile-secondary">
+        ${mobileIncomeYtdKpiMarkup}
+        ${mobileDeadlineKpiMarkup}
+      </div>
+    `
+    : `
+      <div class="grid grid-4 kpi-grid">
+        ${incomeKpiCardMarkup}
+        ${taxLoadKpiCardMarkup}
+        ${mobileIncomeYtdKpiMarkup}
+        ${mobileDeadlineKpiMarkup}
+      </div>
+    `;
 
   const chartSectionHtml = hasDashboardData
     ? `<div class="chart-row">${bars}</div>`
@@ -6609,50 +6688,9 @@ function renderDashboardPage() {
     `;
 
   els.pageContent.innerHTML = `
-    <div class="grid grid-4 kpi-grid">
-      <article class="card kpi-card kpi-card-income-hero${kpiActionClass}" ${incomeKpiActionAttrs}>
-        <div class="income-hero-head">
-          <div class="stat-title">${incomeKpiTitle}</div>
-          <span class="income-hero-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
-              <path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h11A2.5 2.5 0 0 1 19 7.5V9h1.5A2.5 2.5 0 0 1 23 11.5v5a2.5 2.5 0 0 1-2.5 2.5H5.5A2.5 2.5 0 0 1 3 16.5z"></path>
-              <circle cx="18.5" cy="13.5" r="1"></circle>
-            </svg>
-          </span>
-        </div>
-        <div class="stat-value amount-sensitive${incomeKpiValueClass}">${incomeKpiValueText}</div>
-        <div class="income-hero-meta">
-          <div class="kpi-trend ${incomeTrend.className}">${incomeTrend.text}</div>
-        </div>
-        ${!isMobileKpiMode
-          ? '<button type="button" class="income-hero-cta" data-page="income" aria-label="Перейти к добавлению дохода">+ Добавить доход</button>'
-          : ""}
-      </article>
-      <article class="card kpi-card danger tax-load-kpi${kpiActionClass}" data-tour-target="tax-load" ${taxKpiActionAttrs}>
-        <div class="stat-title">${taxLoadTitle}</div>
-        ${!isMobileKpiMode && isHighTaxLoad ? '<span class="badge badge-warning tax-load-warning-badge">Высокая нагрузка</span>' : ""}
-        <div class="stat-value stat-danger amount-sensitive${taxLoadKpiValueClass}">${taxLoadKpiValueText}</div>
-        ${isMobileKpiMode
-          ? `
-            <div class="tax-load-mobile-meta">
-              <div class="stat-sub tax-load-mobile-due">до ${taxLoadDueDateLabel}</div>
-              <div class="tax-load-mobile-cta">Открыть расшифровку &rarr;</div>
-            </div>
-          `
-          : `
-            <div class="tax-load-monthly-note">Ежемесячно: <span class="amount-sensitive">${fmt(taxLoadPayNow)}</span> (без ИПН — он платится раз в полгода)</div>
-            ${taxLoadEmptyHint ? `<div class="stat-sub tax-load-min-note">${taxLoadEmptyHint}</div>` : ""}
-            <div class="stat-sub tax-load-meta-line">${taxLoadIpnReserveLine}</div>
-            <div class="stat-sub tax-load-meta-line">из них <span class="amount-sensitive">${fmt(taxLoadOpvSavings)}</span> — ваши накопления на пенсии</div>
-            <div class="stat-sub tax-load-hint">${infoHintIcon}Нажмите для расшифровки</div>
-            ${isHighTaxLoad ? `<div class="tax-load-warning-hint">${highTaxLoadHint}</div>` : ""}
-          `}
-      </article>
-      ${mobileIncomeYtdKpiMarkup}
-      ${mobileDeadlineKpiMarkup}
-    </div>
+    ${kpiSectionHtml}
 
-    ${welcomeBannerHtml}
+    ${welcomeBannerOutsideKpi}
 
     <div class="grid grid-2 mt-16 dashboard-main-grid">
       <div class="dashboard-left-column">
@@ -6970,7 +7008,7 @@ function renderOnboardingPage() {
 
   els.pageContent.innerHTML = `
     <section class="onboarding-shell">
-      <article class="card onboarding-card">
+      <article class="card onboarding-card onboarding-step-${step}">
         <p class="onboarding-kicker">Первый запуск</p>
         <h2>Узнайте сколько платить налогов — за 1 минуту</h2>
         <p class="onboarding-lead">Выберите режим, заполните профиль, укажите примерный доход и сразу увидите ориентир по налогам.</p>
