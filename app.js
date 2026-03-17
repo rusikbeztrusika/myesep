@@ -2375,15 +2375,16 @@ function handleGlobalClick(event) {
       return;
     }
 
-    if (action === "open-login") {
+    if (action === "open-login" || action === "open-signup") {
       if (els.deadlineModal && !els.deadlineModal.classList.contains("hidden")) {
         state.landingDeadlineOpenId = null;
         saveState();
         closeModal(els.deadlineModal);
       }
-      setAuthMode("login");
+      const authMode = action === "open-signup" ? "signup" : "login";
+      setAuthMode(authMode);
       openModal(els.loginModal);
-      trackEvent("open_login_modal");
+      trackEvent(authMode === "signup" ? "open_signup_modal" : "open_login_modal");
       return;
     }
 
@@ -5122,7 +5123,7 @@ function renderLandingDeadlineLiteModal(row) {
   `;
 
   els.deadlineModalSubscribe.removeAttribute("data-deadline-subscribe");
-  els.deadlineModalSubscribe.setAttribute("data-action", "open-login");
+  els.deadlineModalSubscribe.setAttribute("data-action", "open-signup");
   els.deadlineModalSubscribe.classList.remove("subscribed", "locked");
   els.deadlineModalSubscribe.classList.add("landing-cta");
   els.deadlineModalSubscribe.removeAttribute("role");

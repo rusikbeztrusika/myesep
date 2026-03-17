@@ -7338,8 +7338,11 @@ h3,
   }
 
   #deadlineModal .modal-card.deadline-modal-card {
-    width: calc(100% - 14px);
+    width: min(100%, 560px);
+    max-width: calc(100vw - 28px);
     border-radius: 16px;
+    margin-left: auto;
+    margin-right: auto;
   }
 
   #deadlineModal .deadline-modal-head {
@@ -13651,7 +13654,10 @@ h4,
 
   /* Deadline checklist modal: mobile typography tune */
   #deadlineModal .modal-card.deadline-modal-card {
-    width: min(94vw, 560px);
+    width: min(100%, 560px);
+    max-width: calc(100vw - 28px);
+    margin-left: auto;
+    margin-right: auto;
   }
 
   #deadlineModal .deadline-modal-head {
@@ -14671,15 +14677,20 @@ body.onboarding-tour-active .onboarding-tour-highlight {
   }
 
   .calc-title {
-    display: inline;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    column-gap: 8px;
+    row-gap: 4px;
     text-align: center;
   }
 
   .calc-title .icon-inline {
     width: 16px;
     height: 16px;
-    margin: 0 6px 0 0;
-    vertical-align: -2px;
+    margin: 0;
+    vertical-align: middle;
     transform: none;
   }
 }
@@ -14713,20 +14724,7 @@ body.onboarding-tour-active .onboarding-tour-highlight {
   }
 
   .quick-calc .calc-head::before {
-    content: "КАЛЬКУЛЯТОР";
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0 auto 8px;
-    padding: 4px 10px;
-    border-radius: 999px;
-    font-family: "JetBrains Mono", monospace;
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    color: #dfe7ff;
-    border: 1px solid rgba(195, 208, 255, 0.38);
-    background: rgba(160, 175, 255, 0.14);
+    content: none;
   }
 }
 
@@ -14738,8 +14736,10 @@ body.onboarding-tour-active .onboarding-tour-highlight {
   }
 
   .quick-calc.card-dark {
-    width: 100%;
+    width: auto;
     max-width: 100%;
+    margin-left: auto;
+    margin-right: auto;
   }
 
   .page-content {
