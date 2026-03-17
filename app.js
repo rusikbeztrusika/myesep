@@ -1538,6 +1538,7 @@ async function init() {
       ensureDeadlineTrackingFrom();
       ensureRegistrationDate();
       saveState();
+      clearAuthHashAfterRedirect();
       updateAuthUi();
       renderDashboard();
     }
@@ -1545,6 +1546,35 @@ async function init() {
 
   logOpvDebugExample(22543233);
   trackEvent("visit");
+}
+
+function clearAuthHashAfterRedirect() {
+  if (!window.location || !window.history || typeof window.history.replaceState !== "function") {
+    return;
+  }
+
+  const rawHash = String(window.location.hash || "");
+  if (!rawHash) {
+    return;
+  }
+
+  const hash = rawHash.startsWith("#") ? rawHash.slice(1) : rawHash;
+  const authHashMarkers = [
+    "access_token=",
+    "refresh_token=",
+    "expires_in=",
+    "token_type=",
+    "type=recovery",
+    "type=signup",
+    "error=",
+    "error_description="
+  ];
+
+  if (!authHashMarkers.some((marker) => hash.includes(marker))) {
+    return;
+  }
+
+  window.history.replaceState(null, "", window.location.pathname);
 }
 
 function bindBaseEvents() {
