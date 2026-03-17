@@ -18,6 +18,7 @@ const APP_CONFIG = {
     ...((window.APP_CONFIG && window.APP_CONFIG.analytics) || {})
   }
 };
+const AUTH_REDIRECT_URL = "https://myesep.kz";
 
 const MRP_2026 = 4325;
 const MZP_2026 = 85000;
@@ -4073,7 +4074,7 @@ async function loginWithGoogle() {
 
   try {
     setLoginStatus("Перенаправляем в Google...");
-    const redirectTo = window.location.href.split("#")[0];
+    const redirectTo = AUTH_REDIRECT_URL;
     const { error } = await supabaseClient.auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo }
@@ -4100,7 +4101,7 @@ async function requestPasswordReset() {
 
   try {
     setLoginStatus("Отправляем письмо для восстановления...");
-    const redirectTo = window.location.href.split("#")[0];
+    const redirectTo = AUTH_REDIRECT_URL;
     const { error } = await supabaseClient.auth.resetPasswordForEmail(email, { redirectTo });
     if (error) throw error;
 
