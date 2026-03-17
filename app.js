@@ -5,7 +5,8 @@ const DEFAULT_CONFIG = {
   ownerProEmails: [],
   analytics: {
     googleTagId: "",
-    plausibleDomain: ""
+    plausibleDomain: "",
+    yandexMetrikaId: ""
   }
 };
 
@@ -9813,6 +9814,8 @@ function escapeHtml(value) {
 
 function trackEvent(name, payload = {}) {
   eventCounter += 1;
+  const yandexMetrikaIdRaw = APP_CONFIG.analytics.yandexMetrikaId;
+  const yandexMetrikaId = Number(yandexMetrikaIdRaw);
 
   if (window.gtag && APP_CONFIG.analytics.googleTagId) {
     window.gtag("event", name, payload);
@@ -9820,6 +9823,13 @@ function trackEvent(name, payload = {}) {
 
   if (window.plausible && APP_CONFIG.analytics.plausibleDomain) {
     window.plausible(name, { props: payload });
+  }
+
+  if (window.ym && Number.isFinite(yandexMetrikaId) && yandexMetrikaId > 0) {
+    window.ym(yandexMetrikaId, "reachGoal", name, payload);
+    if (name === "page_open" && payload && payload.page) {
+      window.ym(yandexMetrikaId, "hit", `/${String(payload.page).trim()}`);
+    }
   }
 
   console.info("[event]", eventCounter, name, payload);
@@ -9847,6 +9857,34 @@ function initAnalyticsProviders() {
     script.dataset.domain = APP_CONFIG.analytics.plausibleDomain;
     script.src = "https://plausible.io/js/script.js";
     document.head.appendChild(script);
+  }
+
+  const yandexMetrikaIdRaw = APP_CONFIG.analytics.yandexMetrikaId;
+  const yandexMetrikaId = Number(yandexMetrikaIdRaw);
+  if (Number.isFinite(yandexMetrikaId) && yandexMetrikaId > 0) {
+    (function loadYandexMetrika(d, w, id) {
+      if (w.ym) return;
+
+      const script = d.createElement("script");
+      script.async = true;
+      script.src = "https://mc.yandex.ru/metrika/tag.js";
+      d.head.appendChild(script);
+
+      w.ym = function ymProxy() {
+        (w.ym.a = w.ym.a || []).push(arguments);
+      };
+      w.ym.l = Date.now();
+      w.ym(id, "init", {
+        ssr: true,
+        clickmap: true,
+        trackLinks: true,
+        accurateTrackBounce: true,
+        webvisor: true,
+        ecommerce: "dataLayer",
+        referrer: d.referrer,
+        url: w.location.href
+      });
+    })(document, window, yandexMetrikaId);
   }
 }
 

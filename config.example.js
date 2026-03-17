@@ -7,6 +7,7 @@
   currency: "KZT",
   analytics: {
     googleTagId: "",
-    plausibleDomain: ""
+    plausibleDomain: "",
+    yandexMetrikaId: ""
   }
 };

@@ -21,6 +21,10 @@
    - `supabaseUrl`
    - `supabaseAnonKey`
    - `feedbackWebhookUrl` (URL Google Apps Script Web App для формы обратной связи)
+   - при необходимости аналитики:
+     - `analytics.googleTagId`
+     - `analytics.plausibleDomain`
+     - `analytics.yandexMetrikaId`
 3. Открой `index.html` в браузере или задеплой как статический сайт.
 
 ## Важно

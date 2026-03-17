@@ -8,7 +8,8 @@
   ownerProEmails: [],
   analytics: {
     googleTagId: "",
-    plausibleDomain: ""
+    plausibleDomain: "",
+    yandexMetrikaId: "107734503"
   }
 };
 

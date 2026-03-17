@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MyEsep.kz - Дашборд для ИП и самозанятых Казахстана</title>
-  <meta name="description" content="Дашборд для ИП и самозанятых Казахстана: налоги, сроки, доходы, сравнение режимов." />
+  <title>MyEsep.kz — Расчёт налогов для ИП и самозанятых в Казахстане</title>
+  <meta name="description" content="Узнайте, сколько платить в месяц: упрощёнка, ОУР, самозанятый. Сравнение режимов, сроки и напоминания. Без бухгалтера — результат за 30 секунд." />
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -405,11 +405,6 @@
         <button class="icon-btn" data-action="close-login" aria-label="Закрыть">&times;</button>
       </div>
 
-      <div class="login-trust">
-        <span>Безопасная сессия</span>
-        <span>Данные не передаются третьим лицам</span>
-      </div>
-
       <div class="login-mode-switch" role="tablist" aria-label="Режим авторизации">
         <button type="button" class="login-mode-btn active" data-login-mode="login" aria-pressed="true">Вход</button>
         <button type="button" class="login-mode-btn" data-login-mode="signup" aria-pressed="false">Регистрация</button>
@@ -432,6 +427,15 @@
           <input id="loginPassword" type="password" minlength="6" placeholder="Введите пароль" required />
         </label>
         <button id="loginSubmitBtn" type="submit" class="btn btn-primary login-primary">Войти</button>
+        <div class="login-trust" role="note">
+          <span class="icon-inline" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <rect x="5" y="10" width="14" height="10" rx="2"></rect>
+              <path d="M8 10V8a4 4 0 0 1 8 0v2"></path>
+            </svg>
+          </span>
+          <span class="login-trust-text">Защищённый вход. Данные не передаются третьим лицам.</span>
+        </div>
         <button type="button" class="login-forgot-btn" data-action="forgot-password">Забыли пароль?</button>
         <div class="login-auth-separator"><span>или</span></div>
         <button type="button" class="btn login-google-btn" data-action="login-google">
@@ -630,6 +634,9 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./config.js"></script>
   <script src="./app.js?v=20260316-dashboard-tune-3" defer></script>
+  <noscript>
+    <div><img src="https://mc.yandex.ru/watch/107734503" style="position:absolute; left:-9999px;" alt="" /></div>
+  </noscript>
 </body>
 </html>
 

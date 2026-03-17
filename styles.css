@@ -3526,22 +3526,24 @@ h3,
 
 #loginModal .login-trust {
   display: flex;
+  align-items: flex-start;
   gap: 8px;
-  flex-wrap: wrap;
-  padding: 14px 22px 0;
+  margin-top: 2px;
+  color: #6e7da7;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
 }
 
-#loginModal .login-trust span {
-  display: inline-flex;
-  align-items: center;
-  border: 1px solid #d6defb;
-  border-radius: 999px;
-  background: #eef3ff;
-  color: #5b6a95;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  padding: 5px 10px;
+#loginModal .login-trust .icon-inline {
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  color: #7a89b1;
+}
+
+#loginModal .login-trust-text {
+  display: inline-block;
 }
 
 #loginModal .login-mode-switch {
@@ -7047,7 +7049,6 @@ h3,
     font-size: 13px;
   }
 
-  #loginModal .login-trust,
   #loginModal .login-form,
   #loginModal .login-status {
     padding-left: 14px;
@@ -14659,30 +14660,27 @@ body.onboarding-tour-active .onboarding-tour-highlight {
 /* Quick-calc title icon alignment (mobile only) */
 @media (max-width: 768px) {
   .calc-head h2 {
-    max-width: none !important;
+    max-width: 100% !important;
     font-size: clamp(16px, 4.8vw, 21px);
     line-height: 1.18;
     letter-spacing: -0.01em;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    text-wrap: balance;
   }
 
   .calc-title {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
+    display: inline;
     text-align: center;
   }
 
   .calc-title .icon-inline {
     width: 16px;
     height: 16px;
-    margin: 0;
-    flex-shrink: 0;
-    transform: translateY(-1px);
+    margin: 0 6px 0 0;
+    vertical-align: -2px;
+    transform: none;
   }
 }
 
@@ -14729,5 +14727,43 @@ body.onboarding-tour-active .onboarding-tour-highlight {
     color: #dfe7ff;
     border: 1px solid rgba(195, 208, 255, 0.38);
     background: rgba(160, 175, 255, 0.14);
+  }
+}
+
+/* Income page mobile overflow guard */
+@media (max-width: 960px) {
+  .main-area {
+    overflow-x: hidden !important;
+    overflow-y: auto;
+  }
+
+  .quick-calc.card-dark {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .page-content {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
+  .grid.grid-2.income-layout {
+    grid-template-columns: minmax(0, 1fr) !important;
+    width: 100%;
+    min-width: 0;
+    overflow-x: clip;
+  }
+
+  .grid.grid-2.income-layout > .card {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .income-form input[type="date"] {
+    padding-right: 42px;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
