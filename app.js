@@ -1,4 +1,4 @@
-﻿const DEFAULT_CONFIG = {
+const DEFAULT_CONFIG = {
   supabaseUrl: "",
   supabaseAnonKey: "",
   feedbackWebhookUrl: "",
@@ -32,7 +32,9 @@ const SELF_LIMIT_ANNUAL_MRP = 3600;
 const SIMPLIFIED_LIMIT_ANNUAL_MRP = 600000;
 const SIMPLIFIED_SO_RATE = SO_RATE;
 const IPN_RATE_910 = 0.04;
-const SIMPLIFIED_IPN_RATE = IPN_RATE_910;
+const IPN_RATE_910_ASTANA = 0.03;
+const IPN_RATE_910_MIN = 0.02;
+const IPN_RATE_910_MAX = 0.06;
 const SELF_SOCIAL_COMPONENT_RATE = 0.01;
 const IPN_RATE_SAMOZANYATY = 0;
 const SELF_IPN_RATE = IPN_RATE_SAMOZANYATY;
@@ -359,11 +361,11 @@ const KNOWLEDGE_ARTICLES = [
     summary: "ИПН учитывается в структуре налога по упрощенке.",
     practical: "При скачках дохода сверяйте ИПН ежемесячно, а не только в конце периода.",
     when: "В рамках расчетов за период",
-    formula: `В модели сервиса: доход * ${SIMPLIFIED_IPN_RATE * 100}% (ежемесячно).`,
+    formula: "В модели сервиса: доход * ставка региона (2-6%) ежемесячно.",
     where: "Калькулятор режимов + сверка в e-Salyq",
     needs: ["Доход периода", "Выбранный режим 910"],
     note: "Модель дает ориентир, финальную сумму сверяйте официально.",
-    search: ["ипн", "910", `${SIMPLIFIED_IPN_RATE * 100}%`]
+    search: ["ипн", "910", "2-6%"]
   },
   {
     id: "esp-self",
@@ -1369,6 +1371,7 @@ const state = {
     iin: "",
     city: "Алматы",
     activity: "IT-услуги",
+    simplifiedRate: "",
     deadlineTrackingFrom: ""
   },
   calcIncome: 500000,
@@ -1593,6 +1596,7 @@ function loadState() {
   state.calendarPreServiceApplied = saved.calendarPreServiceApplied === true || saved.calendarPreServiceApplied === "true" || saved.calendarPreServiceApplied === 1;
   state.registrationDate = String(saved.registrationDate || "").trim();
   state.profile = { ...state.profile, ...(saved.profile || {}) };
+  state.profile.simplifiedRate = normalizeProfileSimplifiedRate(state.profile.simplifiedRate);
   const profileIin = String(state.profile.iin || "").trim();
   if (PROFILE_DEFAULT_IIN_PLACEHOLDERS.has(profileIin)) {
     state.profile.iin = "";
@@ -2112,6 +2116,9 @@ function updateAuthUi() {
   updateCalendarReminderToggleUi();
   updateMobileHeaderState();
   updateAmountsVisibilityUi();
+  if (window.lucide && typeof window.lucide.createIcons === "function") {
+    window.lucide.createIcons();
+  }
 }
 
 function updatePlanUi() {
@@ -4263,7 +4270,9 @@ function calcSelfEmployed(income) {
   const safeIncome = Math.max(0, Number(income) || 0);
   const opv = safeIncome * SELF_SOCIAL_COMPONENT_RATE;
   const opvr = safeIncome * SELF_SOCIAL_COMPONENT_RATE;
-  const so = safeIncome * SELF_SOCIAL_COMPONENT_RATE;
+  const soBaseCap = RATES.MZP * 7;
+  const soBase = Math.min(safeIncome, soBaseCap);
+  const so = soBase * SELF_SOCIAL_COMPONENT_RATE;
   const vosms = safeIncome * SELF_SOCIAL_COMPONENT_RATE;
   const ipn = safeIncome * SELF_IPN_RATE;
   const total = opv + opvr + so + vosms + ipn;
@@ -4296,10 +4305,11 @@ function calcSimplified(income) {
   const so = calcSocialContributionWithCap(safeIncome, opv, SIMPLIFIED_SO_RATE);
   const opvr = calcIpOpvr(safeIncome);
   const vosms = RATES.VOSMS;
-  const ipn = safeIncome * SIMPLIFIED_IPN_RATE;
+  const ipnRate = getActiveSimplifiedIpnRate();
+  const ipn = safeIncome * ipnRate;
   const socTax = 0;
   const total = opv + so + opvr + vosms + ipn + socTax;
-  return { opv, so, opvr, vosms, ipn, socTax, total, limit: SIMPLIFIED_LIMIT_ANNUAL };
+  return { opv, so, opvr, vosms, ipn, ipnRate, socTax, total, limit: SIMPLIFIED_LIMIT_ANNUAL };
 }
 
 function calcOUR(income, expenses = 0) {
@@ -4382,6 +4392,45 @@ function formatPct(value) {
   return `${Math.max(0, value).toFixed(1)}%`;
 }
 
+function formatRatePercent(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "0%";
+  const pct = numeric * 100;
+  return Number.isInteger(pct) ? `${pct}%` : `${pct.toFixed(1).replace(/\.0$/, "")}%`;
+}
+
+function normalizeProfileSimplifiedRate(value) {
+  if (value === "" || value === null || value === undefined || value === "auto") {
+    return "";
+  }
+
+  const numeric = Number(String(value).replace(",", "."));
+  if (!Number.isFinite(numeric)) return "";
+
+  const asRate = numeric > 1 ? numeric / 100 : numeric;
+  if (asRate < IPN_RATE_910_MIN || asRate > IPN_RATE_910_MAX) {
+    return "";
+  }
+
+  return Number(asRate.toFixed(4));
+}
+
+function getSimplifiedIpnRateByCity(cityValue) {
+  const normalizedCity = String(cityValue || "").trim().toLowerCase();
+  if (!normalizedCity) return IPN_RATE_910;
+  if (normalizedCity.includes("астана") || normalizedCity.includes("astana")) {
+    return IPN_RATE_910_ASTANA;
+  }
+  return IPN_RATE_910;
+}
+
+function getActiveSimplifiedIpnRate(profile = state.profile) {
+  const safeProfile = profile && typeof profile === "object" ? profile : {};
+  const manualRate = normalizeProfileSimplifiedRate(safeProfile.simplifiedRate);
+  if (manualRate !== "") return manualRate;
+  return getSimplifiedIpnRateByCity(safeProfile.city);
+}
+
 function getRegimeLimit(regime) {
   if (regime === "self") return SELF_LIMIT_ANNUAL;
   if (regime === "simplified") return SIMPLIFIED_LIMIT_ANNUAL;
@@ -4457,41 +4506,66 @@ function renderLandingSummary(bestRow, secondRow, multiplier, periodLabel, incom
     }));
 
   if (bestRow.id === "simplified") {
+    const simplifiedIpnRate = Number(bestRow.taxData && bestRow.taxData.ipnRate) || getActiveSimplifiedIpnRate();
     summaryRows.push({
-      label: `ИПН (4%) ${periodLabel}`,
-      value: income * SIMPLIFIED_IPN_RATE * multiplier
+      label: `ИПН (${formatRatePercent(simplifiedIpnRate)}) ${periodLabel}`,
+      value: Number(bestRow.taxData && bestRow.taxData.ipn || 0) * multiplier
     });
   }
 
   const lines = summaryRows
     .map((row) => `<span><b>${row.label}:</b> ${fmt(row.value)}</span>`)
     .join("");
+  const shouldCollapseBreakdown = typeof window !== "undefined"
+    && typeof window.matchMedia === "function"
+    && window.matchMedia("(max-width: 768px)").matches;
+  const breakdownSection = lines
+    ? `<details class="landing-breakdown-accordion"${shouldCollapseBreakdown ? "" : " open"}>
+        <summary>
+          <span class="landing-breakdown-label">Из чего состоит сумма</span>
+          <span class="landing-breakdown-meta">${summaryRows.length} строк</span>
+        </summary>
+        <div class="landing-breakdown">${lines}</div>
+      </details>`
+    : "";
+  const savingsPeriodSuffix = state.landingPeriod === "year" ? "/год" : "/мес";
+  const summaryChips = `
+    <div class="landing-summary-chips">
+      <span class="landing-summary-chip">${bestRow.label}</span>
+      ${savings > 0 ? `<span class="landing-summary-chip is-save">Экономия ${fmt(savings)}${savingsPeriodSuffix}</span>` : ""}
+    </div>
+  `;
 
   const isSelfIncomeWithinLimit = income <= SELF_LIMIT_MONTHLY;
   const landingHintTone = isSelfIncomeWithinLimit ? "success" : "warning";
+  const landingHintShortText = isSelfIncomeWithinLimit
+    ? "Подходит Самозанятый."
+    : "Доход выше лимита Самозанятого.";
   const landingHintText = isSelfIncomeWithinLimit
     ? "Вам подходит Самозанятый — никакого ИП, минимум налогов."
     : "Ваш доход выше лимита Самозанятого — выгоднее открыть ИП на Упрощёнке.";
   const landingHintCtaText = isSelfIncomeWithinLimit
     ? "Зарегистрироваться бесплатно >"
-    : "Рассчитать точно >";
+    : "Сохранить и перейти в личный кабинет →";
 
   els.landingSummary.innerHTML = `
     <article class="landing-summary-card">
       <div class="landing-summary-main">
         <small>Итого к уплате ${periodLabel}</small>
         <div class="landing-summary-amount">${fmt(total)}</div>
-        <p>
-          Режим: <strong>${bestRow.label}</strong>
-          ${savings > 0 ? ` · Экономия ${fmt(savings)} относительно ${secondRow.label}` : ""}
-        </p>
-        <p class="landing-period-context">Ввод: ${fmt(income)} в месяц · Показано: налоги ${periodLabel}.</p>
+        ${summaryChips}
         <div class="landing-practical-hint ${landingHintTone}">
-          <span>${landingHintText}</span>
+          <div class="landing-practical-copy">
+            <span class="landing-practical-line">${landingHintShortText}</span>
+            <details class="landing-practical-more">
+              <summary>Подробнее</summary>
+              <p>${landingHintText}</p>
+            </details>
+          </div>
           <button type="button" class="landing-practical-cta" data-action="scroll-landing-signup">${landingHintCtaText}</button>
         </div>
       </div>
-      ${lines ? `<div class="landing-breakdown">${lines}</div>` : ""}
+      ${breakdownSection}
     </article>
   `;
 }
@@ -5493,6 +5567,7 @@ function getTaxLoadModalModel(regime, tax, income = 0) {
   const payNow = getTaxLoadPayNow(regime, tax);
   const dueDateLabel = getNextTaxDueDateLabel();
   const currentYear = new Date().getFullYear();
+  const simplifiedIpnRate = Number((tax && tax.ipnRate) || 0) || getActiveSimplifiedIpnRate();
 
   if (regime === "self") {
     return {
@@ -5500,7 +5575,7 @@ function getTaxLoadModalModel(regime, tax, income = 0) {
       payNowRows: [
         { label: "ОПВ (1%)", value: opv },
         { label: "ОПВР (1%)", value: opvr },
-        { label: "СО (1%)", value: so },
+        { label: "СО (1%, до 7 МЗП)", value: so },
         { label: "ВОСМС (1%)", value: vosms }
       ],
       payNowTotalLabel: "Итого сейчас",
@@ -5509,7 +5584,7 @@ function getTaxLoadModalModel(regime, tax, income = 0) {
       payLaterRows: [],
       payLaterNotes: [],
       infoLines: [
-        "Самозанятый платит только 4% соцплатежей. ИПН = 0%."
+        "Самозанятый платит 1% ОПВ, 1% ОПВР, 1% ВОСМС и СО 1% с лимитом до 7 МЗП. ИПН = 0%."
       ]
     };
   }
@@ -5527,7 +5602,7 @@ function getTaxLoadModalModel(regime, tax, income = 0) {
       payNowTotal: payNow,
       payLaterTitle: "Платить в августе (за I полугодие)",
       payLaterRows: [
-        { label: "ИПН (4% от дохода за полугодие)", value: ipn, suffix: "/мес" }
+        { label: `ИПН (${formatRatePercent(simplifiedIpnRate)} от дохода за полугодие)`, value: ipn, suffix: "/мес" }
       ],
       payLaterNotes: [
         `Срок уплаты: до 25 августа ${currentYear}`,
@@ -6411,17 +6486,17 @@ function renderDashboard() {
 
 function renderDashboardPage() {
   const dashboardIncomes = getDashboardIncomesForView();
-  const hasDashboardData = dashboardIncomes.length > 0;
   const showWelcomeBanner = state.incomes.length === 0;
 
   const monthlyData = getMonthlyData(dashboardIncomes);
   const maxIncome = Math.max(...monthlyData.map((x) => x.income), 1);
+  const monthsWithEntriesCount = monthlyData.filter((row) => Number(row.entries || 0) > 0).length;
+  const hasAnyMonthsHistory = monthsWithEntriesCount > 0;
+  const hasThreeMonthsHistory = monthsWithEntriesCount >= 3;
 
   const currentIncome = getCurrentMonthIncome(dashboardIncomes);
   const totalIncome = getTotalIncome(dashboardIncomes);
   const currentTax = calcByRegime(state.regime, currentIncome, state.calcExpenses);
-  const showZeroIncomeMinimumNote = currentIncome <= 0 && state.regime === "simplified";
-  const showSelfZeroIncomeHint = currentIncome <= 0 && state.regime === "self" && state.incomes.length === 0;
   const limit = getRegimeLimit(state.regime);
   const limitPct = limit ? Math.min((totalIncome / limit) * 100, 100) : null;
   const safeLimitPct = limitPct === null ? null : Math.round(limitPct);
@@ -6486,15 +6561,6 @@ function renderDashboardPage() {
   const taxLoadTitle = `ЗАПЛАТИТЬ В ${taxLoadMonthLabel}`;
   const taxLoadIpnReserve = Math.max(0, Math.round((currentTax && currentTax.ipn) || 0));
   const taxLoadOpvSavings = Math.max(0, Math.round((currentTax && currentTax.opv) || 0));
-  const taxLoadIpnReserveLine = state.regime === "simplified"
-    ? `+ <span class="amount-sensitive">${fmt(taxLoadIpnReserve)}</span> откладывать на ИПН (платить в августе)`
-    : `+ <span class="amount-sensitive">${fmt(taxLoadIpnReserve)}</span> откладывать на ИПН`;
-  const taxLoadRate = currentIncome > 0 ? currentTax.total / currentIncome : 0;
-  const isHighTaxLoad = currentIncome > 0 && taxLoadRate > 0.3;
-  const isIpAccount = isIpAccountProfile();
-  const highTaxLoadHint = isIpAccount
-    ? "Самозанятый доступен только без статуса ИП. Для ИП сравнивайте 910 и ОУР."
-    : "При низком доходе выгоднее режим Самозанятый — там нет фиксированных минимумов, только 4% от дохода.";
   const infoHintIcon = '<span class="inline-info-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><circle cx="12" cy="12" r="9"></circle><path d="M12 10v6"></path><path d="M12 7h.01"></path></svg></span>';
   const bars = monthlyData
     .map((row, index) => {
@@ -6569,11 +6635,6 @@ function renderDashboardPage() {
       return `${dateObj.getDate()} ${MONTHS_GENITIVE[dateObj.getMonth()] || ""}`.trim();
     })()
     : "Нет срока";
-  const taxLoadEmptyHint = showZeroIncomeMinimumNote
-    ? "минимум при нулевом доходе"
-    : showSelfZeroIncomeHint
-      ? "добавьте доход чтобы увидеть расчёт"
-      : "";
   const taxLoadDueDateLabel = getNextTaxDueDateLabel();
   const kpiActionClass = isMobileKpiMode ? " kpi-card-actionable" : "";
   const incomeKpiActionAttrs = isMobileKpiMode
@@ -6641,7 +6702,7 @@ function renderDashboardPage() {
   const isSelfRegime = state.regime === "self";
   const taxRowsForKpiSheet = [
     { label: isSelfRegime ? "ОПВ (1%)" : "ОПВ", value: Number(currentTax.opv || 0) },
-    { label: isSelfRegime ? "СО (1%)" : "СО", value: Number(currentTax.so || 0) },
+    { label: isSelfRegime ? "СО (1%, до 7 МЗП)" : "СО", value: Number(currentTax.so || 0) },
     { label: isSelfRegime ? "ОПВР (1%)" : "ОПВР", value: Number(currentTax.opvr || 0) },
     { label: isSelfRegime ? "ВОСМС (1%)" : "ВОСМС", value: Number(currentTax.vosms || 0) }
   ];
@@ -6704,9 +6765,9 @@ function renderDashboardPage() {
           </span>
         </div>
         <div class="stat-value amount-sensitive${incomeKpiValueClass}">${incomeKpiValueText}</div>
-        <div class="income-hero-meta">
-          <div class="kpi-trend ${incomeTrend.className}">${incomeTrend.text}</div>
-        </div>
+        ${hasThreeMonthsHistory
+          ? `<div class="income-hero-meta"><div class="kpi-trend ${incomeTrend.className}">${incomeTrend.text}</div></div>`
+          : ""}
         ${!isMobileKpiMode
           ? '<button type="button" class="income-hero-cta" data-page="income" aria-label="Перейти к добавлению дохода">+ Добавить доход</button>'
           : ""}
@@ -6716,23 +6777,9 @@ function renderDashboardPage() {
   const taxLoadKpiCardMarkup = `
       <article class="card kpi-card danger tax-load-kpi${kpiActionClass}" data-tour-target="tax-load" ${taxKpiActionAttrs}>
         <div class="stat-title">${taxLoadTitle}</div>
-        ${!isMobileKpiMode && isHighTaxLoad ? '<span class="badge badge-warning tax-load-warning-badge">Высокая нагрузка</span>' : ""}
         <div class="stat-value stat-danger amount-sensitive${taxLoadKpiValueClass}">${taxLoadKpiValueText}</div>
-        ${isMobileKpiMode
-          ? `
-            <div class="tax-load-mobile-meta">
-              <div class="stat-sub tax-load-mobile-due">до ${taxLoadDueDateLabel}</div>
-              <div class="tax-load-mobile-cta">Открыть расшифровку&nbsp;&rarr;</div>
-            </div>
-          `
-          : `
-            <div class="tax-load-monthly-note">Ежемесячно: <span class="amount-sensitive">${fmt(taxLoadPayNow)}</span> (без ИПН — он платится раз в полгода)</div>
-            ${taxLoadEmptyHint ? `<div class="stat-sub tax-load-min-note">${taxLoadEmptyHint}</div>` : ""}
-            <div class="stat-sub tax-load-meta-line">${taxLoadIpnReserveLine}</div>
-            <div class="stat-sub tax-load-meta-line">из них <span class="amount-sensitive">${fmt(taxLoadOpvSavings)}</span> — ваши накопления на пенсии</div>
-            <div class="stat-sub tax-load-hint">${infoHintIcon}Нажмите для расшифровки</div>
-            ${isHighTaxLoad ? `<div class="tax-load-warning-hint">${highTaxLoadHint}</div>` : ""}
-          `}
+        <div class="tax-load-monthly-note">Ежемесячно</div>
+        <div class="stat-sub tax-load-hint">${infoHintIcon}Нажмите для расшифровки</div>
       </article>
   `;
 
@@ -6759,13 +6806,19 @@ function renderDashboardPage() {
       </div>
     `;
 
-  const chartSectionHtml = hasDashboardData
+  const chartPlaceholderBars = Array.from({ length: 12 }, (_, index) => `
+      <div class="chart-item chart-item-placeholder" aria-hidden="true">
+        <div class="chart-bar chart-bar-placeholder" style="height:68px"></div>
+        <span>${MONTHS[index]}</span>
+      </div>
+    `).join("");
+  const chartSectionHtml = hasAnyMonthsHistory
     ? `<div class="chart-row">${bars}</div>`
     : `
-      <div class="dashboard-empty-state">
-        <p>Здесь появится ваш график</p>
-        <button type="button" class="btn btn-ghost" data-page="income">+ Добавить доход</button>
+      <div class="chart-row chart-row-placeholder" aria-label="Плейсхолдер графика">
+        ${chartPlaceholderBars}
       </div>
+      <p class="chart-placeholder-note">Добавьте первый доход, чтобы увидеть график</p>
     `;
 
   const taxSectionHtml = (() => {
@@ -6778,7 +6831,7 @@ function renderDashboardPage() {
     const noIncomeHint = selectedMonthHasIncome ? "" : '<p class="dashboard-tax-empty-note">В этом месяце доходов не добавлено</p>';
     const payNowRows = [
       { label: isSelfRegime ? "ОПВ (1%)" : "ОПВ (10%)", value: selectedTax.opv || 0 },
-      { label: isSelfRegime ? "СО (1%)" : "СО (5%)", value: selectedTax.so || 0 },
+      { label: isSelfRegime ? "СО (1%, до 7 МЗП)" : "СО (5%)", value: selectedTax.so || 0 },
       { label: isSelfRegime ? "ОПВР (1%)" : "ОПВР (3.5%)", value: selectedTax.opvr || 0 },
       { label: isSelfRegime ? "ВОСМС (1%)" : "ВОСМС", value: selectedTax.vosms || 0 }
     ];
@@ -6792,7 +6845,7 @@ function renderDashboardPage() {
     }
 
     const payLaterLabel = isSimplifiedRegime
-      ? "ИПН (4% от дохода)"
+      ? `ИПН (${formatRatePercent(Number(selectedTax.ipnRate || 0) || getActiveSimplifiedIpnRate())} от дохода)`
       : isOurRegime
         ? "ИПН (10% после вычетов)"
         : "ИПН (0%)";
@@ -7179,10 +7232,10 @@ function renderOnboardingPage() {
           <button type="button" class="step-btn" data-onboarding-income-step="50000">+</button>
         </div>
         <div class="onboarding-income-presets">
-          <button type="button" data-onboarding-income-preset="200000">200k</button>
-          <button type="button" data-onboarding-income-preset="400000">400k</button>
-          <button type="button" data-onboarding-income-preset="700000">700k</button>
-          <button type="button" data-onboarding-income-preset="1000000">1M</button>
+          <button type="button" data-onboarding-income-preset="200000">200 тыс ₸</button>
+          <button type="button" data-onboarding-income-preset="400000">400 тыс ₸</button>
+          <button type="button" data-onboarding-income-preset="700000">700 тыс ₸</button>
+          <button type="button" data-onboarding-income-preset="1000000">1 млн ₸</button>
         </div>
       </div>
       <div class="onboarding-actions">
@@ -7227,7 +7280,7 @@ function renderOnboardingPage() {
     const monthlyLines = regime === "self"
       ? [
           { label: "ОПВ (1%)", value: taxes.opv },
-          { label: "СО (1%)", value: taxes.so },
+          { label: "СО (1%, до 7 МЗП)", value: taxes.so },
           { label: "ОПВР (1%)", value: taxes.opvr },
           { label: "ВОСМС (1%)", value: taxes.vosms }
         ]
@@ -7249,7 +7302,7 @@ function renderOnboardingPage() {
     const periodicLines = regime === "self"
       ? []
       : regime === "simplified"
-        ? [{ label: "ИПН (4%)", value: taxes.ipn }]
+        ? [{ label: `ИПН (${formatRatePercent(Number(taxes.ipnRate || 0) || getActiveSimplifiedIpnRate())})`, value: taxes.ipn }]
         : [{ label: "ИПН (10%)", value: taxes.ipn }];
     const socialTaxHint = regime === "simplified" ? '<p class="onboarding-tax-note-muted">Соц. налог: освобождены</p>' : "";
 
@@ -7654,7 +7707,7 @@ function renderIncomePage() {
       showTrialBanner
         ? `
       <article class="card income-trial-notice" role="status" aria-live="polite">
-        <p>У вас осталось <strong>${remainingTrialOps}</strong> ${remainingTrialOps === 1 ? "операция" : remainingTrialOps >= 2 && remainingTrialOps <= 4 ? "операции" : "операций"} в Trial. <button type="button" class="income-trial-link" data-action="open-pro">Перейдите на Pro для неограниченного учёта →</button></p>
+        <p>У вас осталось <strong>${remainingTrialOps}</strong> ${remainingTrialOps === 1 ? "операция" : remainingTrialOps >= 2 && remainingTrialOps <= 4 ? "операции" : "операций"} в Trial. <button type="button" class="income-trial-link" data-action="open-pro">Перейдите на Pro бесплатно на 30 дней →</button></p>
         <button type="button" class="income-trial-close" data-action="dismiss-income-trial-banner" aria-label="Закрыть уведомление">×</button>
       </article>
     `
@@ -7674,10 +7727,10 @@ function renderIncomePage() {
             <label>Сумма (₸)
               <input id="incomeAmountInput" name="amount" type="number" min="0" step="1" value="${editingIncome ? Math.round(editingIncome.amount) : ""}" required />
               <div class="amount-presets" aria-label="Быстрый выбор суммы">
-                <button type="button" data-income-preset="50000">50k</button>
-                <button type="button" data-income-preset="100000">100k</button>
-                <button type="button" data-income-preset="250000">250k</button>
-                <button type="button" data-income-preset="500000">500k</button>
+                <button type="button" data-income-preset="50000">50 тыс ₸</button>
+                <button type="button" data-income-preset="100000">100 тыс ₸</button>
+                <button type="button" data-income-preset="250000">250 тыс ₸</button>
+                <button type="button" data-income-preset="500000">500 тыс ₸</button>
               </div>
             </label>
           </div>
@@ -8146,10 +8199,10 @@ function renderTaxesPage() {
   const incomePresetsHtml = `
     <div class="tax-presets">
       <span>Быстрый доход:</span>
-      <button type="button" data-tax-income-preset="200000">200k</button>
-      <button type="button" data-tax-income-preset="500000">500k</button>
-      <button type="button" data-tax-income-preset="1000000">1M</button>
-      <button type="button" data-tax-income-preset="2000000">2M</button>
+      <button type="button" data-tax-income-preset="200000">200 тыс ₸</button>
+      <button type="button" data-tax-income-preset="500000">500 тыс ₸</button>
+      <button type="button" data-tax-income-preset="1000000">1 млн ₸</button>
+      <button type="button" data-tax-income-preset="2000000">2 млн ₸</button>
     </div>
   `;
   const expensePresetsHtml = `
@@ -9140,7 +9193,7 @@ function getKnowledgeFno910Personalization() {
 
   const planner = getTaxPlannerState();
   const monthlyIncome = Math.max(0, normalizeIncome(planner.income || getTaxPlannerFallbackIncome()));
-  const estimatedHalfYearAmount = monthlyIncome * 6 * SIMPLIFIED_IPN_RATE;
+  const estimatedHalfYearAmount = monthlyIncome * 6 * getActiveSimplifiedIpnRate();
   const deadlineLabel = nextDeadline
     ? new Intl.DateTimeFormat("ru-KZ", { day: "numeric", month: "long" }).format(new Date(nextDeadline.date))
     : "";
@@ -9443,7 +9496,8 @@ function getSettingsFormValues(form) {
       name: String(state.profile.name || "").trim(),
       iin: String(state.profile.iin || "").trim(),
       city: String(state.profile.city || "").trim(),
-      activity: normalizeSettingsActivity(state.profile.activity)
+      activity: normalizeSettingsActivity(state.profile.activity),
+      simplifiedRate: normalizeProfileSimplifiedRate(state.profile.simplifiedRate)
     };
   }
 
@@ -9461,7 +9515,8 @@ function getSettingsFormValues(form) {
     name: String(fd.get("name") || "").trim(),
     iin,
     city: String(fd.get("city") || "").trim(),
-    activity: normalizeSettingsActivity(fd.get("activity"))
+    activity: normalizeSettingsActivity(fd.get("activity")),
+    simplifiedRate: normalizeProfileSimplifiedRate(fd.get("simplifiedRate"))
   };
 }
 
@@ -9470,7 +9525,8 @@ function hasSettingsProfileChanges(nextValues) {
     String(nextValues.name || "") !== String(state.profile.name || "") ||
     String(nextValues.iin || "") !== String(state.profile.iin || "") ||
     String(nextValues.city || "") !== String(state.profile.city || "") ||
-    String(nextValues.activity || "") !== normalizeSettingsActivity(state.profile.activity)
+    String(nextValues.activity || "") !== normalizeSettingsActivity(state.profile.activity) ||
+    normalizeProfileSimplifiedRate(nextValues.simplifiedRate) !== normalizeProfileSimplifiedRate(state.profile.simplifiedRate)
   );
 }
 
@@ -9530,6 +9586,22 @@ function renderSettingsPage() {
       : "Trial: базовый расчет и учет. Pro: напоминания, расширенная аналитика и экспорт.";
   const maskedIin = maskSettingsIin(state.profile.iin);
   const settingsCityValue = String(state.profile.city || "").trim();
+  const profileRateOverride = normalizeProfileSimplifiedRate(state.profile.simplifiedRate);
+  const autoSimplifiedRate = getSimplifiedIpnRateByCity(settingsCityValue);
+  const activeSimplifiedRate = getActiveSimplifiedIpnRate();
+  const simplifiedRateSource = profileRateOverride !== ""
+    ? "ручная ставка"
+    : autoSimplifiedRate === IPN_RATE_910_ASTANA
+      ? "авто по городу: Астана"
+      : "авто по умолчанию";
+  const settingsSimplifiedRateOptions = [
+    `<option value="auto" ${profileRateOverride === "" ? "selected" : ""}>Авто (${formatRatePercent(autoSimplifiedRate)})</option>`,
+    `<option value="0.02" ${profileRateOverride === 0.02 ? "selected" : ""}>2%</option>`,
+    `<option value="0.03" ${profileRateOverride === 0.03 ? "selected" : ""}>3%</option>`,
+    `<option value="0.04" ${profileRateOverride === 0.04 ? "selected" : ""}>4%</option>`,
+    `<option value="0.05" ${profileRateOverride === 0.05 ? "selected" : ""}>5%</option>`,
+    `<option value="0.06" ${profileRateOverride === 0.06 ? "selected" : ""}>6%</option>`
+  ].join("");
   const settingsCityOptions = [
     `<option value="" ${settingsCityValue ? "" : "selected"}>Не указан</option>`,
     ...SETTINGS_PROFILE_CITIES.map(
@@ -9577,6 +9649,11 @@ function renderSettingsPage() {
               ${settingsActivityOptions}
             </select>
           </label>
+          <label>Ставка ИПН 910
+            <select name="simplifiedRate">
+              ${settingsSimplifiedRateOptions}
+            </select>
+          </label>
           <div class="settings-form-actions">
             <button type="submit" class="btn btn-primary" data-action="save-settings" disabled>Сохранить</button>
           </div>
@@ -9592,6 +9669,7 @@ function renderSettingsPage() {
             <tr><td>ОПВ</td><td>10%</td></tr>
             <tr><td>СО (упрощенка 910)</td><td>5%</td></tr>
             <tr><td>СО (ОУР)</td><td>5%</td></tr>
+            <tr><td>ИПН (упрощенка 910)</td><td>${formatRatePercent(activeSimplifiedRate)} · ${simplifiedRateSource}</td></tr>
             <tr><td>ВОСМС</td><td>${fmt(RATES.VOSMS)}/мес</td></tr>
             <tr><td>Лимит упрощенки</td><td>${fmt(SIMPLIFIED_LIMIT_ANNUAL)}/год</td></tr>
             <tr><td>Лимит самозанятого</td><td>${fmt(SELF_LIMIT_MONTHLY)}/мес · ${fmt(SELF_LIMIT_ANNUAL)}/год</td></tr>
@@ -9630,7 +9708,7 @@ function getTaxLines(tax, regime) {
     return [
       { label: "ОПВ (1%)", value: tax.opv },
       { label: "ОПВР (1%)", value: tax.opvr },
-      { label: "СО (1%)", value: tax.so },
+      { label: "СО (1%, до 7 МЗП)", value: tax.so },
       { label: "ВОСМС (1%)", value: tax.vosms }
     ];
   }
@@ -9647,7 +9725,7 @@ function getTaxLines(tax, regime) {
       { label: "СО (5%)", value: tax.so },
       { label: isMinimumScenario ? "ОПВР (3.5% от МЗП, минимум)" : "ОПВР (3.5% от дохода, до 50 МЗП)", value: tax.opvr },
       { label: "ВОСМС", value: tax.vosms },
-      { label: "ИПН (4%)", value: tax.ipn },
+      { label: `ИПН (${formatRatePercent(Number(tax.ipnRate || 0) || getActiveSimplifiedIpnRate())})`, value: tax.ipn },
       { label: "Соц. налог", value: tax.socTax }
     ];
   }

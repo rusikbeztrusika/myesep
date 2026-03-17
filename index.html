@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Montserrat:wght@600;700;800&family=Rubik:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=20260315-mobile-ux-8" />
+  <link rel="stylesheet" href="./styles.css?v=20260317-landing-hero-rhythm-13" />
 </head>
 <body>
   <div id="publicApp" class="public-app">
@@ -25,13 +25,14 @@
       <div class="chip">Новый налоговый кодекс 2026 · Казахстан</div>
       <h1>Знай, сколько платить.<br /><span>Не плати лишнего.</span></h1>
       <p>
-        С 2026 года налоговые правила для ИП изменились. Введите доход — получите точный расчёт ОПВ, СО и ИПН за секунды. Без бухгалтера. Без карты.
+        <span class="hero-subtitle-desktop">С 2026 года налоговые правила для ИП изменились. Введите доход — получите точный расчёт ОПВ, СО и ИПН за секунды. Без бухгалтера. Без карты.</span>
+        <span class="hero-subtitle-mobile">С 2026 года налоговые правила для ИП изменились. Введите доход — получите точный расчёт налогов за секунды. Без бухгалтера. Без карты.</span>
       </p>
       <button class="btn btn-primary btn-glow" data-action="open-login">Считать налоги бесплатно ></button>
     </section>
 
     <section class="trust-strip">
-      <article class="trust-card">
+      <article class="trust-card trust-card-penalty">
         <h3 class="trust-title"><span class="icon-inline" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><rect x="3" y="4" width="18" height="17" rx="3"></rect><path d="M8 2.8v3.5"></path><path d="M16 2.8v3.5"></path><path d="M3 9h18"></path><path d="M12 12.8v4"></path><circle cx="12" cy="18.2" r="0.7"></circle></svg></span>Штраф за просрочку — до 118&nbsp;000&nbsp;₸</h3>
         <p>Сервис показывает критичные сроки и напоминает за 7, 3 и 1 день до даты уплаты.</p>
       </article>
@@ -71,10 +72,10 @@
       <p class="calc-input-note">Ввод всегда в месяц. Переключатель сверху меняет период показа налога.</p>
 
       <div class="income-presets" aria-label="Быстрый выбор дохода">
-        <button type="button" data-landing-preset="300000">300k</button>
-        <button type="button" data-landing-preset="400000" class="active">400k</button>
-        <button type="button" data-landing-preset="500000">500k</button>
-        <button type="button" data-landing-preset="1000000">1M</button>
+        <button type="button" data-landing-preset="300000">300 тыс ₸</button>
+        <button type="button" data-landing-preset="400000" class="active">400 тыс ₸</button>
+        <button type="button" data-landing-preset="500000">500 тыс ₸</button>
+        <button type="button" data-landing-preset="1000000">1 млн ₸</button>
       </div>
 
       <div id="landingSummary" class="landing-summary"></div>
@@ -87,7 +88,7 @@
       <div id="landingCards" class="regime-cards"></div>
 
       <div class="quick-footer">
-        <button class="btn btn-primary btn-with-icon" data-action="open-login"><span class="icon-inline" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><rect x="3" y="4" width="18" height="14" rx="2"></rect><path d="M8 20h8"></path><path d="M12 12l4-4"></path><path d="M16 8h-4"></path><path d="M16 8v4"></path></svg></span>Сохранить расчёт и открыть дашборд ></button>
+        <button class="btn btn-primary btn-with-icon" data-action="open-login"><span class="icon-inline" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><rect x="3" y="4" width="18" height="14" rx="2"></rect><path d="M8 20h8"></path><path d="M12 12l4-4"></path><path d="M16 8h-4"></path><path d="M16 8v4"></path></svg></span>Сохранить и перейти в личный кабинет →</button>
       </div>
     </section>
     <section class="landing-block how-it-works landing-animate landing-delay-1">
@@ -194,9 +195,18 @@
           </span>Начать считать налоги бесплатно ></button>
         <p>Без карты. Доступ за 2 минуты.</p>
         <div class="landing-proof">
-          <span>Локально для РК</span>
-          <span>Без карты</span>
-          <span>30 дней Pro бесплатно</span>
+          <span>
+            <i class="proof-lucide" data-lucide="map-pin" aria-hidden="true"></i>
+            Локально для РК
+          </span>
+          <span>
+            <i class="proof-lucide" data-lucide="credit-card" aria-hidden="true"></i>
+            Без карты
+          </span>
+          <span>
+            <i class="proof-lucide" data-lucide="zap" aria-hidden="true"></i>
+            30 дней Pro бесплатно
+          </span>
         </div>
       </div>
     </section>
@@ -619,7 +629,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./config.js"></script>
-  <script src="./app.js?v=20260315-mobile-ux-8" defer></script>
+  <script src="./app.js?v=20260316-dashboard-tune-3" defer></script>
 </body>
 </html>
 

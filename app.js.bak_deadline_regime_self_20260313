@@ -1,4 +1,4 @@
-﻿const DEFAULT_CONFIG = {
+const DEFAULT_CONFIG = {
   supabaseUrl: "",
   supabaseAnonKey: "",
   feedbackWebhookUrl: "",
@@ -3282,7 +3282,7 @@ function renderLandingSummary(bestRow, secondRow, multiplier, periodLabel, incom
     : "Ваш доход выше лимита Самозанятого — выгоднее открыть ИП на Упрощёнке.";
   const landingHintCtaText = isSelfIncomeWithinLimit
     ? "Зарегистрироваться бесплатно →"
-    : "Рассчитать точно →";
+    : "Сохранить и перейти в личный кабинет →";
 
   els.landingSummary.innerHTML = `
     <article class="landing-summary-card">
