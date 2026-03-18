@@ -4497,6 +4497,7 @@ async function flushTaxProfileUpsert() {
 
   taxProfileUpsertInFlight = true;
   try {
+    const supabase = supabaseClient;
     const userIdFromState = String(state.userId || "").trim();
     let userId = userIdFromState;
 
@@ -4513,7 +4514,7 @@ async function flushTaxProfileUpsert() {
 
     const row = {
       user_id: userId,
-      full_name: state.profile?.name || "",
+      full_name: state.profile?.name || (await supabase.auth.getUser())?.data?.user?.user_metadata?.full_name || (await supabase.auth.getUser())?.data?.user?.user_metadata?.name || "",
       ...payload
     };
     const rowKey = JSON.stringify(row);
