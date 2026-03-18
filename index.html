@@ -536,18 +536,21 @@
       </div>
       <div class="reminders-settings-intro" role="note" aria-live="polite">
         <i class="reminders-settings-intro-icon" data-lucide="bell" aria-hidden="true"></i>
-        <p>Мы будем напоминать о каждом налоговом сроке по вашему режиму — за 7, 3 и 1 день до срока оплаты. Так вы не пропустите платёж и избежите штрафов.</p>
+        <p>Выберите когда получать напоминания о налоговых сроках. Уведомления придут на email и в Telegram.</p>
       </div>
       <form id="remindersSettingsForm" class="reminders-settings-form">
         <label>Email
           <input id="remindersSettingsEmail" name="email" type="email" placeholder="you@email.com" />
         </label>
+        <p style="margin:4px 0 0;font-size:12px;color:#888">Уведомления будут отправлены на этот адрес</p>
         <div class="reminders-telegram-connect-wrap">
           <button type="button" class="btn btn-ghost reminders-telegram-connect" id="remindersTelegramConnectBtn" data-action="connect-reminders-telegram">Подключить Telegram →</button>
           <span id="remindersTelegramConnectedBadge" class="reminders-telegram-connected hidden">✅ Telegram подключён</span>
+          <button type="button" class="reminders-telegram-disconnect hidden" id="remindersTelegramDisconnectBtn" data-action="disconnect-reminders-telegram">Отключить</button>
         </div>
         <fieldset class="reminders-settings-days">
           <legend>Когда напоминать</legend>
+          <p style="margin:0 0 8px;font-size:12px;color:#888">Применяется к Telegram и email</p>
           <label><input type="checkbox" name="days" value="7" checked /> За 7 дней</label>
           <label><input type="checkbox" name="days" value="3" checked /> За 3 дня</label>
           <label><input type="checkbox" name="days" value="1" checked /> За 1 день</label>
@@ -557,8 +560,10 @@
         <div class="reminders-settings-actions">
           <button type="button" class="btn btn-ghost" data-action="close-reminders-settings">Отмена</button>
           <button type="submit" class="btn btn-primary" id="remindersSettingsSubmit">Сохранить настройки</button>
+          <button type="button" class="btn btn-ghost" id="remindersSettingsTestBtn" data-action="send-reminders-test">Отправить тестовое</button>
         </div>
-        <button type="button" class="reminders-settings-disable-link hidden" id="remindersSettingsDisableLink" data-action="disable-reminders">Отключить напоминания</button>
+        <hr style="border:none;border-top:1px solid #eee;margin:16px 0">
+        <button type="button" class="reminders-settings-disable-link hidden" id="remindersSettingsDisableLink" data-action="disable-reminders" style="font-size:13px;">Отключить напоминания</button>
       </form>
     </div>
   </div>
@@ -639,7 +644,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./config.js"></script>
-  <script src="./app.js?v=20260316-dashboard-tune-3" defer></script>
+  <script src="./app.js?v=20260317-tax-kpi-ipn-note-1" defer></script>
   <!-- Yandex.Metrika counter -->
   <script type="text/javascript">
     (function(m,e,t,r,i,k,a){

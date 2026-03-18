@@ -1242,9 +1242,22 @@ function getReminderTelegramStartId() {
 function syncRemindersTelegramUi(model = null) {
   const normalized = model || normalizeGlobalReminders(state.reminders, getReminderDefaultEmail()) || getDefaultGlobalReminders();
   const telegramConnected = Boolean(normalized.telegramConnected || normalized.telegram);
+  const normalizeDisconnectBtn = (btn) => {
+    if (!(btn instanceof HTMLButtonElement)) {
+      return null;
+    }
+    btn.type = "button";
+    btn.dataset.action = "disconnect-reminders-telegram";
+    btn.classList.add("reminders-telegram-disconnect");
+    if (!String(btn.textContent || "").trim()) {
+      btn.textContent = "Отключить";
+    }
+    return btn;
+  };
+
   const ensureDisconnectBtn = () => {
     if (els.remindersTelegramDisconnectBtn instanceof HTMLButtonElement) {
-      return els.remindersTelegramDisconnectBtn;
+      return normalizeDisconnectBtn(els.remindersTelegramDisconnectBtn);
     }
 
     const wrap = document.querySelector("#remindersSetupModal .reminders-telegram-connect-wrap");
@@ -1259,12 +1272,12 @@ function syncRemindersTelegramUi(model = null) {
       btn.id = "remindersTelegramDisconnectBtn";
       btn.dataset.action = "disconnect-reminders-telegram";
       btn.className = "reminders-telegram-disconnect hidden";
-      btn.textContent = "Отключить Telegram";
+      btn.textContent = "Отключить";
       wrap.appendChild(btn);
     }
 
-    els.remindersTelegramDisconnectBtn = btn;
-    return btn;
+    els.remindersTelegramDisconnectBtn = normalizeDisconnectBtn(btn);
+    return els.remindersTelegramDisconnectBtn;
   };
 
   if (els.remindersTelegramConnectBtn) {
@@ -1487,6 +1500,7 @@ const els = {
   remindersTelegramDisconnectBtn: document.getElementById("remindersTelegramDisconnectBtn"),
   remindersSettingsHint: document.getElementById("remindersSettingsHint"),
   remindersSettingsSubmit: document.getElementById("remindersSettingsSubmit"),
+  remindersSettingsTestBtn: document.getElementById("remindersSettingsTestBtn"),
   remindersSettingsDisableLink: document.getElementById("remindersSettingsDisableLink"),
   taxLoadModal: document.getElementById("taxLoadModal"),
   taxLoadModalTitle: document.getElementById("taxLoadModalTitle"),
@@ -2379,6 +2393,56 @@ function handleGlobalClick(event) {
       if (els.remindersSetupModal) {
         closeModal(els.remindersSetupModal);
       }
+      return;
+    }
+
+    if (action === "send-reminders-test" && state.isLoggedIn) {
+      const testBtn = actionEl instanceof HTMLButtonElement
+        ? actionEl
+        : (els.remindersSettingsTestBtn instanceof HTMLButtonElement ? els.remindersSettingsTestBtn : null);
+      if (testBtn) {
+        testBtn.disabled = true;
+      }
+
+      void (async () => {
+        const supabase = supabaseClient;
+        if (!supabase || !supabase.auth || typeof supabase.auth.getUser !== "function" || !supabase.functions || typeof supabase.functions.invoke !== "function") {
+          showAppToast("Не удалось отправить тестовое уведомление");
+          if (testBtn) {
+            testBtn.disabled = false;
+          }
+          return;
+        }
+
+        try {
+          let userId = String(state.userId || "").trim();
+          if (!userId) {
+            const { data, error } = await supabase.auth.getUser();
+            userId = String(data && data.user && data.user.id ? data.user.id : "").trim();
+            if (error || !userId) {
+              showAppToast("Не удалось отправить тестовое уведомление");
+              return;
+            }
+          }
+
+          const { error } = await supabase.functions.invoke("send-test-notification", {
+            body: { user_id: userId }
+          });
+          if (error) {
+            showAppToast("Не удалось отправить тестовое уведомление");
+            return;
+          }
+
+          showAppToast("Тестовое уведомление отправлено");
+          trackEvent("calendar_reminders_test_sent", { source: "settings_modal" });
+        } catch (_error) {
+          showAppToast("Не удалось отправить тестовое уведомление");
+        } finally {
+          if (testBtn) {
+            testBtn.disabled = false;
+          }
+        }
+      })();
       return;
     }
 
