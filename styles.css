@@ -11394,6 +11394,29 @@ body.onboarding-tour-active {
     max-height: 90vh;
     overflow-y: auto;
   }
+
+  #remindersSetupModal .reminders-settings-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  #remindersSetupModal .reminders-settings-actions .btn {
+    width: 100%;
+    white-space: nowrap;
+  }
+
+  #remindersSetupModal .reminders-settings-actions #remindersSettingsSubmit {
+    order: 1;
+  }
+
+  #remindersSetupModal .reminders-settings-actions #remindersSettingsTestBtn {
+    order: 2;
+  }
+
+  #remindersSetupModal .reminders-settings-actions [data-action="close-reminders-settings"] {
+    order: 3;
+  }
 }
 
 @media (max-width: 720px) {
@@ -15134,8 +15157,20 @@ body.onboarding-tour-active .onboarding-tour-highlight {
     max-width: 100%;
   }
 
+  .income-form .form-grid-2,
+  .income-form .form-grid-2 > label {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
   .income-form input[type="date"] {
-    padding-right: 42px;
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    padding-right: 12px;
     overflow: hidden;
     text-overflow: ellipsis;
   }

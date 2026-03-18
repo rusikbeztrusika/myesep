@@ -1,4 +1,4 @@
-const DEFAULT_CONFIG = {
+﻿const DEFAULT_CONFIG = {
   supabaseUrl: "",
   supabaseAnonKey: "",
   feedbackWebhookUrl: "",
@@ -792,55 +792,48 @@ function getProDaysLeft(subscription = state.subscription) {
   return Math.max(1, getDaysLeft(expiry));
 }
 
+function hasUsedFreeProTrial(subscription = state.subscription) {
+  const source = normalizeSubscription(subscription);
+  return Boolean(String(source.proStartedAt || "").trim() || String(source.lastExpiredPlanExpiry || "").trim());
+}
+
 function refreshSubscriptionState() {
   state.subscription = normalizeSubscription(state.subscription);
 
   let changed = false;
-  const ownerAccount = isOwnerProAccount();
 
-  if (ownerAccount) {
-    const proActive = state.subscription.plan === "pro" && state.subscription.status === "active";
+  const proActive = state.subscription.plan === "pro" && state.subscription.status === "active";
 
-    if (proActive) {
-      let proStart = new Date(state.subscription.proStartedAt || "");
-      if (Number.isNaN(proStart.getTime())) {
-        proStart = new Date();
-        state.subscription.proStartedAt = proStart.toISOString();
-        changed = true;
-      }
-
-      if (!state.subscription.planExpiry) {
-        const expiry = new Date(proStart);
-        expiry.setDate(expiry.getDate() + TRIAL_DAYS);
-        state.subscription.planExpiry = expiry.toISOString();
-        changed = true;
-      }
-
-      if (getDaysLeft(state.subscription.planExpiry) <= 0) {
-        state.subscription.plan = "trial";
-        state.subscription.status = "trial";
-        state.subscription.lastExpiredPlanExpiry = state.subscription.planExpiry || state.subscription.lastExpiredPlanExpiry;
-        state.subscription.planExpiry = "";
-        state.subscription.trialEndsAt = "";
-        state.subscription.expiryNoticePending = true;
-        changed = true;
-      }
-    } else if (state.subscription.plan !== "trial" || state.subscription.status !== "trial" || state.subscription.planExpiry) {
-      state.subscription.plan = "trial";
-      state.subscription.status = "trial";
-      state.subscription.planExpiry = "";
-      state.subscription.trialEndsAt = "";
+  if (proActive) {
+    let proStart = new Date(state.subscription.proStartedAt || "");
+    if (Number.isNaN(proStart.getTime())) {
+      proStart = new Date();
+      state.subscription.proStartedAt = proStart.toISOString();
       changed = true;
     }
-  } else {
-    if (state.subscription.plan !== "trial" || state.subscription.status !== "trial" || state.subscription.planExpiry) {
-      state.subscription.plan = "trial";
-      state.subscription.status = "trial";
-      state.subscription.planExpiry = "";
-      state.subscription.trialEndsAt = "";
-      state.subscription.expiryNoticePending = false;
+
+    if (!state.subscription.planExpiry) {
+      const expiry = new Date(proStart);
+      expiry.setDate(expiry.getDate() + TRIAL_DAYS);
+      state.subscription.planExpiry = expiry.toISOString();
       changed = true;
     }
+
+    if (getDaysLeft(state.subscription.planExpiry) <= 0) {
+      state.subscription.plan = "trial";
+      state.subscription.status = "trial";
+      state.subscription.lastExpiredPlanExpiry = state.subscription.planExpiry || state.subscription.lastExpiredPlanExpiry;
+      state.subscription.planExpiry = "";
+      state.subscription.trialEndsAt = "";
+      state.subscription.expiryNoticePending = true;
+      changed = true;
+    }
+  } else if (state.subscription.plan !== "trial" || state.subscription.status !== "trial" || state.subscription.planExpiry) {
+    state.subscription.plan = "trial";
+    state.subscription.status = "trial";
+    state.subscription.planExpiry = "";
+    state.subscription.trialEndsAt = "";
+    changed = true;
   }
 
   state.isPro = state.subscription.plan === "pro" && state.subscription.status === "active";
@@ -923,6 +916,7 @@ function renderProModal(featureKey = "") {
   refreshSubscriptionState();
   const proActive = isProActive();
   const proDaysLeft = proActive ? getProDaysLeft(state.subscription) : 0;
+  const freeTrialAlreadyUsed = hasUsedFreeProTrial(state.subscription) && !proActive;
   const isMobileCompact = isMobileViewport() && !proActive;
 
   const desktopListCopy = [
@@ -979,8 +973,15 @@ function renderProModal(featureKey = "") {
       ctaMetaEl.hidden = false;
       ctaMetaEl.textContent = `До окончания пробного Pro осталось ${proDaysLeft} ${getLandingDayWord(proDaysLeft)}.`;
     }
-
-
+  } else if (freeTrialAlreadyUsed) {
+    statusEl.innerHTML = `<span class="pro-status-badge trial">Ваш план: Trial</span>`;
+    statusEl.className = "pro-status trial";
+    ctaEl.textContent = "Пробный период уже использован";
+    ctaEl.disabled = true;
+    if (ctaMetaEl) {
+      ctaMetaEl.hidden = false;
+      ctaMetaEl.textContent = "Оплата подписки скоро будет доступна.";
+    }
   } else {
     statusEl.innerHTML = `<span class="pro-status-badge trial">Ваш план: Trial</span>`;
     statusEl.className = "pro-status trial";
@@ -996,6 +997,8 @@ function renderProModal(featureKey = "") {
     reasonEl.textContent = `${getFeatureTitle(featureKey)}: ${getPaywallReasonText(featureKey)}`;
   } else if (proActive) {
     reasonEl.textContent = "Доступ активен: напоминания, экспорт и аналитика уже работают в вашем аккаунте.";
+  } else if (freeTrialAlreadyUsed) {
+    reasonEl.textContent = "30 дней бесплатного Pro уже были активированы для этого аккаунта.";
   } else if (isMobileCompact) {
     reasonEl.textContent = "Полный доступ на 30 дней без карты и обязательств.";
   } else {
@@ -1016,12 +1019,6 @@ function requireFeature(featureKey, source = "") {
     return true;
   }
 
-  if (!isOwnerProAccount()) {
-    showBetaAccessModal("owner_only");
-    trackEvent("paywall_owner_only", { feature: featureKey, source });
-    return false;
-  }
-
   state.paywallFeature = featureKey;
   saveState();
   renderProModal(featureKey);
@@ -1031,11 +1028,6 @@ function requireFeature(featureKey, source = "") {
 }
 
 function activateProDemo(source = "manual") {
-  if (!isOwnerProAccount()) {
-    showBetaAccessModal("owner_only");
-    return;
-  }
-
   if (state.ownerTrialPreview) {
     state.ownerTrialPreview = false;
     state.paywallFeature = "";
@@ -1047,6 +1039,17 @@ function activateProDemo(source = "manual") {
     }
     renderDashboard();
     trackEvent("owner_trial_preview_exit", { source });
+    return;
+  }
+
+  if (hasUsedFreeProTrial(state.subscription) && !isProActive()) {
+    showAppToast("Пробный Pro на 30 дней уже использован");
+    if (els.proModal) {
+      closeModal(els.proModal);
+    }
+    if (els.betaAccessModal) {
+      closeModal(els.betaAccessModal);
+    }
     return;
   }
 
@@ -1077,19 +1080,7 @@ function activateProDemo(source = "manual") {
   trackEvent("upgrade_pro", { mode: "beta_free", source });
 }
 function ensureTrialIfNeeded() {
-  if (isOwnerProAccount()) {
-    refreshSubscriptionState();
-    return;
-  }
-
-  if (state.subscription.plan !== "trial" || state.subscription.status !== "trial" || state.subscription.planExpiry) {
-    state.subscription.plan = "trial";
-    state.subscription.status = "trial";
-    state.subscription.planExpiry = "";
-    state.subscription.trialEndsAt = "";
-    state.subscription.expiryNoticePending = false;
-    saveState();
-  }
+  refreshSubscriptionState();
 }
 
 function getIncomeOpsCountForMonth(dateString) {
@@ -1117,10 +1108,9 @@ function renderSidebarBetaBanner() {
   const bannerEl = els.sidebarBetaBanner;
   if (!bannerEl) return;
 
-  const ownerAccount = isOwnerProAccount();
   const proActive = isProActive();
 
-  if (ownerAccount && proActive) {
+  if (proActive) {
     const proDaysLeft = getProDaysLeft(state.subscription);
     const tone = getBetaProBannerTone(proDaysLeft);
     bannerEl.className = `sidebar-beta-banner pro ${tone}`;
@@ -1145,18 +1135,18 @@ function showBetaAccessModal(mode = "limit") {
     els.betaAccessPrimary.textContent = "Понятно";
     els.betaAccessPrimary.dataset.action = "close-beta-modal";
   } else if (mode === "expired") {
-    els.betaAccessTitle.textContent = "Бета-период завершён";
-    els.betaAccessText.textContent = "Бета-период завершён. Спасибо! Скоро откроем подписку.";
+    els.betaAccessTitle.textContent = "Пробный Pro завершён";
+    els.betaAccessText.textContent = "30 дней Pro закончились. Сейчас доступна Trial-версия. Оплата подписки скоро будет доступна.";
     els.betaAccessPrimary.textContent = "Понятно";
     els.betaAccessPrimary.dataset.action = "close-beta-modal";
-  } else if (isOwnerProAccount()) {
+  } else if (!hasUsedFreeProTrial(state.subscription)) {
     els.betaAccessTitle.textContent = "Лимит бесплатной версии";
     els.betaAccessText.textContent = "Вы добавили 5 операций — это лимит бесплатной версии. Активируйте 30 дней Pro бесплатно чтобы продолжить.";
     els.betaAccessPrimary.textContent = "Активировать бесплатно";
     els.betaAccessPrimary.dataset.action = "activate-beta-pro";
   } else {
     els.betaAccessTitle.textContent = "Лимит бесплатной версии";
-    els.betaAccessText.textContent = `Вы добавили ${FREE_INCOME_MONTH_LIMIT} операций — это лимит Trial.`;
+    els.betaAccessText.textContent = `Вы добавили ${FREE_INCOME_MONTH_LIMIT} операций — это лимит Trial. Пробный Pro на 30 дней уже использован.`;
     els.betaAccessPrimary.textContent = "Понятно";
     els.betaAccessPrimary.dataset.action = "close-beta-modal";
   }
@@ -2514,7 +2504,6 @@ function updatePlanUi() {
 
   const proActive = isProActive();
   const trialActive = isTrialActive();
-  const ownerAccount = isOwnerProAccount();
 
   if (els.planBadge) {
     if (proActive) {
@@ -2537,10 +2526,8 @@ function updatePlanUi() {
   }
 
   if (els.proBtn) {
-    els.proBtn.classList.toggle("hidden", !ownerAccount);
-    if (ownerAccount) {
-      els.proBtn.textContent = proActive ? "Тариф" : "Тарифы";
-    }
+    els.proBtn.classList.remove("hidden");
+    els.proBtn.textContent = proActive ? "Тариф" : "Тарифы";
   }
 
   if (els.mobileDrawerProBtn) {
@@ -3086,11 +3073,6 @@ function handleGlobalClick(event) {
         closeModal(els.mobileMoreModal);
       }
 
-      if (!isOwnerProAccount()) {
-        showBetaAccessModal("owner_only");
-        return;
-      }
-
       renderProModal(state.paywallFeature || "");
       openModal(els.proModal);
       trackEvent("open_pro_modal", { feature: state.paywallFeature || "", source: "mobile_more" });
@@ -3278,11 +3260,6 @@ function handleGlobalClick(event) {
     }
     if (action === "open-pro") {
       closeMobileDrawer();
-      if (!isOwnerProAccount()) {
-        showBetaAccessModal("owner_only");
-        return;
-      }
-
       renderProModal(state.paywallFeature || "");
       openModal(els.proModal);
       trackEvent("open_pro_modal", { feature: state.paywallFeature || "" });
@@ -10820,6 +10797,7 @@ function readJson(key) {
     return null;
   }
 }
+
 
 
 
