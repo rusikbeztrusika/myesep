@@ -4513,6 +4513,7 @@ async function flushTaxProfileUpsert() {
 
     const row = {
       user_id: userId,
+      full_name: state.profile?.name || "",
       ...payload
     };
     const rowKey = JSON.stringify(row);
