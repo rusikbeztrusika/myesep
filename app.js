@@ -1242,6 +1242,30 @@ function getReminderTelegramStartId() {
 function syncRemindersTelegramUi(model = null) {
   const normalized = model || normalizeGlobalReminders(state.reminders, getReminderDefaultEmail()) || getDefaultGlobalReminders();
   const telegramConnected = Boolean(normalized.telegramConnected || normalized.telegram);
+  const ensureDisconnectBtn = () => {
+    if (els.remindersTelegramDisconnectBtn instanceof HTMLButtonElement) {
+      return els.remindersTelegramDisconnectBtn;
+    }
+
+    const wrap = document.querySelector("#remindersSetupModal .reminders-telegram-connect-wrap");
+    if (!(wrap instanceof HTMLElement)) {
+      return null;
+    }
+
+    let btn = wrap.querySelector("#remindersTelegramDisconnectBtn");
+    if (!(btn instanceof HTMLButtonElement)) {
+      btn = document.createElement("button");
+      btn.type = "button";
+      btn.id = "remindersTelegramDisconnectBtn";
+      btn.dataset.action = "disconnect-reminders-telegram";
+      btn.className = "reminders-telegram-disconnect hidden";
+      btn.textContent = "Отключить Telegram";
+      wrap.appendChild(btn);
+    }
+
+    els.remindersTelegramDisconnectBtn = btn;
+    return btn;
+  };
 
   if (els.remindersTelegramConnectBtn) {
     els.remindersTelegramConnectBtn.classList.toggle("hidden", telegramConnected);
@@ -1251,8 +1275,9 @@ function syncRemindersTelegramUi(model = null) {
     els.remindersTelegramConnectedBadge.classList.toggle("hidden", !telegramConnected);
   }
 
-  if (els.remindersTelegramDisconnectBtn) {
-    els.remindersTelegramDisconnectBtn.classList.toggle("hidden", !telegramConnected);
+  const disconnectBtn = ensureDisconnectBtn();
+  if (disconnectBtn) {
+    disconnectBtn.classList.toggle("hidden", !telegramConnected);
   }
 }
 function normalizeDeadlineCompletionMeta(raw) {
