@@ -539,10 +539,18 @@
         <p>Выберите когда получать напоминания о налоговых сроках. Уведомления придут на email и в Telegram.</p>
       </div>
       <form id="remindersSettingsForm" class="reminders-settings-form">
-        <label>Email
-          <input id="remindersSettingsEmail" name="email" type="email" placeholder="you@email.com" />
-        </label>
-        <p style="margin:4px 0 0;font-size:12px;color:#888">Уведомления будут отправлены на этот адрес</p>
+        <div id="remindersEmailToggle" class="calendar-reminder-toggle reminders-email-toggle is-on" title="Уведомления на email">
+          <span class="calendar-reminder-toggle-label">Уведомления на email</span>
+          <button type="button" class="calendar-reminder-switch" id="remindersEmailSwitch" data-action="toggle-reminders-email" role="switch" aria-checked="true" aria-label="Переключить email уведомления">
+            <span class="calendar-reminder-switch-thumb" aria-hidden="true"></span>
+          </button>
+        </div>
+        <div id="remindersEmailFieldWrap">
+          <label>Email
+            <input id="remindersSettingsEmail" name="email" type="email" placeholder="you@email.com" />
+          </label>
+          <p style="margin:4px 0 0;font-size:12px;color:#888">Уведомления будут отправлены на этот адрес</p>
+        </div>
         <div class="reminders-telegram-connect-wrap">
           <button type="button" class="btn btn-ghost reminders-telegram-connect" id="remindersTelegramConnectBtn" data-action="connect-reminders-telegram">Подключить Telegram →</button>
           <span id="remindersTelegramConnectedBadge" class="reminders-telegram-connected hidden">✅ Telegram подключён</span>

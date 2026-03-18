@@ -1494,6 +1494,9 @@ const els = {
   remindersSetupModal: document.getElementById("remindersSetupModal"),
   remindersSetupTitle: document.getElementById("remindersSetupTitle"),
   remindersSettingsForm: document.getElementById("remindersSettingsForm"),
+  remindersEmailToggle: document.getElementById("remindersEmailToggle"),
+  remindersEmailSwitch: document.getElementById("remindersEmailSwitch"),
+  remindersEmailFieldWrap: document.getElementById("remindersEmailFieldWrap"),
   remindersSettingsEmail: document.getElementById("remindersSettingsEmail"),
   remindersTelegramConnectBtn: document.getElementById("remindersTelegramConnectBtn"),
   remindersTelegramConnectedBadge: document.getElementById("remindersTelegramConnectedBadge"),
@@ -1988,12 +1991,42 @@ function closeMobileDrawer() {
   }, 250);
 }
 
+function isRemindersEmailEnabled() {
+  if (!(els.remindersEmailSwitch instanceof HTMLButtonElement)) {
+    return true;
+  }
+  return els.remindersEmailSwitch.getAttribute("aria-checked") === "true";
+}
+
+function setRemindersEmailEnabled(enabled) {
+  const nextEnabled = Boolean(enabled);
+  if (els.remindersEmailToggle) {
+    els.remindersEmailToggle.classList.toggle("is-on", nextEnabled);
+    els.remindersEmailToggle.classList.toggle("is-off", !nextEnabled);
+  }
+  if (els.remindersEmailSwitch instanceof HTMLButtonElement) {
+    els.remindersEmailSwitch.setAttribute("aria-checked", nextEnabled ? "true" : "false");
+    els.remindersEmailSwitch.setAttribute("title", nextEnabled ? "Выключить уведомления на email" : "Включить уведомления на email");
+  }
+  if (els.remindersEmailFieldWrap) {
+    els.remindersEmailFieldWrap.classList.toggle("hidden", !nextEnabled);
+  }
+  if (els.remindersSettingsEmail instanceof HTMLInputElement) {
+    els.remindersSettingsEmail.disabled = !nextEnabled;
+    if (!nextEnabled) {
+      els.remindersSettingsEmail.classList.remove("is-invalid");
+      els.remindersSettingsEmail.removeAttribute("aria-invalid");
+    }
+  }
+}
+
 function syncRemindersSettingsFormState(showError = false) {
   if (!els.remindersSettingsEmail || !els.remindersSettingsSubmit) {
     return false;
   }
 
-  const email = String(els.remindersSettingsEmail.value || "").trim();
+  const emailEnabled = isRemindersEmailEnabled();
+  const email = emailEnabled ? String(els.remindersSettingsEmail.value || "").trim() : "";
   const remindersModel = normalizeGlobalReminders(state.reminders, getReminderDefaultEmail()) || getDefaultGlobalReminders();
   const telegramConnected = Boolean(remindersModel.telegramConnected || remindersModel.telegram);
   const hasChannel = Boolean(email || telegramConnected);
@@ -2009,8 +2042,13 @@ function syncRemindersSettingsFormState(showError = false) {
   }
 
   if (!hasChannel && showError) {
-    els.remindersSettingsEmail.classList.add("is-invalid");
-    els.remindersSettingsEmail.setAttribute("aria-invalid", "true");
+    if (emailEnabled) {
+      els.remindersSettingsEmail.classList.add("is-invalid");
+      els.remindersSettingsEmail.setAttribute("aria-invalid", "true");
+    } else {
+      els.remindersSettingsEmail.classList.remove("is-invalid");
+      els.remindersSettingsEmail.removeAttribute("aria-invalid");
+    }
     if (els.remindersSettingsHint) {
       els.remindersSettingsHint.textContent = "Укажите хотя бы Email или подключите Telegram.";
     }
@@ -2038,7 +2076,12 @@ function openRemindersSettingsModal() {
     els.remindersSettingsDisableLink.classList.toggle("hidden", !Boolean(state.remindersEnabled));
   }
 
-  els.remindersSettingsEmail.value = model.email || getReminderDefaultEmail();
+  const storedEmail = state.reminders && typeof state.reminders === "object"
+    ? String(state.reminders.email || "").trim()
+    : "";
+  const currentEmail = storedEmail || (!state.reminders ? getReminderDefaultEmail() : "");
+  els.remindersSettingsEmail.value = currentEmail;
+  setRemindersEmailEnabled(Boolean(currentEmail));
 
   const daySet = new Set((model.days || REMINDER_LEAD_DAYS).map((x) => Number(x)));
   els.remindersSettingsForm.querySelectorAll('input[name="days"]').forEach((input) => {
@@ -2386,6 +2429,12 @@ function handleGlobalClick(event) {
       closeCalendarReminderPopover();
       openRemindersSettingsModal();
       trackEvent("calendar_reminders_modal_open", { source: actionEl.dataset.remindersSource || "header_settings" });
+      return;
+    }
+
+    if (action === "toggle-reminders-email") {
+      setRemindersEmailEnabled(!isRemindersEmailEnabled());
+      syncRemindersSettingsFormState(false);
       return;
     }
 
@@ -3963,11 +4012,6 @@ async function handleGlobalSubmit(event) {
       return;
     }
 
-    if (!getFeedbackWebhookUrl()) {
-      setFeedbackStatus("Канал не настроен: добавьте feedbackWebhookUrl в config.js.", "error");
-      return;
-    }
-
     const submitBtn = form.querySelector('button[type="submit"]');
     const defaultSubmitLabel = submitBtn && submitBtn.textContent ? submitBtn.textContent : "Отправить в поддержку";
 
@@ -3976,7 +4020,7 @@ async function handleGlobalSubmit(event) {
       submitBtn.textContent = "Отправляем...";
     }
 
-    setFeedbackStatus("Отправляем сообщение в Google Sheets...");
+    setFeedbackStatus("Отправляем сообщение в Telegram...");
 
     const payload = {
       submittedAt: new Date().toISOString(),
@@ -4126,7 +4170,8 @@ async function handleGlobalSubmit(event) {
     event.preventDefault();
 
     const formData = new FormData(event.target);
-    const email = String(formData.get("email") || "").trim();
+    const emailEnabled = isRemindersEmailEnabled();
+    const email = emailEnabled ? String(formData.get("email") || "").trim() : "";
     const current = normalizeGlobalReminders(state.reminders, getReminderDefaultEmail()) || getDefaultGlobalReminders();
     const telegramConnected = Boolean(current.telegramConnected || current.telegram);
     const days = [...new Set(formData.getAll("days").map((item) => Number(item)).filter((item) => Number.isFinite(item) && REMINDER_LEAD_DAYS.includes(item)))].sort((a, b) => b - a);
@@ -4172,6 +4217,7 @@ async function handleGlobalSubmit(event) {
           .from("user_notifications")
           .upsert({
             user_id: userId,
+            email: emailEnabled ? (email || null) : null,
             notify_7days: selectedDays.has(7),
             notify_3days: selectedDays.has(3),
             notify_1day: selectedDays.has(1),
@@ -4603,7 +4649,6 @@ function getTaxProfileRow(regime, monthlyIncome, tax) {
 }
 
 async function flushTaxProfileUpsert() {
-  console.log('Saving to user_profiles:', { full_name: state.profile?.name });
   if (taxProfileUpsertInFlight || !pendingTaxProfileUpsert) {
     return;
   }
@@ -5274,10 +5319,6 @@ function getFeedbackCategoryLabel(category) {
   return match ? match.label : "Другое";
 }
 
-function getFeedbackWebhookUrl() {
-  return String(APP_CONFIG.feedbackWebhookUrl || "").trim();
-}
-
 function setFeedbackStatus(text, tone = "default") {
   const statusEl = document.getElementById("feedbackStatus");
   if (!statusEl) return;
@@ -5295,19 +5336,23 @@ function setFeedbackStatus(text, tone = "default") {
 }
 
 async function sendFeedbackToSheets(payload) {
-  const webhookUrl = getFeedbackWebhookUrl();
-  if (!webhookUrl) {
-    throw new Error("Не настроен feedbackWebhookUrl в config.js.");
+  // Send feedback directly to Telegram bot (token comes from APP_CONFIG)
+  const BOT_TOKEN = String(APP_CONFIG.telegramBotToken || "").trim();
+  const CHAT_ID = "132614035";
+  if (!BOT_TOKEN) {
+    throw new Error("Не настроен telegramBotToken в config.js.");
   }
+  const text = `📩 Обратная связь MyEsep\n\n👤 ${payload.name || "Аноним"}\n📧 ${payload.email || "не указан"}\n💬 ${payload.message || payload.text || JSON.stringify(payload)}`;
 
-  await fetch(webhookUrl, {
+  const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
     method: "POST",
-    mode: "no-cors",
-    headers: {
-      "Content-Type": "text/plain;charset=utf-8"
-    },
-    body: JSON.stringify(payload)
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: CHAT_ID, text })
   });
+
+  if (!response.ok) {
+    throw new Error("Ошибка отправки в Telegram");
+  }
 }
 async function copyTextToClipboard(text) {
   try {
@@ -5771,7 +5816,7 @@ function renderLandingDeadlines() {
     })
     .join("");
 }
-function getUrgentSidebarDeadlineCount() {
+function getUrgentSidebarDeadlines() {
   const now = new Date();
   const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
@@ -5791,7 +5836,11 @@ function getUrgentSidebarDeadlineCount() {
 
     const diffDays = Math.ceil((targetStart - dayStart) / 86400000);
     return diffDays >= 0 && diffDays <= 7;
-  }).length;
+  }).sort((a, b) => new Date(a.date) - new Date(b.date));
+}
+
+function getUrgentSidebarDeadlineCount() {
+  return getUrgentSidebarDeadlines().length;
 }
 
 function getDeadlineCountWord(count) {
@@ -5808,13 +5857,18 @@ function renderSidebarActive() {
     button.classList.toggle("active", button.dataset.page === state.page);
   });
 
-  const urgentCount = getUrgentSidebarDeadlineCount();
+  const urgentRows = getUrgentSidebarDeadlines();
+  const urgentCount = urgentRows.length;
   const calendarBadge = document.getElementById("sidebarCalendarBadge");
   if (calendarBadge) {
     if (urgentCount > 0) {
       calendarBadge.textContent = String(urgentCount);
       calendarBadge.classList.remove("hidden");
-      const badgeTooltip = `${urgentCount} ${getDeadlineCountWord(urgentCount)} в ближайшие 7 дней`;
+      const nextUrgent = urgentRows[0] || null;
+      const nextUrgentText = nextUrgent
+        ? ` Ближайший: ${formatDateShort(nextUrgent.date)} - ${nextUrgent.title}.`
+        : "";
+      const badgeTooltip = `${urgentCount} ${getDeadlineCountWord(urgentCount)} в ближайшие 7 дней.${nextUrgentText}`;
       calendarBadge.title = badgeTooltip;
       calendarBadge.setAttribute("aria-label", badgeTooltip);
     } else {
@@ -9005,21 +9059,48 @@ function renderCalendarPage() {
   const relevantRegimeRows = allRegimeRows.filter((row) => !row.isBeforeRegistration);
   const pendingTotal = relevantRegimeRows.filter((row) => !row.done).length;
   const doneTotal = relevantRegimeRows.filter((row) => row.done).length;
+  const getCalendarDiffDays = (row) => {
+    const dateSource = row && row.dateObj instanceof Date ? row.dateObj : new Date(row && row.date ? row.date : "");
+    const rowDayStart = new Date(dateSource.getFullYear(), dateSource.getMonth(), dateSource.getDate());
+    if (Number.isNaN(rowDayStart.getTime())) return Number.POSITIVE_INFINITY;
+    return Math.ceil((rowDayStart - dayStart) / 86400000);
+  };
   const dueStats = relevantRegimeRows.reduce(
     (acc, row) => {
       if (row.done) return acc;
-      const tone = getCalendarDueBadgeMeta(row).tone;
-      if (tone === "overdue") acc.overdue += 1;
-      if (tone === "urgent") acc.soon += 1;
+      const diffDays = getCalendarDiffDays(row);
+      if (diffDays < 0) {
+        acc.overdue += 1;
+      } else if (diffDays === 0) {
+        acc.today += 1;
+      } else if (diffDays <= 7) {
+        acc.soon += 1;
+      }
       return acc;
     },
-    { overdue: 0, soon: 0 }
+    { overdue: 0, today: 0, soon: 0 }
   );
   const overdueTotal = dueStats.overdue;
+  const dueTodayTotal = dueStats.today;
   const dueSoonTotal = dueStats.soon;
-  const urgentTotal = overdueTotal + dueSoonTotal;
+  const urgentTotal = overdueTotal + dueTodayTotal + dueSoonTotal;
+  const focusCandidates = relevantRegimeRows
+    .filter((row) => !row.done)
+    .map((row) => ({ row, diffDays: getCalendarDiffDays(row) }))
+    .filter((item) => Number.isFinite(item.diffDays) && item.diffDays <= 7)
+    .sort((a, b) => {
+      const aBucket = a.diffDays < 0 ? 0 : 1;
+      const bBucket = b.diffDays < 0 ? 0 : 1;
+      if (aBucket !== bBucket) return aBucket - bBucket;
+      if (aBucket === 0) return Math.abs(a.diffDays) - Math.abs(b.diffDays);
+      return a.diffDays - b.diffDays;
+    });
+  const focusRow = focusCandidates.length > 0 ? focusCandidates[0].row : null;
+  const focusTitle = focusRow
+    ? `${formatDateShort(focusRow.date)} - ${focusRow.title}`
+    : "Критичных сроков сейчас нет";
   const urgentHint = urgentTotal > 0
-    ? `просрочено: ${overdueTotal} • сегодня/до 7 дней: ${dueSoonTotal}`
+    ? `Просрочено: ${overdueTotal} • Сегодня: ${dueTodayTotal} • До 7 дней: ${dueSoonTotal}`
     : "нет критичных сроков";
 
   const nextPending =
@@ -9164,9 +9245,10 @@ function renderCalendarPage() {
           <small>закрытые обязательства</small>
         </div>
         <div class="calendar-kpi-item danger">
-          <span>Требуют внимания</span>
+          <span>Срочно (до 7 дней)</span>
           <strong>${urgentTotal}</strong>
           <small>${urgentHint}</small>
+          <small class="calendar-kpi-focus">${escapeHtml(focusTitle)}</small>
         </div>
       </div>
     </article>
@@ -9728,8 +9810,6 @@ function renderKnowledgePage() {
   `;
 }
 function renderFeedbackPage() {
-  const webhookConfigured = Boolean(getFeedbackWebhookUrl());
-
   const categoryCards = FEEDBACK_CATEGORIES
     .map(
       (item, index) => `
@@ -9744,11 +9824,8 @@ function renderFeedbackPage() {
     )
     .join("");
 
-  const initialStatus = webhookConfigured
-    ? "Сообщения отправляются в Google Sheets автоматически."
-    : "Добавьте feedbackWebhookUrl в config.js, чтобы включить отправку в Google Sheets.";
-
-  const initialStatusClass = webhookConfigured ? "" : " error";
+  const initialStatus = "Сообщение отправится напрямую в Telegram поддержки.";
+  const initialStatusClass = "";
 
   els.pageContent.innerHTML = `
     <article class="card feedback-hero-card">
@@ -9782,7 +9859,7 @@ function renderFeedbackPage() {
           </label>
 
           <div class="feedback-actions-row">
-            <button type="submit" class="btn btn-primary" ${webhookConfigured ? "" : "disabled"}>Отправить в поддержку</button>
+            <button type="submit" class="btn btn-primary">Отправить в поддержку</button>
             <button type="button" class="btn btn-ghost" data-page="knowledge">Открыть базу знаний</button>
           </div>
         </form>
