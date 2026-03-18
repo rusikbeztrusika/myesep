@@ -102,6 +102,10 @@ const HIDE_AMOUNTS_STORAGE_KEY = "hideAmounts";
 
 let supabaseClient = null;
 let eventCounter = 0;
+let taxProfileUpsertTimer = null;
+let pendingTaxProfileUpsert = null;
+let taxProfileUpsertInFlight = false;
+let lastTaxProfileUpsertKey = "";
 
 const TRIAL_DAYS = 30;
 const FREE_INCOME_MONTH_LIMIT = 5;
@@ -1246,6 +1250,10 @@ function syncRemindersTelegramUi(model = null) {
   if (els.remindersTelegramConnectedBadge) {
     els.remindersTelegramConnectedBadge.classList.toggle("hidden", !telegramConnected);
   }
+
+  if (els.remindersTelegramDisconnectBtn) {
+    els.remindersTelegramDisconnectBtn.classList.toggle("hidden", !telegramConnected);
+  }
 }
 function normalizeDeadlineCompletionMeta(raw) {
   if (!raw || typeof raw !== "object") return {};
@@ -1451,6 +1459,7 @@ const els = {
   remindersSettingsEmail: document.getElementById("remindersSettingsEmail"),
   remindersTelegramConnectBtn: document.getElementById("remindersTelegramConnectBtn"),
   remindersTelegramConnectedBadge: document.getElementById("remindersTelegramConnectedBadge"),
+  remindersTelegramDisconnectBtn: document.getElementById("remindersTelegramDisconnectBtn"),
   remindersSettingsHint: document.getElementById("remindersSettingsHint"),
   remindersSettingsSubmit: document.getElementById("remindersSettingsSubmit"),
   remindersSettingsDisableLink: document.getElementById("remindersSettingsDisableLink"),
@@ -2383,6 +2392,68 @@ function handleGlobalClick(event) {
           trackEvent("calendar_reminders_telegram_connect", { source: "settings_modal" });
         } catch (_error) {
           showAppToast("Не удалось открыть Telegram");
+        }
+      })();
+      return;
+    }
+
+    if (action === "disconnect-reminders-telegram" && state.isLoggedIn) {
+      const current = normalizeGlobalReminders(state.reminders, getReminderDefaultEmail()) || getDefaultGlobalReminders();
+      const disconnectBtn = els.remindersTelegramDisconnectBtn;
+      if (disconnectBtn) {
+        disconnectBtn.disabled = true;
+      }
+
+      void (async () => {
+        const supabase = supabaseClient;
+        if (!supabase || !supabase.auth || typeof supabase.auth.getUser !== "function") {
+          showAppToast("Не удалось отключить Telegram");
+          if (disconnectBtn) {
+            disconnectBtn.disabled = false;
+          }
+          return;
+        }
+
+        try {
+          const { data, error } = await supabase.auth.getUser();
+          const userId = String(data && data.user && data.user.id ? data.user.id : "").trim();
+          if (error || !userId) {
+            showAppToast("Не удалось отключить Telegram");
+            if (disconnectBtn) {
+              disconnectBtn.disabled = false;
+            }
+            return;
+          }
+
+          const { error: updateError } = await supabase
+            .from("user_notifications")
+            .update({ telegram_chat_id: null })
+            .eq("user_id", userId);
+          if (updateError) {
+            showAppToast("Не удалось отключить Telegram");
+            if (disconnectBtn) {
+              disconnectBtn.disabled = false;
+            }
+            return;
+          }
+
+          state.reminders = {
+            ...current,
+            telegram: "",
+            telegramConnected: false
+          };
+          saveState();
+          syncRemindersTelegramUi(state.reminders);
+          syncRemindersSettingsFormState(false);
+
+          showAppToast("Telegram отключён");
+          trackEvent("calendar_reminders_telegram_disconnect", { source: "settings_modal" });
+        } catch (_error) {
+          showAppToast("Не удалось отключить Telegram");
+        } finally {
+          if (disconnectBtn) {
+            disconnectBtn.disabled = false;
+          }
         }
       })();
       return;
@@ -4382,6 +4453,110 @@ function calcByRegime(regime, income, expenses = 0) {
   if (regime === "self") return calcSelfEmployed(income);
   if (regime === "our") return calcOUR(income, expenses);
   return calcSimplified(income);
+}
+
+function normalizeTaxRegimeForProfile(regime) {
+  if (regime === "self" || regime === "our" || regime === "simplified") {
+    return regime;
+  }
+  return "simplified";
+}
+
+function normalizeTaxAmountForProfile(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(0, Math.round(numeric));
+}
+
+function getTaxProfileRow(regime, monthlyIncome, tax) {
+  const safeTax = tax && typeof tax === "object" ? tax : {};
+  return {
+    tax_regime: normalizeTaxRegimeForProfile(regime),
+    monthly_income: normalizeTaxAmountForProfile(monthlyIncome),
+    opv: normalizeTaxAmountForProfile(safeTax.opv),
+    so: normalizeTaxAmountForProfile(safeTax.so),
+    opvr: normalizeTaxAmountForProfile(safeTax.opvr),
+    vosms: normalizeTaxAmountForProfile(safeTax.vosms),
+    ipn: normalizeTaxAmountForProfile(safeTax.ipn),
+    total_monthly: normalizeTaxAmountForProfile(safeTax.total),
+    updated_at: new Date().toISOString()
+  };
+}
+
+async function flushTaxProfileUpsert() {
+  if (taxProfileUpsertInFlight || !pendingTaxProfileUpsert) {
+    return;
+  }
+
+  const payload = pendingTaxProfileUpsert;
+  pendingTaxProfileUpsert = null;
+
+  if (!state.isLoggedIn || !supabaseClient) {
+    return;
+  }
+
+  taxProfileUpsertInFlight = true;
+  try {
+    const userIdFromState = String(state.userId || "").trim();
+    let userId = userIdFromState;
+
+    if (!userId && supabaseClient.auth && typeof supabaseClient.auth.getUser === "function") {
+      const { data, error } = await supabaseClient.auth.getUser();
+      if (!error) {
+        userId = String(data && data.user && data.user.id ? data.user.id : "").trim();
+      }
+    }
+
+    if (!userId) {
+      return;
+    }
+
+    const row = {
+      user_id: userId,
+      ...payload
+    };
+    const rowKey = JSON.stringify(row);
+    if (rowKey === lastTaxProfileUpsertKey) {
+      return;
+    }
+
+    const { error } = await supabaseClient
+      .from("user_profiles")
+      .upsert(row, { onConflict: "user_id" });
+
+    if (!error) {
+      lastTaxProfileUpsertKey = rowKey;
+    }
+  } catch (_error) {
+    // keep UI resilient if network/db is temporarily unavailable
+  } finally {
+    taxProfileUpsertInFlight = false;
+    if (pendingTaxProfileUpsert) {
+      if (taxProfileUpsertTimer) {
+        clearTimeout(taxProfileUpsertTimer);
+      }
+      taxProfileUpsertTimer = setTimeout(() => {
+        taxProfileUpsertTimer = null;
+        void flushTaxProfileUpsert();
+      }, 120);
+    }
+  }
+}
+
+function queueTaxProfileUpsert(regime, monthlyIncome, tax) {
+  if (!state.isLoggedIn || !supabaseClient) {
+    return;
+  }
+
+  pendingTaxProfileUpsert = getTaxProfileRow(regime, monthlyIncome, tax);
+
+  if (taxProfileUpsertTimer) {
+    clearTimeout(taxProfileUpsertTimer);
+  }
+  taxProfileUpsertTimer = setTimeout(() => {
+    taxProfileUpsertTimer = null;
+    void flushTaxProfileUpsert();
+  }, 350);
 }
 
 function logOpvDebugExample(income = 22543233) {
@@ -8060,6 +8235,7 @@ function renderTaxesPage() {
   };
 
   const scenarioTax = calcByRegime(state.regime, planner.income, planner.expenses);
+  queueTaxProfileUpsert(state.regime, planner.income, scenarioTax);
   const effectiveRate = planner.income > 0 ? (scenarioTax.total / planner.income) * 100 : 0;
   const reserveAmount = scenarioTax.total * (1 + planner.reservePct / 100);
   const realJournalIncome = monthlyData.reduce((sum, row) => sum + Number(row.income || 0), 0);
@@ -8963,6 +9139,7 @@ function renderCalculatorPage() {
 
   const bestTaxDisplay = bestRow.tax * periodMultiplier;
   const currentRow = rows.find((row) => row.id === state.regime) || bestRow;
+  queueTaxProfileUpsert(state.regime, state.calcIncome, currentRow.taxData);
   const currentTaxDisplay = currentRow.tax * periodMultiplier;
   const selfRow = rows.find((row) => row.id === "self") || bestRow;
   const selfTaxDisplay = selfRow.tax * periodMultiplier;
