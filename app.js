@@ -110,6 +110,8 @@ let lastTaxProfileUpsertKey = "";
 const TRIAL_DAYS = 30;
 const FREE_INCOME_MONTH_LIMIT = 5;
 const PRO_PRICE_MONTHLY = 1990;
+const PRO_PRICE_MONTHLY_LABEL = `${PRO_PRICE_MONTHLY.toLocaleString("ru-RU")} ₸/мес`;
+const PRO_AFTER_TRIAL_TOOLTIP = `затем ${PRO_PRICE_MONTHLY_LABEL}`;
 const ONBOARDING_FLOW_VERSION = 3;
 const ONBOARDING_STEPS_TOTAL = 4;
 const KAZAKHSTAN_CITIES = [
@@ -940,9 +942,10 @@ function renderProModal(featureKey = "") {
 
 
 
-  titleEl.textContent = "MyEsep Pro";
+  titleEl.textContent = `Pro — ${PRO_PRICE_MONTHLY_LABEL}`;
   if (priceEl) {
     priceEl.textContent = "30 дней бесплатно";
+    priceEl.setAttribute("title", PRO_AFTER_TRIAL_TOOLTIP);
   }
 
   if (focusCardEl) {
@@ -963,30 +966,33 @@ function renderProModal(featureKey = "") {
   }
 
   if (proActive) {
-    statusEl.textContent = `Ваш план: Pro активен (${proDaysLeft} дн.)`;
+    statusEl.innerHTML = `<span class="pro-status-badge active">Ваш план: Pro (${proDaysLeft} дн.)</span>`;
 
 
     statusEl.className = "pro-status active";
     ctaEl.textContent = "Pro уже активен";
     ctaEl.disabled = true;
+    ctaEl.removeAttribute("title");
     if (ctaMetaEl) {
-      ctaMetaEl.hidden = false;
-      ctaMetaEl.textContent = `До окончания пробного Pro осталось ${proDaysLeft} ${getLandingDayWord(proDaysLeft)}.`;
+      ctaMetaEl.hidden = true;
+      ctaMetaEl.textContent = "";
     }
   } else if (freeTrialAlreadyUsed) {
     statusEl.innerHTML = `<span class="pro-status-badge trial">Ваш план: Trial</span>`;
     statusEl.className = "pro-status trial";
     ctaEl.textContent = "Пробный период уже использован";
     ctaEl.disabled = true;
+    ctaEl.removeAttribute("title");
     if (ctaMetaEl) {
-      ctaMetaEl.hidden = false;
-      ctaMetaEl.textContent = "Оплата подписки скоро будет доступна.";
+      ctaMetaEl.hidden = true;
+      ctaMetaEl.textContent = "";
     }
   } else {
     statusEl.innerHTML = `<span class="pro-status-badge trial">Ваш план: Trial</span>`;
     statusEl.className = "pro-status trial";
     ctaEl.textContent = "Активировать 30 дней бесплатно";
     ctaEl.disabled = false;
+    ctaEl.setAttribute("title", PRO_AFTER_TRIAL_TOOLTIP);
     if (ctaMetaEl) {
       ctaMetaEl.textContent = "";
       ctaMetaEl.hidden = true;
@@ -1077,6 +1083,7 @@ function activateProDemo(source = "manual") {
     closeModal(els.betaAccessModal);
   }
   renderDashboard();
+  showAppToast("Pro активирован на 30 дней: доступны напоминания, экспорт и аналитика.");
   trackEvent("upgrade_pro", { mode: "beta_free", source });
 }
 function ensureTrialIfNeeded() {
@@ -1121,6 +1128,7 @@ function renderSidebarBetaBanner() {
   bannerEl.className = "sidebar-beta-banner";
   bannerEl.innerHTML = `
     <div class="beta-banner-text">Trial: до ${FREE_INCOME_MONTH_LIMIT} операций доходов.</div>
+    <div class="beta-banner-subtext">После триала — ${PRO_PRICE_MONTHLY_LABEL}</div>
   `;
 }
 
@@ -1134,21 +1142,25 @@ function showBetaAccessModal(mode = "limit") {
     els.betaAccessText.textContent = "Pro-режим доступен только для основного аккаунта владельца.";
     els.betaAccessPrimary.textContent = "Понятно";
     els.betaAccessPrimary.dataset.action = "close-beta-modal";
+    els.betaAccessPrimary.removeAttribute("title");
   } else if (mode === "expired") {
     els.betaAccessTitle.textContent = "Пробный Pro завершён";
     els.betaAccessText.textContent = "30 дней Pro закончились. Сейчас доступна Trial-версия. Оплата подписки скоро будет доступна.";
     els.betaAccessPrimary.textContent = "Понятно";
     els.betaAccessPrimary.dataset.action = "close-beta-modal";
+    els.betaAccessPrimary.removeAttribute("title");
   } else if (!hasUsedFreeProTrial(state.subscription)) {
     els.betaAccessTitle.textContent = "Лимит бесплатной версии";
     els.betaAccessText.textContent = "Вы добавили 5 операций — это лимит бесплатной версии. Активируйте 30 дней Pro бесплатно чтобы продолжить.";
     els.betaAccessPrimary.textContent = "Активировать бесплатно";
     els.betaAccessPrimary.dataset.action = "activate-beta-pro";
+    els.betaAccessPrimary.setAttribute("title", PRO_AFTER_TRIAL_TOOLTIP);
   } else {
     els.betaAccessTitle.textContent = "Лимит бесплатной версии";
     els.betaAccessText.textContent = `Вы добавили ${FREE_INCOME_MONTH_LIMIT} операций — это лимит Trial. Пробный Pro на 30 дней уже использован.`;
     els.betaAccessPrimary.textContent = "Понятно";
     els.betaAccessPrimary.dataset.action = "close-beta-modal";
+    els.betaAccessPrimary.removeAttribute("title");
   }
 
   openModal(els.betaAccessModal);
@@ -2540,8 +2552,8 @@ function updatePlanUi() {
     } else {
       els.mobileDrawerProBtn.classList.remove("is-active");
       els.mobileDrawerProBtn.innerHTML = '<i class="mobile-drawer-pro-icon" data-lucide="zap"></i><span>30 дней Pro — бесплатно</span>';
-      els.mobileDrawerProBtn.setAttribute("aria-label", "Активировать 30 дней Pro бесплатно");
-      els.mobileDrawerProBtn.setAttribute("title", "Активировать 30 дней Pro бесплатно");
+      els.mobileDrawerProBtn.setAttribute("aria-label", `Активировать 30 дней Pro бесплатно, ${PRO_AFTER_TRIAL_TOOLTIP}`);
+      els.mobileDrawerProBtn.setAttribute("title", PRO_AFTER_TRIAL_TOOLTIP);
     }
   }
 
@@ -8447,7 +8459,7 @@ function renderIncomePage() {
       <article class="card income-trial-notice" role="status" aria-live="polite">
         <div class="income-trial-main">
           <p class="income-trial-text">У вас осталось <strong>${remainingTrialOps}</strong> ${remainingTrialOps === 1 ? "операция" : remainingTrialOps >= 2 && remainingTrialOps <= 4 ? "операции" : "операций"} в Trial.</p>
-          <button type="button" class="income-trial-link" data-action="open-pro">Попробовать Pro 30 дней →</button>
+          <button type="button" class="income-trial-link" data-action="open-pro" title="${PRO_AFTER_TRIAL_TOOLTIP}">Попробовать Pro 30 дней →</button>
         </div>
         <button type="button" class="income-trial-close" data-action="dismiss-income-trial-banner" aria-label="Закрыть уведомление">×</button>
       </article>

@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Montserrat:wght@600;700;800&family=Rubik:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=20260318-prelaunch-subscription-1" />
+  <link rel="stylesheet" href="./styles.css?v=20260318-pro-pricing-1" />
 </head>
 <body>
   <div id="publicApp" class="public-app">
@@ -209,7 +209,7 @@
             <i class="proof-lucide" data-lucide="credit-card" aria-hidden="true"></i>
             Без карты
           </span>
-          <span>
+          <span title="затем 1 990 ₸/мес">
             <i class="proof-lucide" data-lucide="zap" aria-hidden="true"></i>
             30 дней Pro бесплатно
           </span>
@@ -380,7 +380,7 @@
         </button>
       </div>
       <div class="mobile-drawer-actions">
-        <button id="mobileDrawerProBtn" type="button" class="mobile-drawer-pro-btn" data-action="open-pro"><i class="mobile-drawer-pro-icon" data-lucide="zap"></i><span>30 дней Pro — бесплатно</span></button>
+        <button id="mobileDrawerProBtn" type="button" class="mobile-drawer-pro-btn" data-action="open-pro" title="затем 1 990 ₸/мес"><i class="mobile-drawer-pro-icon" data-lucide="zap"></i><span>30 дней Pro — бесплатно</span></button>
         <button type="button" class="mobile-drawer-logout-btn" data-action="logout">
           <i class="mobile-drawer-item-icon" data-lucide="log-out"></i>
           <span>Выйти</span>
@@ -466,10 +466,12 @@
         <div class="pro-modal-head-copy">
           <span class="pro-modal-kicker">Для ИП и самозанятых Казахстана</span>
           <div class="pro-title-row">
-            <h3 id="proModalTitle">MyEsep Pro</h3>
-            <span id="proModalPrice" class="pro-price-chip">1 990 ₸/мес</span>
+            <h3 id="proModalTitle">Pro — 1 990 ₸/мес</h3>
           </div>
-          <p id="proModalStatus" class="pro-status trial">Ваш план: Trial</p>
+          <div class="pro-plan-row">
+            <span id="proModalPrice" class="pro-price-chip" title="затем 1 990 ₸/мес">30 дней бесплатно</span>
+          </div>
+          <p id="proModalStatus" class="pro-status trial" hidden></p>
         </div>
         <button class="icon-btn" data-action="close-pro" aria-label="Закрыть">&times;</button>
       </div>
@@ -495,14 +497,14 @@
       </ul>
 
       <div id="proProof" class="pro-proof">
-        <span><span class="icon-inline" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M12 7v5l3 2"></path><circle cx="12" cy="12" r="9"></circle></svg></span>30 дней Pro бесплатно</span>
-        <span><span class="icon-inline" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><rect x="5" y="10" width="14" height="10" rx="2"></rect><path d="M8 10V8a4 4 0 0 1 8 0v2"></path></svg></span>Без карты на старте</span>
-        <span><span class="icon-inline" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11z"></path><circle cx="12" cy="10" r="2.5"></circle></svg></span>Локально для РК</span>
+        <span title="затем 1 990 ₸/мес"><i class="proof-lucide" data-lucide="zap" aria-hidden="true"></i>30 дней Pro бесплатно</span>
+        <span><i class="proof-lucide" data-lucide="credit-card" aria-hidden="true"></i>Без карты на старте</span>
+        <span><i class="proof-lucide" data-lucide="map-pin" aria-hidden="true"></i>Локально для РК</span>
       </div>
 
-      <button id="proModalCta" class="btn btn-primary" data-action="upgrade-pro">Подключить Pro</button>
-      <p id="proModalCtaMeta" class="pro-cta-meta">Подключение занимает меньше минуты.</p>
-      <button class="btn btn-ghost full pro-secondary-link" data-action="close-pro">Остаться на Trial</button>
+      <button id="proModalCta" class="btn btn-primary" data-action="upgrade-pro" title="затем 1 990 ₸/мес">Подключить Pro</button>
+      <p style="font-size:12px;color:#888;text-align:center;margin-top:8px">После 30 дней бесплатного периода · Без карты на старте</p>
+      <p id="proModalCtaMeta" class="pro-cta-meta"></p>
     </div>
   </div>
 
@@ -652,7 +654,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./config.js"></script>
-  <script src="./app.js?v=20260318-prelaunch-subscription-1" defer></script>
+  <script src="./app.js?v=20260318-prelaunch-subscription-4" defer></script>
   <!-- Yandex.Metrika counter -->
   <script type="text/javascript">
     (function(m,e,t,r,i,k,a){
