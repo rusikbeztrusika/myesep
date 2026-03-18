@@ -2416,24 +2416,27 @@ function handleGlobalClick(event) {
 
         try {
           let userId = String(state.userId || "").trim();
-          if (!userId) {
-            const { data, error } = await supabase.auth.getUser();
-            userId = String(data && data.user && data.user.id ? data.user.id : "").trim();
-            if (error || !userId) {
-              showAppToast("Не удалось отправить тестовое уведомление");
-              return;
-            }
-          }
+          const { data: userData } = await supabase.auth.getUser();
+          userId = String(userData?.user?.id || state.userId || "").trim();
 
-          const { error } = await supabase.functions.invoke("send-test-notification", {
-            body: { user_id: userId }
-          });
-          if (error) {
+          const response = await fetch(
+            "https://qayvdwitfdqptzgguoyj.supabase.co/functions/v1/send-test-notification",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + (await supabase.auth.getSession())?.data?.session?.access_token
+              },
+              body: JSON.stringify({ user_id: userId })
+            }
+          );
+
+          if (!response.ok) {
             showAppToast("Не удалось отправить тестовое уведомление");
             return;
           }
 
-          showAppToast("Тестовое уведомление отправлено");
+          showAppToast("Тестовое уведомление отправлено ✅");
           trackEvent("calendar_reminders_test_sent", { source: "settings_modal" });
         } catch (_error) {
           showAppToast("Не удалось отправить тестовое уведомление");
