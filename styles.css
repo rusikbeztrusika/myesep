@@ -2546,6 +2546,14 @@ h3,
   font-size: 12px;
 }
 
+.calendar-kpi-item .calendar-kpi-focus {
+  margin-top: 2px;
+  color: #5f6f98;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
 .calendar-kpi-item.danger {
   border-color: #f1d3db;
   background: #fff5f8;
@@ -2553,6 +2561,10 @@ h3,
 
 .calendar-kpi-item.danger strong {
   color: #bb3e54;
+}
+
+.calendar-kpi-item.danger .calendar-kpi-focus {
+  color: #9f495a;
 }
 
 .calendar-filter-groups {
@@ -9982,6 +9994,10 @@ h3,
 
   .calendar-summary-chip {
     align-self: flex-start;
+  }
+
+  .calendar-kpi-item .calendar-kpi-focus {
+    font-size: 10px;
   }
 
   .calendar-filter-groups {
