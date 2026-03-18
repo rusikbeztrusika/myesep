@@ -288,6 +288,216 @@ const KNOWLEDGE_TOPICS = {
   payments: "Оплата и реквизиты"
 };
 
+const KNOWLEDGE_MODES = Object.freeze({
+  hub: "hub",
+  articles: "articles",
+  faq: "faq"
+});
+
+const KNOWLEDGE_MODE_LABELS = Object.freeze({
+  [KNOWLEDGE_MODES.hub]: "Хаб",
+  [KNOWLEDGE_MODES.articles]: "Справочник",
+  [KNOWLEDGE_MODES.faq]: "FAQ"
+});
+
+const KNOWLEDGE_CATALOG_SECTIONS = [
+  {
+    id: "start",
+    title: "Старт ИП и регистрация",
+    description: "Базовые шаги для запуска без штрафов в первый месяц.",
+    articleTopic: "regimes",
+    topics: [
+      "Как выбрать режим на старте",
+      "Какие коды ОКЭД выбрать",
+      "Нужна ли онлайн-касса",
+      "Как открыть ИП в eGov",
+      "Какие сроки появляются сразу",
+      "Первые платежи после регистрации"
+    ]
+  },
+  {
+    id: "regimes",
+    title: "Режимы и лимиты",
+    description: "Самозанятый, упрощенка, ОУР и переход между ними.",
+    articleTopic: "regimes",
+    topics: [
+      "Лимит по самозанятому",
+      "Лимит по упрощенке (910)",
+      "Когда переходить на ОУР",
+      "Как сменить режим без ошибок",
+      "Риски при превышении лимита",
+      "Как выбрать режим по доходу"
+    ]
+  },
+  {
+    id: "reports",
+    title: "ФНО и отчеты",
+    description: "Ключевые формы и дедлайны подачи отчетности.",
+    articleTopic: "reports",
+    topics: [
+      "ФНО 910: сроки и подготовка",
+      "ФНО 220: годовая декларация",
+      "Частые ошибки в отчетах",
+      "Как исправить отправленный отчет",
+      "Что делать при просрочке ФНО",
+      "Чек-лист перед отправкой"
+    ]
+  },
+  {
+    id: "contributions",
+    title: "ОПВ, СО, ОПВР, ВОСМС",
+    description: "Взносы и отчисления: как считать и когда платить.",
+    articleTopic: "contributions",
+    topics: [
+      "ОПВ: база и ограничения",
+      "СО: расчет и период",
+      "ОПВР: когда обязателен",
+      "ВОСМС: фикс и проверка",
+      "Как сверять суммы в сервисах",
+      "Разница между взносами и налогом"
+    ]
+  },
+  {
+    id: "taxes",
+    title: "ИПН и налоги",
+    description: "Расчет налога по режимам и сверка итоговой суммы.",
+    articleTopic: "taxes",
+    topics: [
+      "ИПН на упрощенке: ставка",
+      "ИПН на ОУР: база",
+      "Налоговая нагрузка по сценарию",
+      "Почему сумма в разных экранах отличается",
+      "Как считать налог при нестабильном доходе",
+      "Как учесть полугодовой платеж"
+    ]
+  },
+  {
+    id: "payments",
+    title: "Оплата и реквизиты",
+    description: "Куда платить, как не ошибиться в КБК и периоде.",
+    articleTopic: "payments",
+    topics: [
+      "Платеж через Kaspi и e-Salyq",
+      "Как проверить КБК",
+      "Что писать в назначении платежа",
+      "Как проверить, что платеж дошел",
+      "Что делать при ошибочном платеже",
+      "Как хранить квитанции"
+    ]
+  },
+  {
+    id: "income",
+    title: "Доходы и учет",
+    description: "Организация учета поступлений без бухгалтера.",
+    articleTopic: "taxes",
+    topics: [
+      "Как вести доходы по категориям",
+      "Как учитывать переводы и возвраты",
+      "Чек по доходам перед дедлайном",
+      "Месячный и годовой учет",
+      "Экспорт в таблицу для бухгалтера",
+      "Контроль чистого денежного потока"
+    ]
+  },
+  {
+    id: "calendar",
+    title: "Календарь сроков",
+    description: "Как не пропускать обязательства и управлять напоминаниями.",
+    articleTopic: "payments",
+    topics: [
+      "Что значит «требует внимания»",
+      "Как работает чеклист по сроку",
+      "Напоминания за 7/3/1 день",
+      "Напоминание в день срока",
+      "Когда срок переносится",
+      "Как закрывать обязательства"
+    ]
+  },
+  {
+    id: "penalties",
+    title: "Штрафы и риски",
+    description: "Типовые причины штрафов и как их предотвращать.",
+    articleTopic: "payments",
+    topics: [
+      "Штраф за просрочку: от чего зависит",
+      "Что делать при уведомлении о нарушении",
+      "Как снизить риск просрочки",
+      "Ошибки в назначении платежа",
+      "Как действовать при блокировке",
+      "Проверка статуса обязательств"
+    ]
+  },
+  {
+    id: "employees",
+    title: "Если есть сотрудники",
+    description: "Минимальный набор обязательств работодателя.",
+    articleTopic: "contributions",
+    topics: [
+      "Какие взносы платит работодатель",
+      "Сроки платежей по сотрудникам",
+      "Как считать отчисления с зарплаты",
+      "Типовые ошибки при выплатах",
+      "Кадровые документы на старте",
+      "Чеклист месяца для работодателя"
+    ]
+  },
+  {
+    id: "close",
+    title: "Пауза и закрытие ИП",
+    description: "Как корректно остановить деятельность или закрыть ИП.",
+    articleTopic: "regimes",
+    topics: [
+      "Когда можно приостановить деятельность",
+      "Какие обязательства закрыть перед паузой",
+      "Закрытие ИП: пошагово",
+      "Что делать с долгами и переплатой",
+      "Проверка перед окончательным закрытием",
+      "Сроки хранения документов"
+    ]
+  },
+  {
+    id: "digital",
+    title: "Сервисы и интеграции",
+    description: "Практика работы с eGov, e-Salyq и уведомлениями.",
+    articleTopic: "reports",
+    topics: [
+      "Вход через ЭЦП и проблемы доступа",
+      "Синхронизация данных между сервисами",
+      "Как подключить Telegram-бота",
+      "Как проверить отправку уведомления",
+      "Где смотреть историю действий",
+      "Резервный сценарий при сбое"
+    ]
+  }
+];
+
+const KNOWLEDGE_FAQ_ITEMS = [
+  { id: "faq-regime-start", topic: "regimes", question: "Какой режим выбрать, если доход пока нестабильный?", answer: "Начните с режима, где проще исполнение обязательств и ниже риск штрафа. Проверяйте расчет на 2-3 сценариях дохода и меняйте режим до превышения лимита.", tags: ["режим", "старт", "лимит"] },
+  { id: "faq-910-deadline", topic: "reports", question: "Когда сдавать ФНО 910?", answer: "Обычно 2 раза в год: до 15 февраля и до 15 августа. Перед отправкой всегда сверяйте актуальные сроки в кабинете КГД.", tags: ["фно 910", "срок", "отчет"] },
+  { id: "faq-220-deadline", topic: "reports", question: "Когда подается ФНО 220 на ОУР?", answer: "Годовая декларация обычно подается до конца марта за предыдущий год. Проверяйте календарь сроков по своему статусу.", tags: ["фно 220", "оур", "годовой отчет"] },
+  { id: "faq-opv-base", topic: "contributions", question: "От какой суммы считать ОПВ?", answer: "ОПВ считается от базы дохода по правилам вашего режима и ограничений. Внутри сервиса используйте расчет из карточки «Из чего состоит сумма».", tags: ["опв", "база", "взносы"] },
+  { id: "faq-so-formula", topic: "contributions", question: "Почему СО отличается от ОПВ?", answer: "Потому что формула и база расчета отличаются. СО и ОПВ — это разные обязательные платежи с разной логикой начисления.", tags: ["со", "опв", "формула"] },
+  { id: "faq-vosms-fixed", topic: "contributions", question: "ВОСМС всегда одинаковый?", answer: "Часто он фиксированный в пределах периода, но нормативы могут обновляться. Сверяйте сумму с актуальными правилами.", tags: ["восмс", "фикс", "ставка"] },
+  { id: "faq-ipn-why-diff", topic: "taxes", question: "Почему сумма налога на главной и в сценарии может отличаться?", answer: "В карточках может показываться разная логика периода и включения отдельных платежей (например, ИПН с оплатой раз в полгода). Смотрите подпись под суммой.", tags: ["ипн", "сценарий", "разница сумм"] },
+  { id: "faq-limit-exceed", topic: "regimes", question: "Что будет, если превысить лимит режима?", answer: "Появится риск доначислений и необходимости смены режима. Лучше заранее отслеживать прогресс лимита и переключаться вовремя.", tags: ["лимит", "превышение", "режим"] },
+  { id: "faq-payment-date", topic: "payments", question: "До какого числа платить налоги и взносы?", answer: "Чаще всего до 25 числа следующего месяца, но есть исключения. Проверяйте конкретный срок в календаре обязательств.", tags: ["оплата", "срок", "25 число"] },
+  { id: "faq-kbk-check", topic: "payments", question: "Как не ошибиться с КБК?", answer: "Перед оплатой сверяйте КБК, период и назначение. Сохраняйте квитанцию сразу после платежа.", tags: ["кбк", "реквизиты", "ошибка"] },
+  { id: "faq-wrong-payment", topic: "payments", question: "Что делать, если платеж ушел не туда?", answer: "Подайте уточнение платежа по процедуре, доступной в официальных сервисах. Чем раньше это сделать, тем быстрее исправится статус.", tags: ["ошибочный платеж", "уточнение", "квитанция"] },
+  { id: "faq-reminders", topic: "payments", question: "Как работают напоминания в Telegram и Email?", answer: "Вы выбираете каналы и дни (за 7, 3, 1 день и в день срока). Настройки применяются ко всем будущим срокам.", tags: ["напоминания", "telegram", "email"] },
+  { id: "faq-calendar-warning", topic: "payments", question: "Что означает «требует внимания: 1» в календаре?", answer: "Это количество ближайших обязательств, которые попадают в окно риска (например, срок в пределах 7 дней).", tags: ["календарь", "требует внимания", "риск"] },
+  { id: "faq-income-categories", topic: "taxes", question: "Зачем разбивать доходы по категориям?", answer: "Так проще анализировать структуру выручки, видеть аномалии и готовить данные к отчету или передаче бухгалтеру.", tags: ["доходы", "категории", "учет"] },
+  { id: "faq-trial-limit", topic: "regimes", question: "Что ограничено в Trial?", answer: "В Trial обычно ограничено количество операций и часть продвинутых функций. Базовый расчет налогов остается доступным.", tags: ["trial", "ограничения", "pro"] },
+  { id: "faq-pro-value", topic: "regimes", question: "Когда имеет смысл переходить на Pro?", answer: "Когда вам нужны регулярные напоминания, расширенная аналитика и удобный экспорт без ручной рутины.", tags: ["pro", "ценность", "подписка"] },
+  { id: "faq-self-employed-limit", topic: "regimes", question: "Когда самозанятый становится невыгодным?", answer: "Когда доход растет и выходит за лимиты/условия режима. В этот момент сравнивайте альтернативы на калькуляторе.", tags: ["самозанятый", "лимит", "выгода"] },
+  { id: "faq-our-expenses", topic: "taxes", question: "Почему на ОУР важно учитывать расходы?", answer: "На ОУР налоговая база зависит от финансового результата. Корректный учет расходов влияет на итоговую сумму налога.", tags: ["оур", "расходы", "налоговая база"] },
+  { id: "faq-report-errors", topic: "reports", question: "Что чаще всего ломает отправку ФНО?", answer: "Неверный период, несоответствие сумм, пропущенные поля и технические ошибки подписи/доступа.", tags: ["фно", "ошибка отправки", "проверка"] },
+  { id: "faq-late-report", topic: "reports", question: "Если отчет отправлен позже срока — что делать?", answer: "Сдайте как можно быстрее, зафиксируйте факт отправки и проверьте уведомления по начислениям/штрафам.", tags: ["просрочка", "отчет", "штраф"] },
+  { id: "faq-employees-minimum", topic: "contributions", question: "Какие обязательства появляются при найме сотрудника?", answer: "Появляются дополнительные платежи и отчетность как у работодателя. Нужен отдельный ежемесячный чеклист.", tags: ["сотрудники", "работодатель", "взносы"] },
+  { id: "faq-close-ip", topic: "regimes", question: "Можно ли просто перестать работать без закрытия ИП?", answer: "Нет, обязательства могут оставаться активными. Лучше официально приостановить деятельность или закрыть ИП по процедуре.", tags: ["закрытие ип", "приостановка", "обязательства"] },
+  { id: "faq-seo-content", topic: "reports", question: "Как часто обновлять базу знаний для SEO?", answer: "Оптимально — еженедельно: добавлять короткие FAQ-ответы и ежемесячно обновлять крупные практические статьи.", tags: ["seo", "контент", "обновление"] },
+  { id: "faq-documents-storage", topic: "payments", question: "Сколько хранить квитанции и подтверждения оплат?", answer: "Храните документы весь срок, который требуется регламентом и для безопасной сверки при проверках.", tags: ["квитанции", "документы", "хранение"] }
+];
+
 const FEEDBACK_CATEGORIES = [
   { id: "bug", label: "Баг", hint: "Опишите что сломалось и как это воспроизвести." },
   { id: "proposal", label: "Предложение", hint: "Что добавить или улучшить." },
@@ -425,12 +635,28 @@ const KNOWLEDGE_ARTICLE_REGIMES = Object.freeze({
 function getDefaultKnowledgeFilters() {
   return {
     query: "",
-    topic: "all"
+    topic: "all",
+    mode: KNOWLEDGE_MODES.hub,
+    section: "all"
   };
 }
 
 function normalizeKnowledgeTopic(value) {
   return Object.prototype.hasOwnProperty.call(KNOWLEDGE_TOPICS, value) ? value : "all";
+}
+
+function normalizeKnowledgeMode(value) {
+  return Object.prototype.hasOwnProperty.call(KNOWLEDGE_MODE_LABELS, value) ? value : KNOWLEDGE_MODES.hub;
+}
+
+function normalizeKnowledgeSection(value) {
+  if (value === "all") return "all";
+  return KNOWLEDGE_CATALOG_SECTIONS.some((section) => section.id === value) ? value : "all";
+}
+
+function getKnowledgeSectionById(sectionId) {
+  if (!sectionId || sectionId === "all") return null;
+  return KNOWLEDGE_CATALOG_SECTIONS.find((section) => section.id === sectionId) || null;
 }
 
 function createDefaultSubscription() {
@@ -1748,7 +1974,9 @@ function loadState() {
   state.knowledgeFilters = {
     ...getDefaultKnowledgeFilters(),
     query: String(savedKnowledgeFilters.query || "").trim(),
-    topic: normalizeKnowledgeTopic(String(savedKnowledgeFilters.topic || "all"))
+    topic: normalizeKnowledgeTopic(String(savedKnowledgeFilters.topic || "all")),
+    mode: normalizeKnowledgeMode(String(savedKnowledgeFilters.mode || KNOWLEDGE_MODES.hub)),
+    section: normalizeKnowledgeSection(String(savedKnowledgeFilters.section || "all"))
   };
 
   const taxFallbackIncome = getTaxPlannerFallbackIncome();
@@ -2217,6 +2445,43 @@ function showAppToast(message) {
     }, 220);
   }, 2800);
 }
+
+function scrollAppViewportToTop() {
+  const mainArea = document.querySelector(".main-area");
+  const targets = [
+    document.scrollingElement,
+    document.documentElement,
+    document.body,
+    mainArea,
+    els.dashboardApp,
+    els.pageContent
+  ];
+
+  targets.forEach((target) => {
+    if (!target) return;
+
+    if (typeof target.scrollTo === "function") {
+      try {
+        target.scrollTo({ top: 0, left: 0, behavior: "auto" });
+        return;
+      } catch (_error) {
+        // fallback to scrollTop below
+      }
+    }
+
+    if ("scrollTop" in target) {
+      target.scrollTop = 0;
+    }
+  });
+
+  if (typeof window.scrollTo === "function") {
+    try {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    } catch (_error) {
+      window.scrollTo(0, 0);
+    }
+  }
+}
 function updateAuthUi() {
   if (state.isLoggedIn) {
     els.publicApp.classList.add("hidden");
@@ -2343,6 +2608,35 @@ function handleGlobalClick(event) {
     }
 
     const action = actionEl.dataset.action;
+
+    if (action === "go-home") {
+      if (state.isLoggedIn) {
+        state.page = "dashboard";
+        closeMobileDrawer();
+        if (els.dashboardApp) {
+          els.dashboardApp.classList.remove("sidebar-open");
+        }
+        if (els.mobileMoreModal) {
+          closeModal(els.mobileMoreModal);
+        }
+        renderDashboard();
+        scrollAppViewportToTop();
+        trackEvent("page_open", { page: "dashboard", source: "logo" });
+        return;
+      }
+
+      if (els.deadlineModal && !els.deadlineModal.classList.contains("hidden")) {
+        state.landingDeadlineOpenId = null;
+        saveState();
+        closeModal(els.deadlineModal);
+      }
+      if (els.loginModal && !els.loginModal.classList.contains("hidden")) {
+        closeModal(els.loginModal);
+      }
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      trackEvent("landing_logo_click");
+      return;
+    }
 
     if (action === "dashboard-recent-month-prev" && state.isLoggedIn && state.page === "dashboard") {
       const maxMonthIndex = new Date().getMonth();
@@ -3564,11 +3858,55 @@ function handleGlobalClick(event) {
     return;
   }
 
+  const knowledgeModeBtn = event.target.closest("[data-knowledge-mode]");
+  if (
+    knowledgeModeBtn &&
+    state.page === "knowledge" &&
+    !knowledgeModeBtn.hasAttribute("data-knowledge-section") &&
+    !knowledgeModeBtn.hasAttribute("data-knowledge-topic")
+  ) {
+    const nextMode = normalizeKnowledgeMode(String(knowledgeModeBtn.dataset.knowledgeMode || KNOWLEDGE_MODES.hub));
+    state.knowledgeFilters = {
+      ...getDefaultKnowledgeFilters(),
+      ...(state.knowledgeFilters || {}),
+      mode: nextMode
+    };
+    saveState();
+    renderKnowledgePage();
+    trackEvent("knowledge_mode_change", { mode: nextMode });
+    return;
+  }
+
+  const knowledgeSectionBtn = event.target.closest("[data-knowledge-section]");
+  if (knowledgeSectionBtn && state.page === "knowledge") {
+    const nextSection = normalizeKnowledgeSection(String(knowledgeSectionBtn.dataset.knowledgeSection || "all"));
+    const forcedModeRaw = String(knowledgeSectionBtn.dataset.knowledgeMode || "");
+    const nextMode = forcedModeRaw ? normalizeKnowledgeMode(forcedModeRaw) : normalizeKnowledgeMode(String((state.knowledgeFilters || {}).mode || KNOWLEDGE_MODES.articles));
+    const sectionMeta = getKnowledgeSectionById(nextSection);
+    const sectionTopic = sectionMeta && sectionMeta.articleTopic
+      ? normalizeKnowledgeTopic(sectionMeta.articleTopic)
+      : "all";
+
+    state.knowledgeFilters = {
+      ...getDefaultKnowledgeFilters(),
+      ...(state.knowledgeFilters || {}),
+      mode: nextMode,
+      section: nextSection,
+      topic: nextMode === KNOWLEDGE_MODES.hub ? normalizeKnowledgeTopic(String((state.knowledgeFilters || {}).topic || "all")) : sectionTopic
+    };
+    saveState();
+    renderKnowledgePage();
+    trackEvent("knowledge_section_filter", { section: nextSection, mode: nextMode });
+    return;
+  }
+
   const knowledgeTopicBtn = event.target.closest("[data-knowledge-topic]");
   if (knowledgeTopicBtn && state.page === "knowledge") {
     state.knowledgeFilters = {
       ...getDefaultKnowledgeFilters(),
       ...(state.knowledgeFilters || {}),
+      mode: KNOWLEDGE_MODES.articles,
+      section: "all",
       topic: normalizeKnowledgeTopic(String(knowledgeTopicBtn.dataset.knowledgeTopic || "all"))
     };
     saveState();
@@ -3579,7 +3917,11 @@ function handleGlobalClick(event) {
 
   const resetKnowledgeBtn = event.target.closest("[data-reset-knowledge-filters]");
   if (resetKnowledgeBtn && state.page === "knowledge") {
-    state.knowledgeFilters = getDefaultKnowledgeFilters();
+    const currentMode = normalizeKnowledgeMode(String((state.knowledgeFilters || {}).mode || KNOWLEDGE_MODES.hub));
+    state.knowledgeFilters = {
+      ...getDefaultKnowledgeFilters(),
+      mode: currentMode
+    };
     saveState();
     renderKnowledgePage();
     trackEvent("knowledge_filters_reset");
@@ -4158,7 +4500,9 @@ async function handleGlobalSubmit(event) {
     state.knowledgeFilters = {
       ...getDefaultKnowledgeFilters(),
       query: String(formData.get("query") || "").trim(),
-      topic: normalizeKnowledgeTopic(String(formData.get("topic") || state.knowledgeFilters.topic || "all"))
+      topic: normalizeKnowledgeTopic(String(formData.get("topic") || state.knowledgeFilters.topic || "all")),
+      mode: normalizeKnowledgeMode(String(formData.get("mode") || state.knowledgeFilters.mode || KNOWLEDGE_MODES.hub)),
+      section: normalizeKnowledgeSection(String(formData.get("section") || state.knowledgeFilters.section || "all"))
     };
 
     saveState();
@@ -6774,13 +7118,28 @@ function syncOnboardingTour() {
   }
 }
 function handleGlobalKeyDown(event) {
+  const actionEl = event.target && typeof event.target.closest === "function"
+    ? event.target.closest("[data-action]")
+    : null;
+  if (actionEl && actionEl.dataset.action === "go-home" && (event.key === "Enter" || event.key === " ")) {
+    event.preventDefault();
+    actionEl.click();
+    return;
+  }
+
   if (event.key === "Escape" && onboardingTourState.active) {
     event.preventDefault();
     closeOnboardingTour(true, "escape");
   }
 }
 function renderDashboard() {
-  if (shouldShowOnboarding()) {
+  const onboardingMode = shouldShowOnboarding();
+  const nextViewKey = onboardingMode ? "onboarding" : state.page;
+  if (lastRenderedPage !== null && lastRenderedPage !== nextViewKey) {
+    scrollAppViewportToTop();
+  }
+
+  if (onboardingMode) {
     document.body.classList.add("onboarding-page-active");
     if (els.dashboardApp) {
       els.dashboardApp.classList.add("onboarding-mode");
@@ -9646,9 +10005,15 @@ function getFilteredKnowledgeArticles() {
   };
 
   const query = String(filters.query || "").trim().toLowerCase();
+  const section = getKnowledgeSectionById(normalizeKnowledgeSection(String(filters.section || "all")));
+  const sectionTopic = section && section.articleTopic ? normalizeKnowledgeTopic(section.articleTopic) : "all";
 
   return KNOWLEDGE_ARTICLES.filter((article) => {
     if (filters.topic !== "all" && article.topic !== filters.topic) {
+      return false;
+    }
+
+    if (sectionTopic !== "all" && article.topic !== sectionTopic) {
       return false;
     }
 
@@ -9665,6 +10030,41 @@ function getFilteredKnowledgeArticles() {
       article.where,
       ...(Array.isArray(article.needs) ? article.needs : []),
       ...(Array.isArray(article.search) ? article.search : [])
+    ]
+      .join(" ")
+      .toLowerCase();
+
+    return haystack.includes(query);
+  });
+}
+
+function getFilteredKnowledgeFaqItems() {
+  const filters = {
+    ...getDefaultKnowledgeFilters(),
+    ...(state.knowledgeFilters || {})
+  };
+
+  const query = String(filters.query || "").trim().toLowerCase();
+  const section = getKnowledgeSectionById(normalizeKnowledgeSection(String(filters.section || "all")));
+  const sectionTopic = section && section.articleTopic ? normalizeKnowledgeTopic(section.articleTopic) : "all";
+
+  return KNOWLEDGE_FAQ_ITEMS.filter((item) => {
+    if (filters.topic !== "all" && item.topic !== filters.topic) {
+      return false;
+    }
+
+    if (sectionTopic !== "all" && item.topic !== sectionTopic) {
+      return false;
+    }
+
+    if (!query) {
+      return true;
+    }
+
+    const haystack = [
+      item.question,
+      item.answer,
+      ...(Array.isArray(item.tags) ? item.tags : [])
     ]
       .join(" ")
       .toLowerCase();
@@ -9690,9 +10090,19 @@ function buildKnowledgeCheatsheetText(article) {
 }
 
 function renderKnowledgePage() {
-  state.knowledgeFilters = {
+  const mergedFilters = {
     ...getDefaultKnowledgeFilters(),
     ...(state.knowledgeFilters || {})
+  };
+  const activeMode = normalizeKnowledgeMode(String(mergedFilters.mode || KNOWLEDGE_MODES.hub));
+  const activeTopic = normalizeKnowledgeTopic(String(mergedFilters.topic || "all"));
+  const activeSection = normalizeKnowledgeSection(String(mergedFilters.section || "all"));
+
+  state.knowledgeFilters = {
+    ...mergedFilters,
+    mode: activeMode,
+    topic: activeTopic,
+    section: activeSection
   };
 
   const selectedRegime = state.regime === "our" || state.regime === "self" ? state.regime : "simplified";
@@ -9701,17 +10111,44 @@ function renderKnowledgePage() {
     const rightRank = isKnowledgeArticleRelevantForRegime(getKnowledgeArticleRegime(right.id), selectedRegime) ? 0 : 1;
     return leftRank - rightRank;
   });
+  const faqItems = getFilteredKnowledgeFaqItems();
   const totalArticles = KNOWLEDGE_ARTICLES.length;
-  const activeTopic = normalizeKnowledgeTopic(String(state.knowledgeFilters.topic || "all"));
+  const totalFaq = KNOWLEDGE_FAQ_ITEMS.length;
+  const totalCatalogTopics = KNOWLEDGE_CATALOG_SECTIONS.reduce((sum, section) => sum + (Array.isArray(section.topics) ? section.topics.length : 0), 0);
+  const query = String(state.knowledgeFilters.query || "").trim().toLowerCase();
+  const selectedSection = getKnowledgeSectionById(activeSection);
+  const searchPlaceholder = activeMode === KNOWLEDGE_MODES.faq
+    ? "срок, штраф, уведомление, ФНО..."
+    : activeMode === KNOWLEDGE_MODES.articles
+      ? "ФНО, ОПВ, ИПН, лимит..."
+      : "регистрация, касса, сроки, e-Salyq...";
 
-  const topicButtons = Object.entries(KNOWLEDGE_TOPICS)
-    .map(
-      ([id, label]) =>
-        `<button type="button" class="${activeTopic === id ? "active" : ""}" data-knowledge-topic="${id}">${label}</button>`
-    )
+  const filteredSections = KNOWLEDGE_CATALOG_SECTIONS.filter((section) => {
+    if (activeMode === KNOWLEDGE_MODES.hub && activeSection !== "all" && section.id !== activeSection) {
+      return false;
+    }
+    if (activeTopic !== "all" && normalizeKnowledgeTopic(String(section.articleTopic || "all")) !== activeTopic) {
+      return false;
+    }
+    if (!query) return true;
+    const haystack = [section.title, section.description, ...(section.topics || [])].join(" ").toLowerCase();
+    return haystack.includes(query);
+  });
+
+  const modeButtons = Object.entries(KNOWLEDGE_MODE_LABELS)
+    .map(([modeId, label]) => `<button type="button" class="${activeMode === modeId ? "active" : ""}" data-knowledge-mode="${modeId}">${escapeHtml(label)}</button>`)
     .join("");
 
-  const cards = articles
+  const sectionButtons = [
+    '<button type="button" class="' + (activeSection === "all" ? "active" : "") + '" data-knowledge-section="all">Все разделы</button>',
+    ...KNOWLEDGE_CATALOG_SECTIONS.map((section) => `<button type="button" class="${activeSection === section.id ? "active" : ""}" data-knowledge-section="${section.id}">${escapeHtml(section.title)}</button>`)
+  ].join("");
+
+  const topicButtons = Object.entries(KNOWLEDGE_TOPICS)
+    .map(([id, label]) => `<button type="button" class="${activeTopic === id ? "active" : ""}" data-knowledge-topic="${id}">${label}</button>`)
+    .join("");
+
+  const articleCards = articles
     .map((article) => {
       const articleRegime = getKnowledgeArticleRegime(article.id);
       const regimeBadgeLabel = getKnowledgeRegimeBadgeLabel(articleRegime);
@@ -9732,29 +10169,16 @@ function renderKnowledgePage() {
             <h3>${escapeHtml(article.title)}</h3>
             <p>${escapeHtml(article.summary)}</p>
           </div>
-
           ${personalizationHtml}
-
           <div class="knowledge-practical">
             <strong>Практично:</strong>
             <span>${escapeHtml(article.practical)}</span>
           </div>
-
           <div class="knowledge-facts">
-            <div>
-              <span>Когда</span>
-              <b>${escapeHtml(article.when)}</b>
-            </div>
-            <div>
-              <span>Как считать</span>
-              <b>${escapeHtml(article.formula)}</b>
-            </div>
-            <div>
-              <span>Где сделать</span>
-              <b>${escapeHtml(article.where)}</b>
-            </div>
+            <div><span>Когда</span><b>${escapeHtml(article.when)}</b></div>
+            <div><span>Как считать</span><b>${escapeHtml(article.formula)}</b></div>
+            <div><span>Где сделать</span><b>${escapeHtml(article.where)}</b></div>
           </div>
-
           <details class="knowledge-details">
             <summary>Открыть мини-чеклист</summary>
             <div class="knowledge-details-body">
@@ -9763,9 +10187,8 @@ function renderKnowledgePage() {
               <p class="knowledge-note">${escapeHtml(article.note)}</p>
             </div>
           </details>
-
           <div class="knowledge-actions-row">
-            <button type="button" class="btn btn-ghost btn-xs" data-action="copy-knowledge" data-knowledge-id="${article.id}" data-default-label="Скопировать шпаргалку" title="Копирует текст карточки для отправки бухгалтеру или в заметки" aria-label="Копировать текст карточки для отправки бухгалтеру или в заметки">Скопировать шпаргалку</button>
+            <button type="button" class="btn btn-ghost btn-xs" data-action="copy-knowledge" data-knowledge-id="${article.id}" data-default-label="Скопировать шпаргалку" title="Копирует текст карточки для отправки бухгалтеру или в заметки" aria-label="Копировать шпаргалку">Скопировать шпаргалку</button>
             <button type="button" class="btn btn-ghost btn-xs" data-page="calendar">Открыть календарь</button>
           </div>
         </article>
@@ -9773,39 +10196,134 @@ function renderKnowledgePage() {
     })
     .join("");
 
+  const faqCards = faqItems
+    .map((item) => {
+      const tags = (item.tags || []).map((tag) => `<span>${escapeHtml(tag)}</span>`).join("");
+      return `
+        <details class="knowledge-faq-item">
+          <summary>${escapeHtml(item.question)}</summary>
+          <div class="knowledge-faq-body">
+            <p>${escapeHtml(item.answer)}</p>
+            <div class="knowledge-faq-tags">${tags}</div>
+          </div>
+        </details>
+      `;
+    })
+    .join("");
+
+  const hubCards = filteredSections
+    .map((section) => {
+      const topTopics = (section.topics || []).slice(0, 4).map((topic) => `<span>${escapeHtml(topic)}</span>`).join("");
+      return `
+        <article class="card knowledge-hub-card">
+          <div class="knowledge-hub-card-head">
+            <h3>${escapeHtml(section.title)}</h3>
+            <span>${(section.topics || []).length} тем</span>
+          </div>
+          <p>${escapeHtml(section.description)}</p>
+          <div class="knowledge-hub-topics">${topTopics}</div>
+          <div class="knowledge-hub-footer">
+            <button type="button" class="btn btn-ghost btn-xs" data-knowledge-section="${section.id}" data-knowledge-mode="articles">Открыть раздел</button>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+
+  const quickGuides = [...KNOWLEDGE_ARTICLES]
+    .sort((left, right) => {
+      const leftRank = isKnowledgeArticleRelevantForRegime(getKnowledgeArticleRegime(left.id), selectedRegime) ? 0 : 1;
+      const rightRank = isKnowledgeArticleRelevantForRegime(getKnowledgeArticleRegime(right.id), selectedRegime) ? 0 : 1;
+      return leftRank - rightRank;
+    })
+    .slice(0, 4)
+    .map((article) => `<button type="button" class="knowledge-quick-item" data-knowledge-mode="articles" data-knowledge-topic="${escapeHtml(article.topic)}"><strong>${escapeHtml(article.title)}</strong><small>${escapeHtml(article.summary)}</small></button>`)
+    .join("");
+
+  const sectionOutline = selectedSection
+    ? `
+      <article class="card mt-16 knowledge-outline-card">
+        <h3>${escapeHtml(selectedSection.title)}: карта тем</h3>
+        <p>${escapeHtml(selectedSection.description)}</p>
+        <div class="knowledge-outline-topics">
+          ${(selectedSection.topics || []).map((topic) => `<span>${escapeHtml(topic)}</span>`).join("")}
+        </div>
+      </article>
+    `
+    : "";
+
+  let contentHtml = "";
+  if (activeMode === KNOWLEDGE_MODES.hub) {
+    contentHtml = `
+      <div class="grid grid-2 mt-16 knowledge-hub-grid">
+        ${hubCards || '<article class="card knowledge-empty">По текущему запросу разделы не найдены. Попробуйте изменить поиск.</article>'}
+      </div>
+      <article class="card mt-16 knowledge-outline-card">
+        <h3>Быстрый старт по вашим условиям</h3>
+        <p>Подборка коротких материалов по текущему режиму.</p>
+        <div class="knowledge-quick-grid">${quickGuides}</div>
+      </article>
+    `;
+  } else if (activeMode === KNOWLEDGE_MODES.faq) {
+    contentHtml = `
+      <article class="card mt-16 knowledge-faq-wrap">
+        <h3>Частые вопросы</h3>
+        <p class="text-muted">Короткие ответы для быстрых решений. Для точной проверки сверяйте данные в официальных сервисах РК.</p>
+        <div class="knowledge-faq-list">
+          ${faqCards || '<article class="knowledge-empty">FAQ по текущему фильтру не найден. Попробуйте убрать часть фильтров.</article>'}
+        </div>
+      </article>
+    `;
+  } else {
+    contentHtml = `
+      ${sectionOutline}
+      <div class="grid grid-2 mt-16 knowledge-grid">
+        ${articleCards || '<article class="card knowledge-empty">Карточки по текущему фильтру не найдены. Попробуйте убрать фильтр темы или поиск.</article>'}
+      </div>
+    `;
+  }
+
+  const visibleCount = activeMode === KNOWLEDGE_MODES.hub
+    ? filteredSections.length
+    : activeMode === KNOWLEDGE_MODES.faq
+      ? faqItems.length
+      : articles.length;
+
   els.pageContent.innerHTML = `
     <article class="card knowledge-hero-card">
       <div>
         <h3>База знаний по РК</h3>
-        <p>Понятные ответы коротко: ФНО, ОПВ, СО, ВОСМС и ключевые налоги без перегруза юридическим языком.</p>
+        <p>Выберите раздел и найдите короткий ответ по налогам, срокам и платежам.</p>
       </div>
       <div class="knowledge-hero-meta">
-        <span>${articles.length} из ${totalArticles} карточек</span>
-        <small>Формат: практичная шпаргалка, не юридическая консультация</small>
+        <span>${totalCatalogTopics} тем · ${totalArticles} статей · ${totalFaq} FAQ</span>
+        <small>Сейчас показано: ${visibleCount} · режим: ${escapeHtml(KNOWLEDGE_MODE_LABELS[activeMode])}</small>
       </div>
     </article>
 
     <article class="card mt-16 knowledge-filter-card">
-      <div class="knowledge-chip-group">${topicButtons}</div>
+      <div class="knowledge-mode-switch">${modeButtons}</div>
+      <div class="knowledge-chip-group mt-10">${sectionButtons}</div>
+      ${activeMode !== KNOWLEDGE_MODES.hub ? `<div class="knowledge-chip-group mt-10">${topicButtons}</div>` : ""}
       <form id="knowledgeFilterForm" class="knowledge-search-form">
         <label>
           Поиск по базе
-          <input name="query" type="text" value="${escapeHtml(state.knowledgeFilters.query)}" placeholder="ФНО, ОПВ, ИПН, лимит..." />
+          <input name="query" type="text" value="${escapeHtml(state.knowledgeFilters.query)}" placeholder="${escapeHtml(searchPlaceholder)}" />
         </label>
         <input type="hidden" name="topic" value="${escapeHtml(activeTopic)}" />
+        <input type="hidden" name="mode" value="${escapeHtml(activeMode)}" />
+        <input type="hidden" name="section" value="${escapeHtml(activeSection)}" />
         <div class="knowledge-filter-actions">
           <button class="btn btn-ghost" type="button" data-reset-knowledge-filters>Сбросить</button>
         </div>
       </form>
     </article>
 
-    <div class="grid grid-2 mt-16 knowledge-grid">
-      ${cards || '<article class="card knowledge-empty">Карточки по текущему фильтру не найдены. Попробуйте убрать фильтр темы или поиск.</article>'}
-    </div>
+    ${contentHtml}
 
     <article class="card mt-16 knowledge-disclaimer-card">
       <h3>Важно</h3>
-      <p>Эта база знаний дает практичный ориентир для ИП и самозанятых. Перед сдачей отчетности и оплатой налогов всегда сверяйте итог в официальных сервисах РК.</p>
+      <p>Это практический ориентир для ИП и самозанятых. Перед оплатой и сдачей отчетности всегда сверяйте данные в официальных сервисах РК.</p>
     </article>
   `;
 }
@@ -9832,7 +10350,7 @@ function renderFeedbackPage() {
       <div>
         
         <h3>Обратная связь</h3>
-        <p class="text-muted">Выберите категорию, опишите ситуацию и отправьте форму. Заявка сразу попадёт к нам — ответим в течение 24 часов.</p>
+        <p class="text-muted">Выберите категорию, опишите ситуацию и отправьте форму.</p>
       </div>
       <div class="feedback-hero-chips">
         <span>Баги</span>
@@ -9841,7 +10359,7 @@ function renderFeedbackPage() {
       </div>
     </article>
 
-    <div class="grid grid-2 mt-16 feedback-grid">
+    <div class="grid mt-10 feedback-grid">
       <article class="card feedback-form-card">
         <h3>Чем можем помочь?</h3>
         <form id="feedbackForm" class="stack-form feedback-form">
@@ -9866,29 +10384,6 @@ function renderFeedbackPage() {
 
         <p id="feedbackStatus" class="status feedback-status${initialStatusClass}">${initialStatus}</p>
       </article>
-
-      <div class="feedback-side-stack">
-        <article class="card feedback-side-card">
-          <h3>Что будет после отправки</h3>
-          <ul class="feedback-flow-list">
-            <li>1. Запрос автоматически попадает в Google Sheets.</li>
-            <li>2. Видны категория, режим, дата и ваш текст.</li>
-            <li>3. Если email указан, сможем ответить напрямую.</li>
-          </ul>
-
-          <div class="feedback-tip-box">
-            <strong>Как написать, чтобы быстрее помочь</strong>
-            <p>Для бага: добавьте шаги и скриншот. Для налогового вопроса: укажите режим и период (месяц/полугодие).</p>
-          </div>
-        </article>
-
-        <article class="card feedback-contact-card">
-          <h3>Оперативный ответ</h3>
-          <p class="feedback-sla">Обычно отвечаем в течение 24 часов.</p>
-          <a class="feedback-telegram-link" href="https://t.me/myesep" target="_blank" rel="noopener noreferrer">@myesep в Telegram</a>
-          <p class="feedback-contact-note">Если вопрос срочный, удобнее всего написать в Telegram.</p>
-        </article>
-      </div>
     </div>
   `;
 }
@@ -10325,6 +10820,7 @@ function readJson(key) {
     return null;
   }
 }
+
 
 
 
