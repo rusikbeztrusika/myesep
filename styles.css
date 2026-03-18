@@ -3369,6 +3369,46 @@ h3,
   font-weight: 700;
   line-height: 1;
 }
+
+.reminders-telegram-disconnect,
+#remindersSetupModal .reminders-telegram-disconnect {
+  -webkit-appearance: none;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #d3dcf5;
+  background: #f8faff;
+  color: #67749b;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.reminders-telegram-disconnect:hover,
+.reminders-telegram-disconnect:focus-visible,
+#remindersSetupModal .reminders-telegram-disconnect:hover,
+#remindersSetupModal .reminders-telegram-disconnect:focus-visible {
+  border-color: #bdc9ef;
+  background: #eef3ff;
+  color: #526391;
+}
+
+.reminders-telegram-disconnect:focus-visible,
+#remindersSetupModal .reminders-telegram-disconnect:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(109, 126, 221, 0.16);
+}
+
+.reminders-telegram-disconnect[disabled],
+#remindersSetupModal .reminders-telegram-disconnect[disabled] {
+  opacity: 0.6;
+  cursor: default;
+}
 #remindersSetupModal .reminders-settings-days {
   border: 1px solid #dce5f8;
   border-radius: 12px;
@@ -6422,48 +6462,60 @@ h3,
 .income-trial-notice {
   margin-top: 16px;
   margin-bottom: 14px;
-  padding: 12px 14px;
+  padding: 12px 40px 12px 14px;
   border-radius: 12px;
-  border: 1px solid #f3d38a;
-  background: #fff8e8;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
+  border: 1px solid #d8e2fb;
+  background: linear-gradient(180deg, #f7f9ff 0%, #f1f5ff 100%);
+  position: relative;
 }
 
-.income-trial-notice p {
+.income-trial-main {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+.income-trial-text {
   margin: 0;
-  color: #765320;
+  color: #4e5f88;
   font-size: 14px;
   font-weight: 600;
-  line-height: 1.4;
+  line-height: 1.35;
+}
+
+.income-trial-text strong {
+  color: #2e4278;
 }
 
 .income-trial-link {
-  display: inline-block;
-  margin-top: 8px;
-  border: 1px solid #d2a04b;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin: 0;
+  border: 1px solid #b8c7f4;
   border-radius: 999px;
-  background: linear-gradient(180deg, #f8d37b 0%, #efbf63 100%);
-  color: #4f350d;
+  background: rgba(255, 255, 255, 0.78);
+  color: #3f548a;
   font: inherit;
   font-size: 13px;
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1.15;
   text-align: center;
   text-decoration: none;
-  padding: 8px 12px;
+  padding: 8px 14px;
   max-width: 100%;
   cursor: pointer;
-  transition: background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
 }
 
 .income-trial-link:hover,
 .income-trial-link:focus-visible {
-  background: linear-gradient(180deg, #f9da8b 0%, #f2c86f 100%);
-  border-color: #c0913f;
-  color: #442c09;
+  background: #ffffff;
+  border-color: #a8baee;
+  color: #354a80;
+  transform: translateY(-1px);
 }
 
 .income-trial-link:active {
@@ -6471,9 +6523,12 @@ h3,
 }
 
 .income-trial-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
   border: 0;
   background: transparent;
-  color: #8f7236;
+  color: #8a9bc8;
   font-size: 20px;
   line-height: 1;
   padding: 0 2px;
@@ -6482,7 +6537,7 @@ h3,
 
 .income-trial-close:hover,
 .income-trial-close:focus-visible {
-  color: #6d531f;
+  color: #6076ad;
 }
 
 .income-journal-head {
@@ -9803,11 +9858,22 @@ h3,
   }
 
   .income-trial-notice {
-    padding: 10px 12px;
+    padding: 10px 38px 10px 12px;
   }
 
-  .income-trial-notice p {
+  .income-trial-main {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .income-trial-text {
     font-size: 13px;
+  }
+
+  .income-trial-link {
+    width: 100%;
+    min-height: 34px;
   }
 }
 
@@ -11570,8 +11636,9 @@ h4,
 
   #mobileMenuBtn {
     display: inline-flex !important;
-    grid-column: 1;
-    justify-self: start;
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: end;
     width: 36px;
     height: 36px;
     border: 1px solid #d2dbf4;
@@ -11590,6 +11657,7 @@ h4,
 
   .main-header-title {
     grid-column: 2;
+    grid-row: 1;
     justify-self: stretch;
     width: 100%;
     min-width: 0;
@@ -11623,8 +11691,9 @@ h4,
 
   #mobileAmountsVisibilityBtn {
     display: inline-flex !important;
-    grid-column: 3;
-    justify-self: end;
+    grid-column: 1;
+    grid-row: 1;
+    justify-self: start;
     width: 36px;
     height: 36px;
     flex: initial;
@@ -11933,15 +12002,16 @@ h4,
   #mobileDrawer {
     position: fixed;
     top: 0;
-    left: 0;
+    right: 0;
+    left: auto;
     width: 280px;
     max-width: calc(100vw - 20px);
     height: 100vh;
     background: #ffffff;
     z-index: 1000;
-    transform: translateX(-100%);
+    transform: translateX(100%);
     transition: transform 0.25s ease;
-    box-shadow: 10px 0 28px rgba(10, 16, 35, 0.2);
+    box-shadow: -10px 0 28px rgba(10, 16, 35, 0.2);
     padding: 10px 0 0;
     display: flex;
     flex-direction: column;
