@@ -4484,6 +4484,7 @@ function getTaxProfileRow(regime, monthlyIncome, tax) {
 }
 
 async function flushTaxProfileUpsert() {
+  console.log('Saving to user_profiles:', { full_name: state.profile?.name });
   if (taxProfileUpsertInFlight || !pendingTaxProfileUpsert) {
     return;
   }
