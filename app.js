@@ -4065,6 +4065,33 @@ async function handleGlobalSubmit(event) {
     saveState();
     updateCalendarReminderToggleUi();
 
+    if (state.isLoggedIn && supabaseClient) {
+      let userId = String(state.userId || "").trim();
+      if (!userId && supabaseClient.auth && typeof supabaseClient.auth.getUser === "function") {
+        const { data, error } = await supabaseClient.auth.getUser();
+        if (!error) {
+          userId = String(data && data.user && data.user.id ? data.user.id : "").trim();
+        }
+      }
+
+      if (userId) {
+        const selectedDays = new Set((next.days || []).map((item) => Number(item)));
+        const { error: notificationsSaveError } = await supabaseClient
+          .from("user_notifications")
+          .upsert({
+            user_id: userId,
+            notify_7days: selectedDays.has(7),
+            notify_3days: selectedDays.has(3),
+            notify_1day: selectedDays.has(1),
+            notify_day_of: selectedDays.has(0)
+          }, { onConflict: "user_id" });
+
+        if (notificationsSaveError && typeof console !== "undefined") {
+          console.warn("Failed to save reminder flags to user_notifications", notificationsSaveError);
+        }
+      }
+    }
+
     if (state.page === "calendar") {
       renderCalendarPage();
     }
