@@ -5344,7 +5344,7 @@ async function sendFeedbackToSheets(payload) {
   }
   const text = `📩 Обратная связь MyEsep\n\n👤 ${payload.name || "Аноним"}\n📧 ${payload.email || "не указан"}\n💬 ${payload.message || payload.text || JSON.stringify(payload)}`;
 
-  const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+  const response = await fetch(`https://api.telegram.org/bot${telegramBotToken: "8664044165:AAGG8yvNR-DA7QrZJAmJuiYzspejTeFvwfo",}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ chat_id: CHAT_ID, text })
