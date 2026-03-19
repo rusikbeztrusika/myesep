@@ -1358,7 +1358,8 @@ function createDefaultOnboarding() {
     step: 1,
     regime: "simplified",
     income: 400000,
-    userEmail: ""
+    userEmail: "",
+    userId: ""
   };
 }
 
@@ -1372,6 +1373,7 @@ function normalizeOnboarding(raw) {
   let step = Math.min(ONBOARDING_STEPS_TOTAL, Math.max(1, Math.round(Number.isFinite(stepInput) ? stepInput : base.step)));
   const income = normalizeIncome(source.income ?? base.income);
   const userEmail = normalizeEmail(source.userEmail || base.userEmail);
+  const userId = String(source.userId || base.userId || "").trim();
   const completed = source.completed === true || source.completed === 1 || source.completed === "1" || source.completed === "true";
 
   if (!completed && rawVersion < ONBOARDING_FLOW_VERSION && step >= 2) {
@@ -1386,8 +1388,40 @@ function normalizeOnboarding(raw) {
     step,
     regime,
     income,
-    userEmail
+    userEmail,
+    userId
   };
+}
+
+function getOnboardingIdentityKey(userId = state.userId, email = state.userEmail) {
+  const normalizedUserId = String(userId || "").trim();
+  if (normalizedUserId) {
+    return `uid:${normalizedUserId}`;
+  }
+
+  const normalizedEmail = normalizeEmail(email);
+  return normalizedEmail ? `email:${normalizedEmail}` : "";
+}
+
+function normalizeOnboardingByUser(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return {};
+  }
+
+  return Object.entries(raw).reduce((acc, [key, value]) => {
+    const safeKey = String(key || "").trim();
+    if (!safeKey) return acc;
+    acc[safeKey] = normalizeOnboarding(value);
+    return acc;
+  }, {});
+}
+
+function getCurrentOnboardingSnapshot() {
+  return normalizeOnboarding({
+    ...state.onboarding,
+    userEmail: normalizeEmail(state.userEmail || state.onboarding.userEmail || ""),
+    userId: String(state.userId || state.onboarding.userId || "").trim()
+  });
 }
 
 function shouldShowOnboarding() {
@@ -1396,28 +1430,49 @@ function shouldShowOnboarding() {
 
 function prepareOnboardingAfterLogin() {
   const currentEmail = normalizeEmail(state.userEmail);
+  const currentUserId = String(state.userId || "").trim();
+  const identityKey = getOnboardingIdentityKey(currentUserId, currentEmail);
   const onboarding = normalizeOnboarding(state.onboarding);
-  const completedForCurrentUser = onboarding.completed && onboarding.userEmail === currentEmail;
+  const onboardingByUser = normalizeOnboardingByUser(state.onboardingByUser);
+  const currentMatches =
+    (onboarding.userId && onboarding.userId === currentUserId)
+    || (!onboarding.userId && onboarding.userEmail === currentEmail);
+  const onboardingForCurrentUser = (identityKey && onboardingByUser[identityKey]) || (currentMatches ? onboarding : null);
+  const completedForCurrentUser = Boolean(onboardingForCurrentUser && onboardingForCurrentUser.completed);
 
   if (completedForCurrentUser) {
     state.onboarding = {
-      ...onboarding,
+      ...onboardingForCurrentUser,
       version: ONBOARDING_FLOW_VERSION,
       step: ONBOARDING_STEPS_TOTAL,
-      userEmail: currentEmail
+      userEmail: currentEmail,
+      userId: currentUserId
     };
+    if (identityKey) {
+      onboardingByUser[identityKey] = normalizeOnboarding(state.onboarding);
+    }
+    state.onboardingByUser = onboardingByUser;
     return;
   }
 
-  const fallbackIncome = Math.max(normalizeIncome(state.calcIncome), onboarding.income, 200000);
+  const fallbackIncome = Math.max(
+    normalizeIncome(state.calcIncome),
+    onboardingForCurrentUser ? onboardingForCurrentUser.income : onboarding.income,
+    200000
+  );
   state.onboarding = {
-    ...onboarding,
+    ...(onboardingForCurrentUser || onboarding),
     version: ONBOARDING_FLOW_VERSION,
     completed: false,
     step: 1,
     income: fallbackIncome,
-    userEmail: currentEmail
+    userEmail: currentEmail,
+    userId: currentUserId
   };
+  if (identityKey) {
+    onboardingByUser[identityKey] = normalizeOnboarding(state.onboarding);
+  }
+  state.onboardingByUser = onboardingByUser;
 }
 
 const REMINDER_LEAD_DAYS = [7, 3, 1, 0];
@@ -1686,6 +1741,7 @@ const state = {
   knowledgeFilters: getDefaultKnowledgeFilters(),
   taxPlanner: getDefaultTaxPlanner(),
   onboarding: createDefaultOnboarding(),
+  onboardingByUser: {},
   dashboardSelectedMonth: new Date().getMonth(),
   dashboardRecentMonth: null,
   firstIncomeProNudgeSeen: false,
@@ -2008,6 +2064,13 @@ function loadState() {
   state.incomeEditId = Number(saved.incomeEditId || 0) || null;
   state.paywallFeature = String(saved.paywallFeature || "");
   state.onboarding = normalizeOnboarding(saved.onboarding);
+  state.onboardingByUser = normalizeOnboardingByUser(saved.onboardingByUser);
+  if (Object.keys(state.onboardingByUser).length === 0) {
+    const legacyOnboardingKey = getOnboardingIdentityKey(String(saved.userId || "").trim(), state.onboarding.userEmail || String(saved.userEmail || "").trim());
+    if (legacyOnboardingKey) {
+      state.onboardingByUser[legacyOnboardingKey] = normalizeOnboarding(state.onboarding);
+    }
+  }
   state.firstIncomeProNudgeSeen = saved.firstIncomeProNudgeSeen === true || saved.firstIncomeProNudgeSeen === "true" || saved.firstIncomeProNudgeSeen === 1;
   let hideAmountsStored = "";
   try {
@@ -2025,6 +2088,14 @@ function loadState() {
 }
 
 function saveState() {
+  const onboardingSnapshot = getCurrentOnboardingSnapshot();
+  const onboardingByUser = normalizeOnboardingByUser(state.onboardingByUser);
+  const onboardingIdentityKey = getOnboardingIdentityKey();
+  if (onboardingIdentityKey) {
+    onboardingByUser[onboardingIdentityKey] = onboardingSnapshot;
+  }
+  state.onboarding = onboardingSnapshot;
+  state.onboardingByUser = onboardingByUser;
   localStorage.setItem(
     STORAGE_KEY,
     JSON.stringify({
@@ -2058,6 +2129,7 @@ function saveState() {
       planExpiry: state.subscription.planExpiry,
       paywallFeature: state.paywallFeature,
       onboarding: state.onboarding,
+      onboardingByUser: state.onboardingByUser,
       firstIncomeProNudgeSeen: state.firstIncomeProNudgeSeen,
       hideAmounts: state.hideAmounts
     })
