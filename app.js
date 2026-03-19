@@ -176,6 +176,30 @@ const PRO_FEATURES = {
   exports: "Экспорт CSV/Excel",
   advanced_analytics: "Расширенная аналитика"
 };
+const PRO_FEATURE_ICONS = {
+  deadline_reminders: "bell",
+  unlimited_income_ops: "infinity",
+  exports: "file-down",
+  advanced_analytics: "bar-chart-3"
+};
+const PRO_FEATURE_INFO = {
+  deadline_reminders: {
+    title: "Напоминания по срокам",
+    text: "Сервис заранее напомнит о налоговых датах за 7, 3, 1 день и в день платежа. Так вы не пропустите срок и избежите штрафов."
+  },
+  unlimited_income_ops: {
+    title: "Безлимитные операции доходов",
+    text: "Добавляйте сколько угодно поступлений без ограничений Trial. Это удобно для бизнеса с частыми продажами и переводами."
+  },
+  exports: {
+    title: "Экспорт CSV/Excel",
+    text: "Выгружайте операции и расчеты в CSV/Excel для бухгалтера, архива и быстрой сверки с банком."
+  },
+  advanced_analytics: {
+    title: "Расширенная аналитика",
+    text: "Смотрите прогноз по налоговой нагрузке, риску выхода за лимит режима и принимайте решения заранее."
+  }
+};
 
 const ONBOARDING_TOUR_STEPS = [
   {
@@ -847,17 +871,11 @@ function refreshSubscriptionState() {
 
 function isProActive() {
   refreshSubscriptionState();
-  if (isOwnerProAccount() && state.ownerTrialPreview) {
-    return false;
-  }
   return state.subscription.plan === "pro" && state.subscription.status === "active";
 }
 
 function isTrialActive() {
   refreshSubscriptionState();
-  if (isOwnerProAccount() && state.ownerTrialPreview) {
-    return true;
-  }
   return state.subscription.plan === "trial";
 }
 
@@ -904,6 +922,7 @@ function renderProModal(featureKey = "") {
   const statusEl = document.getElementById("proModalStatus");
   const reasonEl = document.getElementById("proModalReason");
   const ctaEl = document.getElementById("proModalCta");
+  const cancelBtnEl = document.getElementById("proModalCancelBtn");
   const ctaMetaEl = document.getElementById("proModalCtaMeta");
   const focusCardEl = document.getElementById("proFocusCard");
   const focusTitleEl = document.getElementById("proFocusTitle");
@@ -963,6 +982,9 @@ function renderProModal(featureKey = "") {
   }
   if (mobileStepperEl) {
     mobileStepperEl.classList.toggle("hidden", !isMobileCompact);
+  }
+  if (cancelBtnEl) {
+    cancelBtnEl.hidden = !proActive;
   }
 
   if (proActive) {
@@ -1034,20 +1056,6 @@ function requireFeature(featureKey, source = "") {
 }
 
 function activateProDemo(source = "manual") {
-  if (state.ownerTrialPreview) {
-    state.ownerTrialPreview = false;
-    state.paywallFeature = "";
-    updatePlanUi();
-    updateCalendarReminderToggleUi();
-    closeModal(els.proModal);
-    if (els.betaAccessModal) {
-      closeModal(els.betaAccessModal);
-    }
-    renderDashboard();
-    trackEvent("owner_trial_preview_exit", { source });
-    return;
-  }
-
   if (hasUsedFreeProTrial(state.subscription) && !isProActive()) {
     showAppToast("Пробный Pro на 30 дней уже использован");
     if (els.proModal) {
@@ -1121,15 +1129,25 @@ function renderSidebarBetaBanner() {
     const proDaysLeft = getProDaysLeft(state.subscription);
     const tone = getBetaProBannerTone(proDaysLeft);
     bannerEl.className = `sidebar-beta-banner pro ${tone}`;
-    bannerEl.innerHTML = `<div class="beta-banner-text">Pro активен — осталось ${proDaysLeft} ${getLandingDayWord(proDaysLeft)}</div>`;
+    bannerEl.innerHTML = `
+      <div class="beta-banner-text">Pro активен · осталось ${proDaysLeft} ${getLandingDayWord(proDaysLeft)}</div>
+    `;
     return;
   }
 
+  const freeTrialAlreadyUsed = hasUsedFreeProTrial(state.subscription);
   bannerEl.className = "sidebar-beta-banner";
-  bannerEl.innerHTML = `
-    <div class="beta-banner-text">Trial: до ${FREE_INCOME_MONTH_LIMIT} операций доходов.</div>
-    <div class="beta-banner-subtext">После триала — ${PRO_PRICE_MONTHLY_LABEL}</div>
-  `;
+  bannerEl.innerHTML = freeTrialAlreadyUsed
+    ? `
+      <div class="beta-banner-text">Пробный Pro уже использован</div>
+      <div class="beta-banner-subtext">Тариф Pro — ${PRO_PRICE_MONTHLY_LABEL}</div>
+      <button type="button" class="beta-banner-btn" data-action="open-pro">Открыть тарифы</button>
+    `
+    : `
+      <div class="beta-banner-text">Pro 30 дней бесплатно</div>
+      <div class="beta-banner-subtext">Затем — ${PRO_PRICE_MONTHLY_LABEL}</div>
+      <button type="button" class="beta-banner-btn" data-action="open-pro" title="${PRO_AFTER_TRIAL_TOOLTIP}">Активировать Pro</button>
+    `;
 }
 
 function showBetaAccessModal(mode = "limit") {
@@ -1757,6 +1775,9 @@ const els = {
   betaAccessTitle: document.getElementById("betaAccessTitle"),
   betaAccessText: document.getElementById("betaAccessText"),
   betaAccessPrimary: document.getElementById("betaAccessPrimary"),
+  featureInfoModal: document.getElementById("featureInfoModal"),
+  featureInfoTitle: document.getElementById("featureInfoTitle"),
+  featureInfoText: document.getElementById("featureInfoText"),
   mobileMoreModal: document.getElementById("mobileMoreModal"),
   mobileMenuBtn: document.getElementById("mobileMenuBtn"),
   mobileDrawer: document.getElementById("mobileDrawer"),
@@ -3278,8 +3299,47 @@ function handleGlobalClick(event) {
       return;
     }
 
+    if (action === "open-feature-info") {
+      const featureKey = String(actionEl.dataset.featureKey || "");
+      openFeatureInfoModal(featureKey);
+      trackEvent("subscription_feature_info_open", { feature: featureKey || "unknown" });
+      return;
+    }
+
     if (action === "close-pro") {
       closeModal(els.proModal);
+      return;
+    }
+
+    if (action === "confirm-cancel-pro") {
+      if (!isProActive()) return;
+      const shouldCancel = window.confirm("Точно отключить Pro-подписку сейчас?\nПремиум-функции станут недоступны сразу. Подключить Pro можно снова в любой момент.");
+      if (!shouldCancel) return;
+
+      const previousExpiry = String(state.subscription.planExpiry || "").trim();
+      state.subscription = normalizeSubscription({
+        ...state.subscription,
+        plan: "trial",
+        status: "trial",
+        lastExpiredPlanExpiry: previousExpiry || state.subscription.lastExpiredPlanExpiry || "",
+        planExpiry: "",
+        trialEndsAt: "",
+        expiryNoticePending: false
+      });
+      refreshSubscriptionState();
+      saveState();
+      updatePlanUi();
+      renderDashboard();
+      closeModal(els.proModal);
+      showAppToast("Pro отключен. Вы перешли на Trial.");
+      trackEvent("pro_cancelled_manual");
+      return;
+    }
+
+    if (action === "close-feature-info") {
+      if (els.featureInfoModal) {
+        closeModal(els.featureInfoModal);
+      }
       return;
     }
 
@@ -3306,19 +3366,6 @@ function handleGlobalClick(event) {
       if (els.betaAccessModal) {
         closeModal(els.betaAccessModal);
       }
-      return;
-    }
-
-    if (action === "simulate-owner-trial") {
-      if (!isOwnerProAccount()) {
-        return;
-      }
-
-      state.ownerTrialPreview = !state.ownerTrialPreview;
-      updatePlanUi();
-      updateCalendarReminderToggleUi();
-      renderDashboard();
-      trackEvent("owner_trial_preview_toggle", { enabled: state.ownerTrialPreview });
       return;
     }
 
@@ -3497,6 +3544,11 @@ function handleGlobalClick(event) {
 
   if (event.target === els.proModal) {
     closeModal(els.proModal);
+    return;
+  }
+
+  if (event.target === els.featureInfoModal) {
+    closeModal(els.featureInfoModal);
     return;
   }
 
@@ -4886,6 +4938,23 @@ function closeModal(node) {
   node.classList.add("hidden");
 }
 
+function openFeatureInfoModal(featureKey) {
+  const key = String(featureKey || "").trim();
+  if (!key || !els.featureInfoModal || !els.featureInfoTitle || !els.featureInfoText) {
+    return;
+  }
+
+  const fallbackTitle = PRO_FEATURES[key] || "Возможность Pro";
+  const info = PRO_FEATURE_INFO[key] || {
+    title: fallbackTitle,
+    text: "Подробности по этой функции доступны в Pro."
+  };
+
+  els.featureInfoTitle.textContent = info.title;
+  els.featureInfoText.textContent = info.text;
+  openModal(els.featureInfoModal);
+}
+
 function calcSelfEmployed(income) {
   const safeIncome = Math.max(0, Number(income) || 0);
   const opv = safeIncome * SELF_SOCIAL_COMPONENT_RATE;
@@ -5276,10 +5345,12 @@ function renderLandingSummary(bestRow, secondRow, multiplier, periodLabel, incom
 
   els.landingSummary.innerHTML = `
     <article class="landing-summary-card">
-      <div class="landing-summary-main">
-        <small>Итого к уплате ${periodLabel}</small>
-        <div class="landing-summary-amount">${fmt(total)}</div>
-        ${summaryChips}
+      <div class="landing-summary-top">
+        <div class="landing-summary-main landing-summary-primary">
+          <small>Итого к уплате ${periodLabel}</small>
+          <div class="landing-summary-amount">${fmt(total)}</div>
+          ${summaryChips}
+        </div>
         <div class="landing-practical-hint ${landingHintTone}">
           <div class="landing-practical-copy">
             <span class="landing-practical-line">${landingHintShortText}</span>
@@ -5406,7 +5477,6 @@ function getLandingDeadlineChecklist(row, options = {}) {
   }
 
   const income = getDeadlineIncomeForChecklist(row);
-  const hasIncome = income > 0;
 
   if (regime === "self") {
     return [
@@ -5430,21 +5500,18 @@ function getLandingDeadlineChecklist(row, options = {}) {
   const totalWithoutVosms = Number.isFinite(options.totalWithoutVosms)
     ? Math.max(0, Math.round(options.totalWithoutVosms))
     : fallbackStep1Total;
-  const incomeSourceLabel = hasIncome
-    ? "от реального дохода из журнала"
-    : `от минимальной базы (ОПВ ${fmt(IP_MIN_OPV)} + ОПВР ${fmt(IP_MIN_OPVR)} + СО ${fmt(IP_MIN_SO)})`;
 
   return [
     {
       id: "step-1",
-      title: "Шаг 1 — Банк",
-      items: [`Оплатите ОПВ + ОПВР + СО. Сумма: ОПВ + ОПВР + СО = ${fmt(totalWithoutVosms)} (${incomeSourceLabel}).`],
+      title: "Шаг 1 — ОПВ, ОПВР и СО",
+      items: [`Оплатите ОПВ, ОПВР и СО. Сумма: ${fmt(totalWithoutVosms)}.`],
       instructionHtml: '<p class="deadline-step-instruction">Оплатите через мобильное приложение вашего банка (Kaspi, Halyk или любой другой). Раздел: Платежи -> Штрафы и налоги -> Платежи для ИП</p>'
     },
     {
       id: "step-2",
-      title: "Шаг 2 — ВОСМС",
-      items: [`Оплатите ВОСМС. Сумма: ${fmt(RATES.VOSMS)} (фиксированная).`],
+      title: "Шаг 2 — ВОСМС (отдельно)",
+      items: [`Оплатите ВОСМС отдельным платежом. Сумма: ${fmt(RATES.VOSMS)} (фиксированная).`],
       instructionHtml: '<p class="deadline-step-instruction">Оплатите через мобильное приложение банка. Kaspi: Платежи -> Штрафы и налоги -> Платежи для ИП -> ВОСМС</p>'
     }
   ];
@@ -5775,6 +5842,14 @@ function getLandingDayWord(days) {
   return "дней";
 }
 
+function getLandingStepWord(count) {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return "шаг";
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return "шага";
+  return "шагов";
+}
+
 function getLandingDeadlineDueInfo(dateString) {
   const now = new Date();
   const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -5820,11 +5895,10 @@ function renderLandingDeadlineLiteModal(row) {
   const due = getLandingDeadlineDueInfo(row.date);
   const typeClass = row.type === "payment" ? "payment" : "report";
   const title = splitLandingDeadlineTitle(row.title);
-  const periodLabel = getLandingDeadlinePeriodLabel(row.date, title.period);
   const quickSteps = getLandingDeadlineLiteSteps(row);
+  const quickStepsCount = Math.max(1, quickSteps.length);
   const displayRegime = getDeadlineDisplayRegime();
   const regimeLabelText = getLandingDeadlineRegimeLabel(row.regime, displayRegime);
-  const regimeNote = getLandingDeadlineRegimeNote(row.regime, displayRegime);
 
   els.deadlineModalDate.textContent = `${formatDateShort(row.date)} · ${due.text}`;
   els.deadlineModalTitle.textContent = title.main || row.title;
@@ -5832,14 +5906,12 @@ function renderLandingDeadlineLiteModal(row) {
     <div class="deadline-modal-chip-row">
       <span class="deadline-modal-chip ${typeClass}">${getLandingDeadlineTypeLabel(row.type)}</span>
       <span class="deadline-modal-chip">${escapeHtml(regimeLabelText)}</span>
-      ${periodLabel ? `<span class="deadline-modal-chip">Период: ${escapeHtml(periodLabel)}</span>` : ""}
     </div>
-    ${regimeNote ? `<p class="deadline-modal-note">${escapeHtml(regimeNote)}</p>` : ""}
   `;
 
   els.deadlineModalChecklist.innerHTML = `
     <section class="deadline-lite-card">
-      <h4>Что сделать в 3 шага</h4>
+      <h4>Что сделать в ${quickStepsCount} ${getLandingStepWord(quickStepsCount)}</h4>
       <ol class="deadline-lite-steps">
         ${quickSteps.map((step) => `<li>${escapeHtml(step)}</li>`).join("")}
       </ol>
@@ -6118,26 +6190,28 @@ function renderLandingDeadlines() {
       const due = getLandingDeadlineDueInfo(row.date);
       const dueClass = due.tone ? ` ${due.tone}` : "";
       const isFirstCard = index === 0;
-      const cardClass = isFirstCard ? " next-up" : due.tone === "overdue" ? " urgent" : "";
+      const cardClass = isFirstCard ? " next-up deadline-card-featured" : `${due.tone === "overdue" ? " urgent" : ""} deadline-card-compact`;
       const title = splitLandingDeadlineTitle(row.title);
-      const periodLabel = getLandingDeadlinePeriodLabel(row.date, title.period);
+      const isSocialPayments = /ОПВ.*ОПВР.*СО.*ВОСМС/i.test(title.main);
+      const cardTitle = isSocialPayments ? "Уплата соцплатежей" : title.main;
+      const cardSubtitle = isSocialPayments ? "ОПВ, ОПВР, СО, ВОСМС" : "";
       const regimeLabelText = getLandingDeadlineRegimeLabel(row.regime, landingRegime);
-      const regimeNote = getLandingDeadlineRegimeNote(row.regime, landingRegime);
-      const ctaLabel = state.isLoggedIn ? "Открыть чеклист" : "Показать 3 шага";
+      const regimeMetaLabel = isSocialPayments ? "Ежемесячная уплата соцплатежей" : regimeLabelText;
+      const quickStepsCount = state.isLoggedIn ? 0 : Math.max(1, getLandingDeadlineLiteSteps(row).length);
+      const ctaLabel = state.isLoggedIn ? "Открыть чеклист" : `Показать ${quickStepsCount} ${getLandingStepWord(quickStepsCount)}`;
 
       return `
         <article class="deadline-card ${typeClass}${cardClass}">
           <div class="deadline-top">
-            <div class="deadline-date">${formatDateShort(row.date)}</div>
+            <div class="deadline-date">${formatDateDayMonthLong(row.date)}</div>
             <div class="deadline-due${dueClass}">${due.text}</div>
           </div>
-          <h3 class="deadline-title">${escapeHtml(title.main)}</h3>
-          ${periodLabel ? `<p class="deadline-period">Период: ${escapeHtml(periodLabel)}</p>` : ""}
+          <h3 class="deadline-title">${escapeHtml(cardTitle)}</h3>
+          ${cardSubtitle ? `<p class="deadline-tax-set">${escapeHtml(cardSubtitle)}</p>` : ""}
           <div class="deadline-meta">
             <span class="deadline-type">${getLandingDeadlineTypeLabel(row.type)}</span>
-            <span class="deadline-regime">${escapeHtml(regimeLabelText)}</span>
+            <span class="deadline-regime">${escapeHtml(regimeMetaLabel)}</span>
           </div>
-          ${regimeNote ? `<p class="deadline-period deadline-regime-note">${escapeHtml(regimeNote)}</p>` : ""}
           <div class="deadline-card-actions">
             <button type="button" class="deadline-open-btn" data-deadline-expand="${row.id}" aria-label="${ctaLabel}">
               <span class="deadline-open-btn-label">${ctaLabel}</span>
@@ -7116,9 +7190,21 @@ function handleGlobalKeyDown(event) {
     return;
   }
 
+  if (actionEl && actionEl.dataset.action === "open-feature-info" && (event.key === "Enter" || event.key === " ")) {
+    event.preventDefault();
+    actionEl.click();
+    return;
+  }
+
   if (event.key === "Escape" && onboardingTourState.active) {
     event.preventDefault();
     closeOnboardingTour(true, "escape");
+    return;
+  }
+
+  if (event.key === "Escape" && els.featureInfoModal && !els.featureInfoModal.classList.contains("hidden")) {
+    event.preventDefault();
+    closeModal(els.featureInfoModal);
   }
 }
 function renderDashboard() {
@@ -10486,18 +10572,14 @@ function concealSettingsIinInput(input) {
 function renderSettingsPage() {
   refreshSubscriptionState();
 
-  const ownerAccount = isOwnerProAccount();
-  const trialPreviewEnabled = ownerAccount && state.ownerTrialPreview;
   const proActive = isProActive();
   const proDaysLeft = proActive ? getProDaysLeft(state.subscription) : 0;
   const trialActive = isTrialActive();
   const planLabel = proActive ? `Pro (${proDaysLeft} дн.)` : trialActive ? "Trial" : "Trial";
   const planTone = proActive ? "active" : "trial";
-  const planHint = trialPreviewEnabled
-    ? "Симуляция Trial включена только для текущего сеанса. После перезагрузки страницы вернется Pro."
-    : proActive
-      ? `Pro активен. До окончания пробного периода ${proDaysLeft} ${getLandingDayWord(proDaysLeft)}.`
-      : "Trial: базовый расчет и учет. Pro: напоминания, расширенная аналитика и экспорт.";
+  const planHint = proActive
+    ? `Pro активен. До окончания пробного периода ${proDaysLeft} ${getLandingDayWord(proDaysLeft)}.`
+    : "Trial: базовый расчет и учет. Pro: напоминания, расширенная аналитика и экспорт.";
   const maskedIin = maskSettingsIin(state.profile.iin);
   const settingsCityValue = String(state.profile.city || "").trim();
   const profileRateOverride = normalizeProfileSimplifiedRate(state.profile.simplifiedRate);
@@ -10535,9 +10617,20 @@ function renderSettingsPage() {
   const featureRows = Object.entries(PRO_FEATURES)
     .map(([key, label]) => {
       const enabled = canUseFeature(key);
+      const icon = PRO_FEATURE_ICONS[key] || "sparkles";
       return `
-        <li>
-          <span>${label}</span>
+        <li
+          class="feature-row ${proActive ? "is-pro-active" : ""}"
+          data-action="open-feature-info"
+          data-feature-key="${key}"
+          role="button"
+          tabindex="0"
+          title="Нажмите, чтобы узнать подробнее"
+        >
+          <span class="feature-label">
+            <i class="feature-icon" data-lucide="${icon}" aria-hidden="true"></i>
+            <span>${label}</span>
+          </span>
           <b class="feature-state ${enabled ? "enabled" : "locked"}">${enabled ? "Доступно" : "Недоступно"}</b>
         </li>
       `;
@@ -10602,7 +10695,6 @@ function renderSettingsPage() {
         ${featureRows}
       </ul>
       <div class="subscription-actions">
-        ${ownerAccount ? `<button type="button" class="btn btn-ghost" data-action="simulate-owner-trial">${trialPreviewEnabled ? "Вернуть Pro вид" : "Симулировать Trial"}</button>` : ""}
         <button type="button" class="btn btn-ghost" data-action="reset-onboarding-tour">Показать тур ещё раз</button>
         <button type="button" class="btn btn-primary" data-action="open-pro">Открыть тарифы</button>
         <a href="#" class="subscription-manage-link" data-action="open-pro">Управление подпиской</a>
@@ -10610,6 +10702,10 @@ function renderSettingsPage() {
       </div>
     </article>
   `;
+
+  if (window.lucide && typeof window.lucide.createIcons === "function") {
+    window.lucide.createIcons();
+  }
 
   const settingsForm = document.getElementById("settingsForm");
   if (settingsForm instanceof HTMLFormElement) {
@@ -10715,6 +10811,10 @@ function formatDate(dateString) {
 
 function formatDateShort(dateString) {
   return new Date(dateString).toLocaleDateString("ru-KZ", { day: "numeric", month: "short" });
+}
+
+function formatDateDayMonthLong(dateString) {
+  return new Date(dateString).toLocaleDateString("ru-KZ", { day: "numeric", month: "long" });
 }
 
 function escapeHtml(value) {
