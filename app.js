@@ -96,6 +96,7 @@ const ONBOARDING_TOUR_FORCE_STORAGE_KEY = "onboardingTourForceOnce";
 const ONBOARDING_TOUR_INCOME_STORAGE_KEY = "onboardingTourIncomeDone";
 const ONBOARDING_TOUR_TAXES_STORAGE_KEY = "onboardingTourTaxesDone";
 const ONBOARDING_TOUR_CALENDAR_STORAGE_KEY = "onboardingTourCalendarDone";
+const ONBOARDING_ACCOUNT_METADATA_KEY = "myesep_onboarding";
 const OWNER_EMAIL_STORAGE_KEY = "myesep_owner_email_v1";
 const HIDE_AMOUNTS_STORAGE_KEY = "hideAmounts";
 
@@ -290,6 +291,7 @@ const ONBOARDING_TOUR_CALENDAR_STEPS = [
 ];
 
 const ONBOARDING_TOUR_SWIPE_THRESHOLD = 72;
+const ONBOARDING_TOUR_PAGES = ["dashboard", "income", "taxes", "calendar"];
 const PROFILE_DEFAULT_IIN_PLACEHOLDERS = new Set(["831204350124", "831204350125"]);
 
 const INCOME_CATEGORY_PRESETS = [
@@ -1416,6 +1418,221 @@ function normalizeOnboardingByUser(raw) {
   }, {});
 }
 
+function normalizeOnboardingTourPage(page) {
+  return ONBOARDING_TOUR_PAGES.includes(page) ? page : "dashboard";
+}
+
+function createDefaultOnboardingAccountMeta() {
+  return {
+    flow: {
+      completed: false,
+      step: 1,
+      regime: "simplified",
+      income: 400000
+    },
+    tours: ONBOARDING_TOUR_PAGES.reduce((acc, page) => {
+      acc[page] = false;
+      return acc;
+    }, {})
+  };
+}
+
+function normalizeOnboardingAccountMeta(raw) {
+  const base = createDefaultOnboardingAccountMeta();
+  const source = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  const flowSource = source.flow && typeof source.flow === "object" ? source.flow : source;
+  const toursSource = source.tours && typeof source.tours === "object" ? source.tours : {};
+  const regime = ["self", "simplified", "our"].includes(flowSource.regime) ? flowSource.regime : base.flow.regime;
+  const stepInput = Number(flowSource.step);
+  const completed = flowSource.completed === true || flowSource.completed === 1 || flowSource.completed === "1" || flowSource.completed === "true";
+  const step = completed
+    ? ONBOARDING_STEPS_TOTAL
+    : Math.min(ONBOARDING_STEPS_TOTAL, Math.max(1, Math.round(Number.isFinite(stepInput) ? stepInput : base.flow.step)));
+  const income = normalizeIncome(flowSource.income ?? base.flow.income);
+
+  return {
+    flow: {
+      completed,
+      step,
+      regime,
+      income
+    },
+    tours: ONBOARDING_TOUR_PAGES.reduce((acc, page) => {
+      const value = toursSource[page];
+      acc[page] = value === true || value === 1 || value === "1" || value === "true";
+      return acc;
+    }, {})
+  };
+}
+
+function getOnboardingAccountMetaFromUser(user) {
+  const metadata = user && user.user_metadata && typeof user.user_metadata === "object"
+    ? user.user_metadata[ONBOARDING_ACCOUNT_METADATA_KEY]
+    : null;
+  return normalizeOnboardingAccountMeta(metadata);
+}
+
+function getOnboardingTourStorageIdentityKey(userId = state.userId, email = state.userEmail) {
+  return getOnboardingIdentityKey(userId, email) || "guest";
+}
+
+function getScopedOnboardingTourStorageKey(page = state.page, userId = state.userId, email = state.userEmail) {
+  return `${ONBOARDING_TOUR_STORAGE_KEY}:${normalizeOnboardingTourPage(page)}:${getOnboardingTourStorageIdentityKey(userId, email)}`;
+}
+
+function getScopedOnboardingTourForceStorageKey(userId = state.userId, email = state.userEmail) {
+  return `${ONBOARDING_TOUR_FORCE_STORAGE_KEY}:${getOnboardingTourStorageIdentityKey(userId, email)}`;
+}
+
+function setLocalOnboardingTourDone(page, done, userId = state.userId, email = state.userEmail) {
+  try {
+    const key = getScopedOnboardingTourStorageKey(page, userId, email);
+    if (done) {
+      localStorage.setItem(key, "true");
+    } else {
+      localStorage.removeItem(key);
+    }
+  } catch (_error) {
+    // ignore storage errors
+  }
+}
+
+function getLocalOnboardingTourDone(page, userId = state.userId, email = state.userEmail) {
+  try {
+    return localStorage.getItem(getScopedOnboardingTourStorageKey(page, userId, email)) === "true";
+  } catch (_error) {
+    return false;
+  }
+}
+
+function clearLocalOnboardingTourProgress(userId = state.userId, email = state.userEmail) {
+  ONBOARDING_TOUR_PAGES.forEach((page) => {
+    setLocalOnboardingTourDone(page, false, userId, email);
+  });
+  try {
+    localStorage.removeItem(getScopedOnboardingTourForceStorageKey(userId, email));
+  } catch (_error) {
+    // ignore storage errors
+  }
+}
+
+function syncOnboardingStateFromAccountUser(user) {
+  if (!user || typeof user !== "object") {
+    return;
+  }
+
+  const currentUserId = String(user.id || state.userId || "").trim();
+  const currentEmail = normalizeEmail(user.email || state.userEmail || "");
+  const identityKey = getOnboardingIdentityKey(currentUserId, currentEmail);
+  const remoteMeta = getOnboardingAccountMetaFromUser(user);
+  const localTourState = ONBOARDING_TOUR_PAGES.reduce((acc, page) => {
+    acc[page] = getLocalOnboardingTourDone(page, currentUserId, currentEmail);
+    return acc;
+  }, {});
+  const mergedTours = ONBOARDING_TOUR_PAGES.reduce((acc, page) => {
+    acc[page] = Boolean(remoteMeta.tours[page] || localTourState[page]);
+    return acc;
+  }, {});
+
+  ONBOARDING_TOUR_PAGES.forEach((page) => {
+    setLocalOnboardingTourDone(page, mergedTours[page], currentUserId, currentEmail);
+  });
+
+  if (!identityKey) {
+    return;
+  }
+
+  const onboardingByUser = normalizeOnboardingByUser(state.onboardingByUser);
+  const localOnboarding = onboardingByUser[identityKey] || normalizeOnboarding({
+    ...state.onboarding,
+    userEmail: currentEmail,
+    userId: currentUserId
+  });
+  const completed = Boolean(remoteMeta.flow.completed || localOnboarding.completed);
+
+  onboardingByUser[identityKey] = normalizeOnboarding({
+    ...localOnboarding,
+    version: ONBOARDING_FLOW_VERSION,
+    completed,
+    step: completed ? ONBOARDING_STEPS_TOTAL : remoteMeta.flow.step,
+    regime: remoteMeta.flow.regime || localOnboarding.regime,
+    income: remoteMeta.flow.income ?? localOnboarding.income,
+    userEmail: currentEmail,
+    userId: currentUserId
+  });
+  state.onboardingByUser = onboardingByUser;
+
+  if (!remoteMeta.flow.completed && localOnboarding.completed) {
+    void persistOnboardingAccountState({
+      flow: {
+        completed: true,
+        step: ONBOARDING_STEPS_TOTAL,
+        regime: localOnboarding.regime,
+        income: localOnboarding.income
+      }
+    }, { user });
+  }
+
+  const hasTourBackfill = ONBOARDING_TOUR_PAGES.some((page) => localTourState[page] && !remoteMeta.tours[page]);
+  if (hasTourBackfill) {
+    void persistOnboardingAccountState({
+      tours: mergedTours
+    }, { user });
+  }
+}
+
+async function persistOnboardingAccountState(patch = {}, options = {}) {
+  if (!state.isLoggedIn || !supabaseClient || !supabaseClient.auth || typeof supabaseClient.auth.updateUser !== "function") {
+    return false;
+  }
+
+  let user = options.user && typeof options.user === "object" ? options.user : null;
+  if (!user && typeof supabaseClient.auth.getUser === "function") {
+    try {
+      const { data, error } = await supabaseClient.auth.getUser();
+      if (!error) {
+        user = data && data.user ? data.user : null;
+      }
+    } catch (_error) {
+      user = null;
+    }
+  }
+
+  if (!user) {
+    return false;
+  }
+
+  const patchSource = patch && typeof patch === "object" ? patch : {};
+  const currentMeta = getOnboardingAccountMetaFromUser(user);
+  const nextMeta = normalizeOnboardingAccountMeta({
+    flow: {
+      ...currentMeta.flow,
+      ...(patchSource.flow && typeof patchSource.flow === "object" ? patchSource.flow : {})
+    },
+    tours: {
+      ...currentMeta.tours,
+      ...(patchSource.tours && typeof patchSource.tours === "object" ? patchSource.tours : {})
+    }
+  });
+  const currentUserMetadata = user.user_metadata && typeof user.user_metadata === "object" ? user.user_metadata : {};
+  const nextUserMetadata = {
+    ...currentUserMetadata,
+    [ONBOARDING_ACCOUNT_METADATA_KEY]: nextMeta
+  };
+
+  try {
+    const { data, error } = await supabaseClient.auth.updateUser({ data: nextUserMetadata });
+    if (error) {
+      return false;
+    }
+    const updatedUser = data && data.user ? data.user : { ...user, user_metadata: nextUserMetadata };
+    syncOnboardingStateFromAccountUser(updatedUser);
+    return true;
+  } catch (_error) {
+    return false;
+  }
+}
+
 function getCurrentOnboardingSnapshot() {
   return normalizeOnboarding({
     ...state.onboarding,
@@ -1887,6 +2104,7 @@ async function init() {
       state.isLoggedIn = true;
       state.userEmail = data.session.user.email || state.userEmail;
       state.userId = data.session.user.id || state.userId;
+      syncOnboardingStateFromAccountUser(data.session.user);
       prepareOnboardingAfterLogin();
       ensureOwnerEmailBinding();
       ensureTrialIfNeeded();
@@ -3337,10 +3555,25 @@ function handleGlobalClick(event) {
         dashboardDemoIncomes = [];
       }
 
-      state.onboarding = { ...onboarding, version: ONBOARDING_FLOW_VERSION, completed: true, step: ONBOARDING_STEPS_TOTAL, userEmail: normalizeEmail(state.userEmail) };
+      state.onboarding = {
+        ...onboarding,
+        version: ONBOARDING_FLOW_VERSION,
+        completed: true,
+        step: ONBOARDING_STEPS_TOTAL,
+        userEmail: normalizeEmail(state.userEmail),
+        userId: String(state.userId || "").trim()
+      };
       state.page = "dashboard";
       setOnboardingTourForced(true);
       saveState();
+      void persistOnboardingAccountState({
+        flow: {
+          completed: true,
+          step: ONBOARDING_STEPS_TOTAL,
+          regime: onboarding.regime,
+          income
+        }
+      });
       renderDashboard();
       trackEvent("onboarding_complete", { page: state.page, regime: state.regime, income, savedIncome: shouldSaveFirstIncome });
       return;
@@ -3510,14 +3743,15 @@ function handleGlobalClick(event) {
     }
 
     if (action === "reset-onboarding-tour") {
-      try {
-        localStorage.removeItem(ONBOARDING_TOUR_STORAGE_KEY);
-        localStorage.removeItem(ONBOARDING_TOUR_INCOME_STORAGE_KEY);
-        localStorage.removeItem(ONBOARDING_TOUR_TAXES_STORAGE_KEY);
-        localStorage.removeItem(ONBOARDING_TOUR_CALENDAR_STORAGE_KEY);
-      } catch (_error) {
-        // ignore storage errors
-      }
+      clearLocalOnboardingTourProgress();
+      void persistOnboardingAccountState({
+        tours: {
+          dashboard: false,
+          income: false,
+          taxes: false,
+          calendar: false
+        }
+      });
 
       setOnboardingTourForced(true);
       closeOnboardingTour(false, "debug_reset");
@@ -4987,6 +5221,7 @@ function finalizeAuthSession(user, fallbackEmail = "") {
   state.ownerTrialPreview = false;
   state.userEmail = (user && user.email) || fallbackEmail;
   state.userId = (user && user.id) || state.userId;
+  syncOnboardingStateFromAccountUser(user);
   prepareOnboardingAfterLogin();
   ensureOwnerEmailBinding();
   ensureTrialIfNeeded();
@@ -5492,7 +5727,7 @@ function renderLandingSummary(bestRow, secondRow, multiplier, periodLabel, incom
     ? `<details class="landing-breakdown-accordion"${shouldCollapseBreakdown ? "" : " open"}>
         <summary>
           <span class="landing-breakdown-label">Из чего состоит сумма</span>
-          <span class="landing-breakdown-meta">${summaryRows.length} строк</span>
+          <span class="landing-breakdown-meta">${summaryRows.length} ${getBreakdownCountWord(summaryRows.length)}</span>
         </summary>
         <div class="landing-breakdown">${lines}</div>
       </details>`
@@ -6540,6 +6775,15 @@ function getNextTaxDueDateLabel() {
   return getTaxDueDateLabelByMonth(now.getMonth(), now.getFullYear());
 }
 
+function getBreakdownCountWord(count) {
+  const safeCount = Math.abs(Number(count) || 0) % 100;
+  const lastDigit = safeCount % 10;
+  if (safeCount > 10 && safeCount < 20) return "платежей";
+  if (lastDigit === 1) return "платёж";
+  if (lastDigit >= 2 && lastDigit <= 4) return "платежа";
+  return "платежей";
+}
+
 function getTaxActionPlan(regime, tax, income = 0, monthIndex = new Date().getMonth(), year = new Date().getFullYear()) {
   const dueDateLabel = getTaxDueDateLabelByMonth(monthIndex, year);
   const payNowTotal = Math.max(0, Math.round(getTaxLoadPayNow(regime, tax)));
@@ -7035,19 +7279,7 @@ function getLimitRiskMeta(limitPct, monthsToLimit) {
   return { className: "low", label: "Низкий риск" };
 }
 function getOnboardingTourStorageKey(page = state.page) {
-  if (page === "income") {
-    return ONBOARDING_TOUR_INCOME_STORAGE_KEY;
-  }
-
-  if (page === "taxes") {
-    return ONBOARDING_TOUR_TAXES_STORAGE_KEY;
-  }
-
-  if (page === "calendar") {
-    return ONBOARDING_TOUR_CALENDAR_STORAGE_KEY;
-  }
-
-  return ONBOARDING_TOUR_STORAGE_KEY;
+  return getScopedOnboardingTourStorageKey(page);
 }
 
 function getActiveOnboardingTourSteps() {
@@ -7086,7 +7318,7 @@ function isOnboardingTourDone(page = state.page) {
 
 function isOnboardingTourForced() {
   try {
-    return localStorage.getItem(ONBOARDING_TOUR_FORCE_STORAGE_KEY) === "true";
+    return localStorage.getItem(getScopedOnboardingTourForceStorageKey()) === "true";
   } catch (_error) {
     return false;
   }
@@ -7094,10 +7326,11 @@ function isOnboardingTourForced() {
 
 function setOnboardingTourForced(enabled) {
   try {
+    const key = getScopedOnboardingTourForceStorageKey();
     if (enabled) {
-      localStorage.setItem(ONBOARDING_TOUR_FORCE_STORAGE_KEY, "true");
+      localStorage.setItem(key, "true");
     } else {
-      localStorage.removeItem(ONBOARDING_TOUR_FORCE_STORAGE_KEY);
+      localStorage.removeItem(key);
     }
   } catch (_error) {
     // ignore storage errors
@@ -7105,11 +7338,12 @@ function setOnboardingTourForced(enabled) {
 }
 
 function markOnboardingTourDone(page = state.page) {
-  try {
-    localStorage.setItem(getOnboardingTourStorageKey(page), "true");
-  } catch (_error) {
-    // ignore storage errors
-  }
+  setLocalOnboardingTourDone(page, true);
+  void persistOnboardingAccountState({
+    tours: {
+      [normalizeOnboardingTourPage(page)]: true
+    }
+  });
 }
 
 function startOnboardingTour(page = "dashboard", forceOpen = false) {
