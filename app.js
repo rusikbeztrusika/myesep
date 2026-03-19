@@ -963,8 +963,11 @@ function renderProModal(featureKey = "") {
 
   titleEl.textContent = `Pro — ${PRO_PRICE_MONTHLY_LABEL}`;
   if (priceEl) {
-    priceEl.textContent = "30 дней бесплатно";
-    priceEl.setAttribute("title", PRO_AFTER_TRIAL_TOOLTIP);
+    priceEl.hidden = proActive;
+    if (!proActive) {
+      priceEl.textContent = "30 дней бесплатно";
+      priceEl.setAttribute("title", PRO_AFTER_TRIAL_TOOLTIP);
+    }
   }
 
   if (focusCardEl) {
@@ -976,12 +979,10 @@ function renderProModal(featureKey = "") {
   }
   if (modalCardEl) {
     modalCardEl.classList.toggle("pro-mobile-compact", isMobileCompact);
-    if (!isMobileCompact) {
-      modalCardEl.classList.remove("is-step-1", "is-step-2");
-    }
+    modalCardEl.classList.remove("is-step-1", "is-step-2");
   }
   if (mobileStepperEl) {
-    mobileStepperEl.classList.toggle("hidden", !isMobileCompact);
+    mobileStepperEl.classList.add("hidden");
   }
   if (cancelBtnEl) {
     cancelBtnEl.hidden = !proActive;
@@ -1037,9 +1038,6 @@ function renderProModal(featureKey = "") {
   if (focusTitleEl) focusTitleEl.textContent = context.title;
   if (focusTextEl) {
     focusTextEl.textContent = isMobileCompact ? "Все налоги, сроки и риски — в одном месте." : context.text;
-  }
-  if (isMobileCompact) {
-    setProModalMobileStep(1);
   }
 }
 function requireFeature(featureKey, source = "") {
@@ -1690,6 +1688,7 @@ const state = {
   onboarding: createDefaultOnboarding(),
   dashboardSelectedMonth: new Date().getMonth(),
   dashboardRecentMonth: null,
+  firstIncomeProNudgeSeen: false,
   hideAmounts: false
 };
 
@@ -2009,6 +2008,7 @@ function loadState() {
   state.incomeEditId = Number(saved.incomeEditId || 0) || null;
   state.paywallFeature = String(saved.paywallFeature || "");
   state.onboarding = normalizeOnboarding(saved.onboarding);
+  state.firstIncomeProNudgeSeen = saved.firstIncomeProNudgeSeen === true || saved.firstIncomeProNudgeSeen === "true" || saved.firstIncomeProNudgeSeen === 1;
   let hideAmountsStored = "";
   try {
     hideAmountsStored = String(localStorage.getItem(HIDE_AMOUNTS_STORAGE_KEY) || "");
@@ -2058,6 +2058,7 @@ function saveState() {
       planExpiry: state.subscription.planExpiry,
       paywallFeature: state.paywallFeature,
       onboarding: state.onboarding,
+      firstIncomeProNudgeSeen: state.firstIncomeProNudgeSeen,
       hideAmounts: state.hideAmounts
     })
   );
@@ -2467,6 +2468,57 @@ function showAppToast(message) {
       }
     }, 220);
   }, 2800);
+}
+
+function shouldShowFirstIncomeProNudge() {
+  refreshSubscriptionState();
+  return !isProActive() && !hasUsedFreeProTrial(state.subscription) && !state.firstIncomeProNudgeSeen;
+}
+
+function ensureFirstIncomeProNudgeHost() {
+  let host = document.getElementById("firstIncomeProNudge");
+  if (!host) {
+    host = document.createElement("div");
+    host.id = "firstIncomeProNudge";
+    host.className = "pro-nudge-host hidden";
+    document.body.appendChild(host);
+  }
+  return host;
+}
+
+function hideFirstIncomeProNudge() {
+  const host = document.getElementById("firstIncomeProNudge");
+  if (!host) return;
+  host.classList.remove("show");
+  host.classList.add("hidden");
+}
+
+function showFirstIncomeProNudge() {
+  if (!shouldShowFirstIncomeProNudge()) {
+    return;
+  }
+
+  state.firstIncomeProNudgeSeen = true;
+  saveState();
+
+  const host = ensureFirstIncomeProNudgeHost();
+  host.innerHTML = `
+    <section class="pro-nudge-card" role="status" aria-live="polite" aria-label="Предложение Pro">
+      <button type="button" class="pro-nudge-close" data-action="dismiss-first-income-pro-nudge" aria-label="Закрыть предложение">×</button>
+      <div class="pro-nudge-eyebrow">30 дней Pro бесплатно</div>
+      <h4>Первый доход сохранён</h4>
+      <p>Откройте напоминания, экспорт и аналитику сразу. Потом — ${PRO_PRICE_MONTHLY_LABEL}. Без карты на старте.</p>
+      <div class="pro-nudge-actions">
+        <button type="button" class="btn btn-primary btn-sm" data-action="open-first-income-pro" title="${PRO_AFTER_TRIAL_TOOLTIP}">Получить Pro бесплатно</button>
+        <button type="button" class="btn btn-ghost btn-sm" data-action="dismiss-first-income-pro-nudge">Позже</button>
+      </div>
+    </section>
+  `;
+  host.classList.remove("hidden");
+  requestAnimationFrame(() => {
+    host.classList.add("show");
+  });
+  trackEvent("first_income_pro_nudge_shown");
 }
 
 function scrollAppViewportToTop() {
@@ -3266,6 +3318,12 @@ function handleGlobalClick(event) {
       return;
     }
 
+    if (action === "dismiss-first-income-pro-nudge") {
+      hideFirstIncomeProNudge();
+      trackEvent("first_income_pro_nudge_dismiss");
+      return;
+    }
+
     if (action === "load-dashboard-demo") {
       dashboardDemoMode = true;
       dashboardDemoIncomes = buildDashboardDemoIncomes();
@@ -3296,6 +3354,16 @@ function handleGlobalClick(event) {
       renderProModal(state.paywallFeature || "");
       openModal(els.proModal);
       trackEvent("open_pro_modal", { feature: state.paywallFeature || "" });
+      return;
+    }
+
+    if (action === "open-first-income-pro") {
+      hideFirstIncomeProNudge();
+      state.paywallFeature = "";
+      saveState();
+      renderProModal("");
+      openModal(els.proModal);
+      trackEvent("open_pro_modal", { feature: "", source: "first_income_nudge" });
       return;
     }
 
@@ -4466,6 +4534,8 @@ async function handleGlobalSubmit(event) {
       return;
     }
 
+    const shouldShowProNudgeAfterSave = editId <= 0 && state.incomes.length === 0;
+
     if (editId > 0) {
       const target = state.incomes.find((item) => item.id === editId);
       if (!target) return;
@@ -4495,6 +4565,9 @@ async function handleGlobalSubmit(event) {
 
     saveState();
     renderDashboard();
+    if (shouldShowProNudgeAfterSave) {
+      showFirstIncomeProNudge();
+    }
     return;
   }
 
@@ -4731,6 +4804,7 @@ async function handleGlobalSubmit(event) {
     saveState();
     updateAuthUi();
     renderDashboard();
+    showAppToast("Данные сохранены");
     trackEvent("settings_save");
   }
 }
@@ -6366,6 +6440,96 @@ function getNextTaxDueDateLabel() {
   return getTaxDueDateLabelByMonth(now.getMonth(), now.getFullYear());
 }
 
+function getTaxActionPlan(regime, tax, income = 0, monthIndex = new Date().getMonth(), year = new Date().getFullYear()) {
+  const dueDateLabel = getTaxDueDateLabelByMonth(monthIndex, year);
+  const payNowTotal = Math.max(0, Math.round(getTaxLoadPayNow(regime, tax)));
+  const ipn = Math.max(0, Math.round((tax && tax.ipn) || 0));
+  const hasIncome = Number(income || 0) > 0;
+  const tone = regime === "self" ? "self" : regime === "our" ? "our" : "simplified";
+
+  if (!hasIncome && payNowTotal <= 0) {
+    return {
+      tone,
+      badge: `До ${dueDateLabel}`,
+      summary: "За этот месяц в журнале пока нет дохода, поэтому точный платёж сейчас не показан.",
+      nowTitle: "Сейчас",
+      nowText: "Добавьте доход или откройте сценарий в разделе «Налоги».",
+      laterTitle: "Потом",
+      laterText: "После ввода дохода сервис сразу покажет, что платить и что откладывать.",
+      note: "Это полезно, если хотите заранее проверить нагрузку до фактического поступления денег."
+    };
+  }
+
+  if (regime === "self") {
+    return {
+      tone,
+      badge: `До ${dueDateLabel}`,
+      summary: `Оплатите соцплатежи за себя и закройте месяц без отдельного ИПН.`,
+      nowTitle: "Сейчас",
+      nowText: "ОПВ, ОПВР, СО и ВОСМС.",
+      laterTitle: "Потом",
+      laterText: "Отдельного ИПН нет — после оплаты сохраните квитанцию.",
+      note: payNowTotal > 0 ? `Ориентир к оплате сейчас: ${fmt(payNowTotal)}.` : "Когда появится доход, мы автоматически пересчитаем сумму к оплате."
+    };
+  }
+
+  if (regime === "simplified") {
+    return {
+      tone,
+      badge: `До ${dueDateLabel}`,
+      summary: "Сейчас оплатите ежемесячные соцплатежи ИП, а ИПН по 910 держите отдельным резервом.",
+      nowTitle: "Сейчас",
+      nowText: "ОПВ, ОПВР, СО и ВОСМС.",
+      laterTitle: "Потом",
+      laterText: ipn > 0
+        ? `ИПН по 910 не платится сейчас — откладывайте около ${fmt(ipn)} в месяц до полугодия.`
+        : "ИПН по 910 платится раз в полгода, а не вместе с ежемесячными соцплатежами.",
+      note: hasIncome
+        ? "Соцналог на упрощёнке не платится, поэтому сейчас ориентир — только соцплатежи."
+        : "Даже без дохода сервис покажет минимальные обязательные соцплатежи для ИП."
+    };
+  }
+
+  return {
+    tone,
+    badge: `До ${dueDateLabel}`,
+    summary: "Сейчас оплатите ежемесячные обязательные платежи по ОУР, а ИПН держите отдельно как резерв.",
+    nowTitle: "Сейчас",
+    nowText: "ОПВ, ОПВР, СО, ВОСМС и соцналог.",
+    laterTitle: "Потом",
+    laterText: ipn > 0
+      ? `ИПН сейчас не платится — резервируйте около ${fmt(ipn)} в месяц и регулярно обновляйте расходы.`
+      : "ИПН появится после учёта расходов и налоговой базы по ОУР.",
+    note: "По ОУР итоговый ИПН зависит от расходов, поэтому их важно заносить регулярно."
+  };
+}
+
+function renderTaxActionPlan(plan, extraClass = "") {
+  if (!plan) return "";
+  const toneClass = plan.tone ? `tone-${plan.tone}` : "";
+  const className = ["tax-action-plan", toneClass, extraClass].filter(Boolean).join(" ");
+  return `
+    <section class="${className}" aria-label="Что делать дальше">
+      <div class="tax-action-plan-head">
+        <h4>Что делать дальше</h4>
+        <span class="tax-action-plan-badge">${escapeHtml(plan.badge || "")}</span>
+      </div>
+      <p class="tax-action-plan-summary">${escapeHtml(plan.summary || "")}</p>
+      <div class="tax-action-plan-grid">
+        <div class="tax-action-plan-item">
+          <span>${escapeHtml(plan.nowTitle || "Сейчас")}</span>
+          <strong>${escapeHtml(plan.nowText || "")}</strong>
+        </div>
+        <div class="tax-action-plan-item">
+          <span>${escapeHtml(plan.laterTitle || "Потом")}</span>
+          <strong>${escapeHtml(plan.laterText || "")}</strong>
+        </div>
+      </div>
+      ${plan.note ? `<p class="tax-action-plan-note">${escapeHtml(plan.note)}</p>` : ""}
+    </section>
+  `;
+}
+
 function getTaxLoadModalModel(regime, tax, income = 0) {
   const opv = Number((tax && tax.opv) || 0);
   const so = Number((tax && tax.so) || 0);
@@ -6493,6 +6657,7 @@ function openTaxLoadModal() {
   const model = getTaxLoadModalModel(state.regime, tax, income);
   const payNowAmount = Math.round(model.payNowTotal || 0);
   const opvAmount = Math.round((tax && tax.opv) || 0);
+  const actionPlanHtml = renderTaxActionPlan(getTaxActionPlan(state.regime, tax, income), "is-modal");
   const isMobileCompact = isMobileViewport();
   const modalCard = els.taxLoadModal.querySelector(".tax-load-modal-card");
   if (modalCard) {
@@ -6537,6 +6702,7 @@ function openTaxLoadModal() {
     }
 
     els.taxLoadModalBody.innerHTML = `
+      ${actionPlanHtml}
       <section class="tax-load-highlight" aria-live="polite">
         <p>${fmt(opvAmount)} из этой суммы — ваши деньги на пенсионном счёте, не уходят государству</p>
       </section>
@@ -6569,6 +6735,7 @@ function openTaxLoadModal() {
       : "";
 
     els.taxLoadModalBody.innerHTML = `
+      ${actionPlanHtml}
       <section class="tax-load-highlight" aria-live="polite">
         <p>${fmt(opvAmount)} из этой суммы — ваши деньги на пенсионном счёте, не уходят государству</p>
       </section>
@@ -7405,8 +7572,8 @@ function renderDashboardPage() {
       const barClass = index === selectedMonthIndex ? " is-active" : " is-muted";
       const monthLabel = MONTHS_ACCUSATIVE[index] || row.name;
       return `
-        <div class="chart-item${activeClass}" data-action="select-dashboard-month" data-month-index="${index}" data-month-source="chart" title="Показать налоги за ${monthLabel}">
-          <div class="chart-bar${barClass}" style="height:${height}px" title="${row.name}: ${fmt(row.income)}" data-value="${fmt(row.income)}"></div>
+        <div class="chart-item${activeClass}" data-action="select-dashboard-month" data-month-index="${index}" data-month-source="chart" data-value="${fmt(row.income)}" title="Показать налоги за ${monthLabel}">
+          <div class="chart-bar${barClass}" style="height:${height}px" title="${row.name}: ${fmt(row.income)}"></div>
           <span>${row.name}</span>
         </div>
       `;
@@ -7692,9 +7859,14 @@ function renderDashboardPage() {
       : isOurRegime
         ? "Платится по итогам года. Рекомендуем ежемесячно резервировать сумму на отдельном счёте."
         : "Для самозанятого ИПН не применяется.";
+    const actionPlanHtml = renderTaxActionPlan(
+      getTaxActionPlan(state.regime, selectedTax, selectedIncome, selectedMonthIndex, now.getFullYear()),
+      "is-dashboard"
+    );
 
     return `
       <div class="dashboard-tax-split">
+        ${actionPlanHtml}
         <section class="dashboard-tax-block dashboard-tax-block-now">
           <h4 class="dashboard-tax-title">${payNowTitle}</h4>
           ${noIncomeHint}
@@ -8848,6 +9020,7 @@ function renderTaxesPage() {
   queueTaxProfileUpsert(state.regime, planner.income, scenarioTax);
   const effectiveRate = planner.income > 0 ? (scenarioTax.total / planner.income) * 100 : 0;
   const reserveAmount = scenarioTax.total * (1 + planner.reservePct / 100);
+  const nextActionHtml = renderTaxActionPlan(getTaxActionPlan(state.regime, scenarioTax, planner.income), "is-taxes");
   const realJournalIncome = monthlyData.reduce((sum, row) => sum + Number(row.income || 0), 0);
   const hasRealJournalIncome = realJournalIncome > 0;
 
@@ -9142,6 +9315,10 @@ function renderTaxesPage() {
         <div class="tax-kpi-meta">${hasRealYtdData ? `${isMobileTaxesView ? "прогноз: " : "прогноз на 12 мес: "}<span class="amount-sensitive">${annualForecastDisplay}</span>` : "нет данных"}</div>
       </article>
     </div>
+
+    <article class="card mt-16 tax-next-action-card">
+      ${nextActionHtml}
+    </article>
 
     <article class="card mt-16 tax-planner-card" data-tour-target="taxes-planner">
       <div class="tax-planner-head">
