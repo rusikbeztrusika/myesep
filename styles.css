@@ -335,6 +335,19 @@ h3,
   animation-delay: 940ms;
 }
 
+.public-app.is-restored .hero .chip,
+.public-app.is-restored .hero h1,
+.public-app.is-restored .hero p,
+.public-app.is-restored .hero .btn-glow,
+.public-app.is-restored .trust-card,
+.public-app.is-restored .quick-calc,
+.public-app.is-restored .landing-animate {
+  opacity: 1;
+  transform: none;
+  filter: none;
+  animation: none;
+}
+
 .hero .btn-glow {
   position: relative;
   overflow: hidden;
@@ -4052,7 +4065,7 @@ h3,
   border: 1.5px solid #d4ddff;
   background: #f7f9ff;
   color: #1b2547;
-  font-size: 15px;
+  font-size: 16px;
   padding: 0 14px;
 }
 

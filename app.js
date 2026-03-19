@@ -4994,6 +4994,9 @@ function finalizeAuthSession(user, fallbackEmail = "") {
   ensureRegistrationDate();
   saveState();
 
+  if (document.activeElement instanceof HTMLElement && typeof document.activeElement.blur === "function") {
+    document.activeElement.blur();
+  }
   closeModal(els.loginModal);
   updateAuthUi();
   renderDashboard();
@@ -5068,6 +5071,22 @@ async function logout() {
   lastRenderedPage = null;
   closeOnboardingTour(false, "logout");
   updateAuthUi();
+  try {
+    renderLandingCards();
+    renderLandingDeadlines();
+  } catch (error) {
+    console.error("Landing rerender after logout failed:", error);
+  }
+  if (els.publicApp) {
+    els.publicApp.classList.add("is-restored");
+  }
+  if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+    window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    });
+  } else if (typeof window !== "undefined" && typeof window.scrollTo === "function") {
+    window.scrollTo(0, 0);
+  }
   trackEvent("logout");
 }
 
@@ -5081,6 +5100,15 @@ function openModal(node) {
 }
 
 function closeModal(node) {
+  const activeElement = document.activeElement;
+  if (
+    node &&
+    activeElement instanceof HTMLElement &&
+    typeof activeElement.blur === "function" &&
+    node.contains(activeElement)
+  ) {
+    activeElement.blur();
+  }
   node.classList.add("hidden");
 }
 
