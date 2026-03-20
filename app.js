@@ -1603,11 +1603,23 @@ function syncOnboardingStateFromAccountUser(user) {
   }
 
   const onboardingByUser = normalizeOnboardingByUser(state.onboardingByUser);
-  const localOnboarding = onboardingByUser[identityKey] || normalizeOnboarding({
-    ...state.onboarding,
-    userEmail: currentEmail,
-    userId: currentUserId
-  });
+  const currentSnapshot = getCurrentOnboardingSnapshot();
+  const snapshotMatchesCurrentUser =
+    (currentSnapshot.userId && currentSnapshot.userId === currentUserId)
+    || (!currentSnapshot.userId && currentSnapshot.userEmail === currentEmail);
+  const hasStoredOnboardingForUser = Boolean(onboardingByUser[identityKey]);
+  const localOnboarding = hasStoredOnboardingForUser
+    ? onboardingByUser[identityKey]
+    : snapshotMatchesCurrentUser
+      ? normalizeOnboarding({
+          ...currentSnapshot,
+          userEmail: currentEmail,
+          userId: currentUserId
+        })
+      : normalizeOnboarding({
+          userEmail: currentEmail,
+          userId: currentUserId
+        });
   const completed = Boolean(remoteMeta.flow.completed || localOnboarding.completed);
 
   onboardingByUser[identityKey] = normalizeOnboarding({
@@ -1622,7 +1634,7 @@ function syncOnboardingStateFromAccountUser(user) {
   });
   state.onboardingByUser = onboardingByUser;
 
-  if (!remoteMeta.flow.completed && localOnboarding.completed) {
+  if (!remoteMeta.flow.completed && localOnboarding.completed && (hasStoredOnboardingForUser || snapshotMatchesCurrentUser)) {
     void persistOnboardingAccountState({
       flow: {
         completed: true,
@@ -1699,6 +1711,30 @@ function getCurrentOnboardingSnapshot() {
     userEmail: normalizeEmail(state.userEmail || state.onboarding.userEmail || ""),
     userId: String(state.userId || state.onboarding.userId || "").trim()
   });
+}
+
+function seedFreshOnboardingForUser(user, fallbackIncome = state.calcIncome) {
+  const userId = String(user && user.id ? user.id : "").trim();
+  const userEmail = normalizeEmail(user && user.email ? user.email : "");
+  const identityKey = getOnboardingIdentityKey(userId, userEmail);
+  const onboardingByUser = normalizeOnboardingByUser(state.onboardingByUser);
+  const freshOnboarding = normalizeOnboarding({
+    version: ONBOARDING_FLOW_VERSION,
+    completed: false,
+    step: 1,
+    regime: "simplified",
+    income: Math.max(normalizeIncome(fallbackIncome), createDefaultOnboarding().income),
+    userEmail,
+    userId
+  });
+
+  state.onboarding = freshOnboarding;
+  if (identityKey) {
+    onboardingByUser[identityKey] = freshOnboarding;
+  }
+  state.onboardingByUser = onboardingByUser;
+  clearLocalOnboardingTourProgress(userId, userEmail);
+  setOnboardingTourForced(false);
 }
 
 function shouldShowOnboarding() {
@@ -5472,6 +5508,7 @@ async function signup(email, password) {
     if (error) throw error;
 
     if (data && data.session && data.user) {
+      seedFreshOnboardingForUser(data.user);
       finalizeAuthSession(data.user, email);
       setLoginStatus("Аккаунт создан. Вход выполнен.");
       trackEvent("signup", { mode: "supabase_auto_login" });
