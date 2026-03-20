@@ -1401,6 +1401,19 @@ function sanitizeProfile(raw) {
   return next;
 }
 
+function normalizeProfileByUser(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return {};
+  }
+
+  return Object.entries(raw).reduce((acc, [key, value]) => {
+    const safeKey = String(key || "").trim();
+    if (!safeKey) return acc;
+    acc[safeKey] = sanitizeProfile(value);
+    return acc;
+  }, {});
+}
+
 function getAuthMetadataDisplayName(user) {
   const metadata = user && user.user_metadata && typeof user.user_metadata === "object"
     ? user.user_metadata
@@ -1409,12 +1422,23 @@ function getAuthMetadataDisplayName(user) {
 }
 
 function applyAuthProfileDefaults(user) {
+  const currentUserId = String(user && user.id ? user.id : state.userId || "").trim();
+  const currentEmail = normalizeEmail(user && user.email ? user.email : state.userEmail || "");
+  const identityKey = getOnboardingIdentityKey(currentUserId, currentEmail);
+  const profileByUser = normalizeProfileByUser(state.profileByUser);
   const authDisplayName = getAuthMetadataDisplayName(user);
-  const sanitized = sanitizeProfile(state.profile);
+  const storedProfile = identityKey ? profileByUser[identityKey] : null;
+  const sanitized = sanitizeProfile(storedProfile || createDefaultProfile());
+
   if (!sanitized.name && authDisplayName) {
     sanitized.name = authDisplayName;
   }
+
   state.profile = sanitized;
+  if (identityKey) {
+    profileByUser[identityKey] = sanitized;
+  }
+  state.profileByUser = profileByUser;
 }
 
 function normalizeOnboarding(raw) {
@@ -1735,6 +1759,17 @@ function seedFreshOnboardingForUser(user, fallbackIncome = state.calcIncome) {
   state.onboardingByUser = onboardingByUser;
   clearLocalOnboardingTourProgress(userId, userEmail);
   setOnboardingTourForced(false);
+  const profileByUser = normalizeProfileByUser(state.profileByUser);
+  const authDisplayName = getAuthMetadataDisplayName(user);
+  const freshProfile = sanitizeProfile({
+    ...createDefaultProfile(),
+    name: authDisplayName
+  });
+  state.profile = freshProfile;
+  if (identityKey) {
+    profileByUser[identityKey] = freshProfile;
+  }
+  state.profileByUser = profileByUser;
 }
 
 function shouldShowOnboarding() {
@@ -2027,6 +2062,7 @@ const state = {
   calendarPreServiceApplied: false,
   registrationDate: "",
   profile: createDefaultProfile(),
+  profileByUser: {},
   calcIncome: 500000,
   calcExpenses: 0,
   calcPeriod: "month",
@@ -2297,6 +2333,13 @@ function loadState() {
   state.calendarPreServiceApplied = saved.calendarPreServiceApplied === true || saved.calendarPreServiceApplied === "true" || saved.calendarPreServiceApplied === 1;
   state.registrationDate = String(saved.registrationDate || "").trim();
   state.profile = sanitizeProfile({ ...state.profile, ...(saved.profile || {}) });
+  state.profileByUser = normalizeProfileByUser(saved.profileByUser);
+  if (Object.keys(state.profileByUser).length === 0) {
+    const legacyProfileKey = getOnboardingIdentityKey(String(saved.userId || "").trim(), String(saved.userEmail || "").trim());
+    if (legacyProfileKey && saved.profile) {
+      state.profileByUser[legacyProfileKey] = sanitizeProfile(saved.profile);
+    }
+  }
   state.calcIncome = Number(saved.calcIncome || state.calcIncome);
   state.calcExpenses = Number(saved.calcExpenses || state.calcExpenses);
   state.calcPeriod = saved.calcPeriod === "year" ? "year" : "month";
@@ -2400,11 +2443,15 @@ function saveState() {
   const onboardingSnapshot = getCurrentOnboardingSnapshot();
   const onboardingByUser = normalizeOnboardingByUser(state.onboardingByUser);
   const onboardingIdentityKey = getOnboardingIdentityKey();
+  const profileByUser = normalizeProfileByUser(state.profileByUser);
   if (onboardingIdentityKey) {
     onboardingByUser[onboardingIdentityKey] = onboardingSnapshot;
+    profileByUser[onboardingIdentityKey] = sanitizeProfile(state.profile);
   }
   state.onboarding = onboardingSnapshot;
   state.onboardingByUser = onboardingByUser;
+  state.profile = sanitizeProfile(state.profile);
+  state.profileByUser = profileByUser;
   localStorage.setItem(
     STORAGE_KEY,
     JSON.stringify({
@@ -2417,6 +2464,7 @@ function saveState() {
       calendarPreServiceApplied: state.calendarPreServiceApplied,
       registrationDate: state.registrationDate,
       profile: state.profile,
+      profileByUser: state.profileByUser,
       calcIncome: state.calcIncome,
       calcExpenses: state.calcExpenses,
       calcPeriod: state.calcPeriod,
@@ -5611,6 +5659,7 @@ async function logout() {
 
   state.isLoggedIn = false;
   state.ownerTrialPreview = false;
+  state.profile = createDefaultProfile();
   lastRenderedPage = null;
   closeOnboardingTour(false, "logout");
   updateAuthUi();
@@ -8960,22 +9009,23 @@ function renderOnboardingPage() {
       id: "self",
       title: "Самозанятый",
       icon: "user-check",
-      note: "Фиксированный ежемесячный платеж (ЕСП).",
-      limit: `${fmt(SELF_LIMIT_ANNUAL)}/год`
+      note: "Без ИП",
+      limit: `До ${fmt(SELF_LIMIT_ANNUAL)} в год`
     },
     {
       id: "simplified",
       title: "Упрощенка (910)",
       icon: "percent",
-      note: "Для большинства ИП на старте.",
-      limit: `${fmt(SIMPLIFIED_LIMIT_ANNUAL)}/год`
+      note: "Для большинства ИП",
+      badge: "Чаще выбирают",
+      limit: `До ${fmt(SIMPLIFIED_LIMIT_ANNUAL)} в год`
     },
     {
       id: "our",
       title: "ОУР",
       icon: "building-2",
-      note: "Подходит, если важны подтвержденные расходы.",
-      limit: "без лимита"
+      note: "Если есть расходы",
+      limit: "Без лимита"
     }
   ];
 
@@ -8985,11 +9035,15 @@ function renderOnboardingPage() {
   const regimeCards = onboardingRegimes
     .map((item) => {
       const activeClass = item.id === regime ? " active" : "";
+      const badgeHtml = item.badge
+        ? `<span class="onboarding-regime-badge onboarding-regime-badge-best">${escapeHtml(item.badge)}</span>`
+        : "";
       return `
         <button type="button" class="onboarding-regime-card${activeClass}" data-onboarding-regime="${item.id}">
+          ${badgeHtml}
           <strong>${renderOnboardingRegimeIcon(item.icon)}${item.title}</strong>
           <span class="onboarding-regime-note">${item.note}</span>
-          <span class="onboarding-regime-limit">Лимит дохода: ${item.limit}</span>
+          <span class="onboarding-regime-limit">${item.limit}</span>
         </button>
       `;
     })
@@ -9000,24 +9054,28 @@ function renderOnboardingPage() {
   if (step === 1) {
     stepBody = `
       <div class="onboarding-step-body">
-        <h3>Шаг 1. Выберите режим</h3>
-        <p>Это можно поменять позже в кабинете в один клик.</p>
+        <h3>Шаг 1 из 2. Выберите режим</h3>
+        <p>Выберите ваш текущий режим. Позже его можно изменить в кабинете.</p>
         <div class="onboarding-regime-grid">${regimeCards}</div>
-        <p class="onboarding-regime-hint">Не знаете какой выбрать? Мы подскажем после ввода дохода.</p>
+        <p class="onboarding-regime-hint">На следующем шаге сравним режимы по вашему доходу.</p>
       </div>
       <div class="onboarding-actions">
-        <button type="button" class="btn btn-primary" data-action="onboarding-next">Дальше</button>
+        <button type="button" class="btn btn-primary" data-action="onboarding-next">Далее: ввести доход</button>
       </div>
     `;
   } else {
     const incomeAvailability = getRegimeAvailability(regime, income);
+    const taxCardLabel = incomeAvailability.available ? "Нужно платить в месяц" : regimeLabel(regime);
     const incomeHint = incomeAvailability.available
-      ? `Ориентир по налогам для режима «${escapeHtml(regimeLabel(regime))}».`
-      : escapeHtml(incomeAvailability.reason || "Режим недоступен при таком доходе.");
+      ? `При доходе ${fmt(income)} в месяц на режиме ${regimeLabel(regime)}.`
+      : incomeAvailability.reason || "Режим недоступен при таком доходе.";
+    const incomeFollowup = incomeAvailability.available
+      ? "Это налоги и взносы по выбранному режиму. Доход можно изменить позже в разделе «Доходы»."
+      : "Вернитесь на шаг назад и выберите другой режим, если хотите сравнить расчёт.";
 
     stepBody = `
       <div class="onboarding-step-body">
-        <h3>Шаг 2. Укажите доход</h3>
+        <h3>Шаг 2 из 2. Укажите доход</h3>
         <p>Возьмите ориентир за месяц. После этого сразу откроем кабинет и покажем расчёт.</p>
         <label class="onboarding-input-label" for="onboardingIncomeInput">Доход в месяц (₸)</label>
         <div class="onboarding-income-control">
@@ -9032,10 +9090,10 @@ function renderOnboardingPage() {
           <button type="button" data-onboarding-income-preset="1000000">1 млн ₸</button>
         </div>
         <article class="onboarding-tax-card">
-          <small>${escapeHtml(regimeLabel(regime))}</small>
+          <small>${escapeHtml(taxCardLabel)}</small>
           <strong>${fmt(taxes.total)}</strong>
-          <span class="onboarding-tax-subtitle">${incomeHint}</span>
-          <span>Доход можно скорректировать позже в разделе «Доходы».</span>
+          <span class="onboarding-tax-subtitle">${escapeHtml(incomeHint)}</span>
+          <span class="onboarding-tax-note">${escapeHtml(incomeFollowup)}</span>
         </article>
       </div>
       <div class="onboarding-actions">
@@ -9064,8 +9122,7 @@ function renderOnboardingPage() {
   els.pageContent.innerHTML = `
     <section class="onboarding-shell">
       <article class="card onboarding-card onboarding-step-${step}">
-        <p class="onboarding-kicker">Первый запуск</p>
-        <h2>Узнайте сколько платить налогов — за 1 минуту</h2>
+        <h2><span class="onboarding-title-line">Посчитайте налоги</span><span class="onboarding-title-line">за одну минуту</span></h2>
         <p class="onboarding-lead">Выберите режим и укажите доход — сразу увидите ориентир по налогам и попадёте в кабинет.</p>
         <div class="onboarding-progress" aria-label="Прогресс онбординга">${stepPills}</div>
         ${stepBody}

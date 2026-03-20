@@ -4128,19 +4128,28 @@ h3,
 }
 
 #loginModal .login-legal-consent-label {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  column-gap: 10px;
   color: #5f6f98;
   font-size: 12px;
-  line-height: 1.45;
+  line-height: 1.4;
+  cursor: pointer;
 }
 
 #loginModal .login-legal-consent-label input {
+  display: block;
   width: 16px;
   height: 16px;
-  margin-top: 2px;
+  margin: -1px 0 0;
   flex-shrink: 0;
+  align-self: start;
+}
+
+#loginModal .login-legal-consent-label span {
+  display: block;
+  min-width: 0;
 }
 
 #loginModal .login-legal-consent-label a {
@@ -5707,8 +5716,12 @@ h3,
 }
 
 .onboarding-card h2 {
-  margin-top: 12px;
+  margin-top: 0;
   margin-bottom: 6px;
+}
+
+.onboarding-title-line {
+  display: block;
 }
 
 .onboarding-lead {
@@ -5975,6 +5988,30 @@ h3,
   align-items: center;
 }
 
+.onboarding-income-control .step-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  height: 44px;
+  padding: 0;
+  border-radius: 12px;
+  border: 1px solid #cfd9f4;
+  background: linear-gradient(180deg, #ffffff 0%, #f2f6ff 100%);
+  color: #5a5ff0;
+  font-size: 20px;
+  box-shadow: 0 8px 18px rgba(99, 102, 241, 0.08);
+}
+
+.onboarding-income-control .step-btn:hover,
+.onboarding-income-control .step-btn:focus-visible {
+  background: linear-gradient(180deg, #f8faff 0%, #e9efff 100%);
+  border-color: #b8c6f7;
+  color: #474ddc;
+  box-shadow: 0 10px 22px rgba(99, 102, 241, 0.14);
+}
+
 .onboarding-income-control input {
   width: 100%;
   min-height: 44px;
@@ -5983,9 +6020,11 @@ h3,
   background: #f9fbff;
   color: #1b274a;
   font: inherit;
-  font-size: 16px;
+  font-size: 28px;
   font-weight: 700;
-  padding: 10px 12px;
+  text-align: center;
+  letter-spacing: -0.02em;
+  padding: 10px 16px;
   outline: none;
 }
 
@@ -6006,8 +6045,8 @@ h3,
 .onboarding-income-presets button {
   border: 1px solid #cfdaf8;
   border-radius: 999px;
-  background: #eef3ff;
-  color: #415486;
+  background: #f6f8ff;
+  color: #52658f;
   font: inherit;
   font-size: 12px;
   font-weight: 700;
@@ -6018,43 +6057,68 @@ h3,
 .onboarding-income-presets button:hover,
 .onboarding-income-presets button:focus-visible {
   border-color: #aebff6;
-  color: #32498c;
-  background: #e8eeff;
+  color: #3d53a0;
+  background: #edf2ff;
   outline: none;
 }
 
 .onboarding-tax-card {
-  margin-top: 14px;
+  position: relative;
+  overflow: hidden;
+  margin-top: 20px;
   border-radius: 14px;
-  border: 1px solid #d8e2fb;
-  background: #f7faff;
-  padding: 14px;
+  border: 1.5px solid #c7d5ff;
+  background: linear-gradient(180deg, #fbfdff 0%, #f3f7ff 100%);
+  box-shadow: 0 14px 28px rgba(99, 102, 241, 0.08);
+  padding: 16px;
   display: grid;
-  gap: 6px;
+  gap: 8px;
+}
+
+.onboarding-tax-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: linear-gradient(90deg, #6e63ff 0%, #82a0ff 100%);
 }
 
 .onboarding-tax-card small {
-  color: #5d709b;
-  font-size: 12px;
-  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(110, 99, 255, 0.08);
+  color: #465cc0;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .onboarding-tax-card strong {
-  color: #1d2c52;
+  color: #152449;
   font-size: clamp(30px, 2.4vw, 40px);
   line-height: 1.05;
 }
 
 
 .onboarding-tax-card span {
-  color: #4f618e;
+  color: #465b8d;
   font-size: 13px;
   font-weight: 600;
 }
 .onboarding-tax-card .onboarding-tax-subtitle {
-  color: #7b86a7;
+  color: #6a78a3;
   font-size: 13px;
   font-weight: 500;
+}
+
+.onboarding-tax-card .onboarding-tax-note {
+  color: #314874;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
 }
 
 .onboarding-warning {
@@ -8235,13 +8299,14 @@ h3,
 
   .dashboard-app.onboarding-mode .onboarding-income-control {
     margin-top: 0;
-    grid-template-columns: 34px minmax(0, 1fr) 34px;
-    gap: 6px;
+    grid-template-columns: 36px minmax(0, 1fr) 36px;
+    gap: 8px;
   }
 
   .dashboard-app.onboarding-mode .onboarding-income-control .step-btn {
-    min-height: 34px;
-    height: 34px;
+    min-height: 36px;
+    height: 36px;
+    font-size: 17px;
   }
 
   .dashboard-app.onboarding-mode .onboarding-income-control input {
@@ -8269,13 +8334,14 @@ h3,
   }
 
   .dashboard-app.onboarding-mode .onboarding-tax-card {
-    margin-top: 0;
-    padding: 10px;
-    gap: 4px;
+    margin-top: 8px;
+    padding: 12px;
+    gap: 6px;
   }
 
   .dashboard-app.onboarding-mode .onboarding-tax-card small {
-    font-size: 11px;
+    padding: 5px 8px;
+    font-size: 12px;
   }
 
   .dashboard-app.onboarding-mode .onboarding-tax-card strong {
@@ -9457,7 +9523,14 @@ h3,
 
 @media (max-width: 640px) {
   .onboarding-income-control {
-    grid-template-columns: 40px 1fr 40px;
+    grid-template-columns: 38px minmax(0, 1fr) 38px;
+    gap: 8px;
+  }
+
+  .onboarding-income-control .step-btn {
+    height: 38px;
+    font-size: 18px;
+    border-radius: 10px;
   }
 
   .onboarding-actions {
@@ -15771,6 +15844,20 @@ h4,
     line-height: 1.2;
   }
 
+  .dashboard-app.onboarding-mode .onboarding-regime-badge {
+    top: -8px;
+    right: 8px;
+    padding: 3px 6px;
+    font-size: 10px;
+  }
+
+  .dashboard-app.onboarding-mode .onboarding-regime-badge {
+    top: -8px;
+    right: 8px;
+    padding: 3px 6px;
+    font-size: 10px;
+  }
+
   .dashboard-app.onboarding-mode .onboarding-regime-hint {
     margin-top: 1px;
     font-size: 12px;
@@ -15805,13 +15892,14 @@ h4,
 
   .dashboard-app.onboarding-mode .onboarding-income-control {
     margin-top: 0;
-    grid-template-columns: 34px minmax(0, 1fr) 34px;
-    gap: 6px;
+    grid-template-columns: 36px minmax(0, 1fr) 36px;
+    gap: 8px;
   }
 
   .dashboard-app.onboarding-mode .onboarding-income-control .step-btn {
-    min-height: 34px;
-    height: 34px;
+    min-height: 36px;
+    height: 36px;
+    font-size: 17px;
   }
 
   .dashboard-app.onboarding-mode .onboarding-income-control input {
@@ -15839,13 +15927,14 @@ h4,
   }
 
   .dashboard-app.onboarding-mode .onboarding-tax-card {
-    margin-top: 0;
-    padding: 10px;
-    gap: 4px;
+    margin-top: 8px;
+    padding: 12px;
+    gap: 6px;
   }
 
   .dashboard-app.onboarding-mode .onboarding-tax-card small {
-    font-size: 11px;
+    padding: 5px 8px;
+    font-size: 12px;
   }
 
   .dashboard-app.onboarding-mode .onboarding-tax-card strong {
