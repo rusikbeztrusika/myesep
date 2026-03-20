@@ -9951,6 +9951,15 @@ h3,
   line-height: 1.12;
 }
 
+#taxLoadModal .tax-load-modal-head h3 .tax-load-title-label {
+  display: block;
+}
+
+#taxLoadModal .tax-load-modal-head h3 .tax-load-title-amount {
+  display: block;
+  white-space: nowrap;
+}
+
 #taxLoadModal .tax-load-modal-body {
   display: grid;
   gap: 12px;
@@ -10135,6 +10144,10 @@ h3,
   #taxLoadModal .tax-load-modal-card.tax-load-mobile-compact .tax-load-modal-head h3 {
     font-size: clamp(16px, 5.8vw, 24px);
     line-height: 1.2;
+  }
+
+  #taxLoadModal .tax-load-modal-card.tax-load-mobile-compact .tax-load-modal-head h3 .tax-load-title-label {
+    margin-bottom: 2px;
   }
 
   #taxLoadModal .tax-load-modal-card.tax-load-mobile-compact .tax-load-modal-body {

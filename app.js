@@ -99,6 +99,9 @@ const ONBOARDING_TOUR_CALENDAR_STORAGE_KEY = "onboardingTourCalendarDone";
 const ONBOARDING_ACCOUNT_METADATA_KEY = "myesep_onboarding";
 const OWNER_EMAIL_STORAGE_KEY = "myesep_owner_email_v1";
 const HIDE_AMOUNTS_STORAGE_KEY = "hideAmounts";
+const PROFILE_DEFAULT_NAME_PLACEHOLDERS = new Set(["ИП Сарсенов А."]);
+const PROFILE_DEFAULT_CITY_PLACEHOLDERS = new Set(["Алматы"]);
+const PROFILE_DEFAULT_ACTIVITY_PLACEHOLDERS = new Set(["IT-услуги"]);
 
 
 let supabaseClient = null;
@@ -113,8 +116,8 @@ const FREE_INCOME_MONTH_LIMIT = 5;
 const PRO_PRICE_MONTHLY = 1990;
 const PRO_PRICE_MONTHLY_LABEL = `${PRO_PRICE_MONTHLY.toLocaleString("ru-RU")} ₸/мес`;
 const PRO_AFTER_TRIAL_TOOLTIP = `затем ${PRO_PRICE_MONTHLY_LABEL}`;
-const ONBOARDING_FLOW_VERSION = 3;
-const ONBOARDING_STEPS_TOTAL = 4;
+const ONBOARDING_FLOW_VERSION = 4;
+const ONBOARDING_STEPS_TOTAL = 2;
 const KAZAKHSTAN_CITIES = [
   "Алматы",
   "Астана",
@@ -206,87 +209,51 @@ const ONBOARDING_TOUR_STEPS = [
   {
     target: "tax-load",
     icon: "trending-up",
-    title: "Ваши налоги в одном месте",
-    text: "Здесь всегда видно сколько нужно заплатить в этом месяце. Нажмите на карточку чтобы увидеть из чего складывается сумма."
-  },
-  {
-    target: "income-chart",
-    icon: "plus-circle",
-    title: "Добавляйте доходы",
-    text: "Вносите доходы сюда — система сама пересчитает налоги. Чем точнее данные, тем точнее расчёт."
+    title: "Сколько платить сейчас",
+    text: "Здесь сервис показывает сумму к оплате за текущий месяц. Нажмите на карточку, чтобы открыть расшифровку платежа."
   },
   {
     target: "next-deadline",
     icon: "calendar",
-    title: "Не пропустите срок оплаты",
-    text: "Здесь всегда виден следующий налоговый срок. Зайдите в Календарь чтобы увидеть все даты на год вперёд."
+    title: "Ближайший срок под рукой",
+    text: "Здесь всегда видно ближайшую дату оплаты. Отсюда можно сразу перейти в календарь сроков и не пропустить платёж."
   },
   {
-    target: "header-reminders",
-    icon: "bell",
-    title: "Включите напоминания",
-    text: "Переключите тумблер «Напоминания», чтобы получать уведомления о сроках оплаты и ничего не пропустить."
+    target: "income-chart",
+    icon: "bar-chart-3",
+    title: "Доходы и динамика",
+    text: "Здесь видно, как меняются доходы по месяцам. Чем точнее вы ведёте поступления, тем точнее расчёт налогов."
   }
 ];
 
 const ONBOARDING_TOUR_INCOME_STEPS = [
   {
     target: "income-form",
-    icon: "plus-circle",
-    title: "Добавьте первую операцию",
-    text: "Укажите дату, сумму и категорию дохода. После сохранения запись сразу попадет в журнал."
-  },
-  {
-    target: "income-summary",
     icon: "wallet",
-    title: "Сводка обновляется автоматически",
-    text: "Здесь виден общий доход, средний чек и топ-категория по поступлениям."
-  },
-  {
-    target: "income-save",
-    icon: "check-circle",
-    title: "Сохраните доход",
-    text: "Нажмите эту кнопку, чтобы добавить операцию. Налоги и прогнозы пересчитаются автоматически."
+    title: "Добавляйте доходы здесь",
+    text: "Укажите сумму, дату и категорию. После сохранения операция сразу попадёт в журнал, а расчёты обновятся автоматически."
   }
 ];
 const ONBOARDING_TOUR_TAXES_STEPS = [
   {
     target: "taxes-kpi",
     icon: "receipt",
-    title: "Налоги под контролем",
-    text: "Здесь видна итоговая нагрузка, эффективная ставка и рекомендуемый резерв по вашему сценарию."
-  },
-  {
-    target: "taxes-planner",
-    icon: "sliders-horizontal",
-    title: "Планируйте заранее",
-    text: "Меняйте доход и расходы, чтобы сразу видеть как меняются налоги и какой режим выгоднее."
-  },
-  {
-    target: "taxes-deadline-focus",
-    icon: "calendar",
-    title: "Не пропустите срок",
-    text: "Здесь показано что скоро платить. Полный список дат доступен в Календаре сроков."
+    title: "Подробный расчёт по налогам",
+    text: "Здесь видно, что платить сейчас, что откладывать позже и как меняется налоговая нагрузка по выбранному режиму."
   }
 ];
 const ONBOARDING_TOUR_CALENDAR_STEPS = [
   {
     target: "calendar-overview",
     icon: "calendar",
-    title: "Сроки под рукой",
-    text: "Здесь видны ближайшие сроки, сколько задач ожидают и что уже закрыто."
-  },
-  {
-    target: "calendar-checklist-btn",
-    icon: "check-circle",
-    title: "Открывайте чеклист по сроку",
-    text: 'Нажмите "Чеклист", чтобы увидеть шаги: что сделать, куда зайти и какие данные подготовить.'
+    title: "Все сроки в одном месте",
+    text: "Здесь собраны ближайшие налоговые даты, сколько задач ожидают и что уже закрыто по вашему режиму."
   },
   {
     target: "calendar-reminder-entry",
     icon: "bell",
-    title: "Включайте напоминания",
-    text: "Внутри чеклиста можно включить напоминания об уплате налогов за 7, 3, 1 день и в день срока."
+    title: "Напоминания и чеклист",
+    text: "Откройте срок, чтобы увидеть чеклист оплаты и включить напоминания за 7, 3, 1 день и в день срока."
   }
 ];
 
@@ -1391,6 +1358,65 @@ function createDefaultOnboarding() {
   };
 }
 
+function createDefaultProfile() {
+  return {
+    name: "",
+    iin: "",
+    city: "",
+    activity: "",
+    simplifiedRate: "",
+    deadlineTrackingFrom: ""
+  };
+}
+
+function sanitizeProfile(raw) {
+  const base = createDefaultProfile();
+  const source = raw && typeof raw === "object" ? raw : {};
+  const next = {
+    ...base,
+    ...source
+  };
+
+  next.name = String(next.name || "").trim();
+  next.iin = String(next.iin || "").trim();
+  next.city = String(next.city || "").trim();
+  next.activity = String(next.activity || "").trim();
+  next.simplifiedRate = normalizeProfileSimplifiedRate(next.simplifiedRate);
+  next.deadlineTrackingFrom = String(next.deadlineTrackingFrom || "").trim();
+
+  if (PROFILE_DEFAULT_NAME_PLACEHOLDERS.has(next.name)) {
+    next.name = "";
+    if (PROFILE_DEFAULT_CITY_PLACEHOLDERS.has(next.city)) {
+      next.city = "";
+    }
+    if (PROFILE_DEFAULT_ACTIVITY_PLACEHOLDERS.has(next.activity)) {
+      next.activity = "";
+    }
+  }
+
+  if (PROFILE_DEFAULT_IIN_PLACEHOLDERS.has(next.iin)) {
+    next.iin = "";
+  }
+
+  return next;
+}
+
+function getAuthMetadataDisplayName(user) {
+  const metadata = user && user.user_metadata && typeof user.user_metadata === "object"
+    ? user.user_metadata
+    : {};
+  return String(metadata.full_name || metadata.name || "").trim();
+}
+
+function applyAuthProfileDefaults(user) {
+  const authDisplayName = getAuthMetadataDisplayName(user);
+  const sanitized = sanitizeProfile(state.profile);
+  if (!sanitized.name && authDisplayName) {
+    sanitized.name = authDisplayName;
+  }
+  state.profile = sanitized;
+}
+
 function normalizeOnboarding(raw) {
   const base = createDefaultOnboarding();
   const source = raw && typeof raw === "object" ? raw : {};
@@ -1404,8 +1430,8 @@ function normalizeOnboarding(raw) {
   const userId = String(source.userId || base.userId || "").trim();
   const completed = source.completed === true || source.completed === 1 || source.completed === "1" || source.completed === "true";
 
-  if (!completed && rawVersion < ONBOARDING_FLOW_VERSION && step >= 2) {
-    step = Math.min(ONBOARDING_STEPS_TOTAL, step + 1);
+  if (!completed && rawVersion < ONBOARDING_FLOW_VERSION) {
+    step = step <= 1 ? 1 : 2;
   }
 
   const version = Math.max(rawVersion, ONBOARDING_FLOW_VERSION);
@@ -1471,10 +1497,18 @@ function normalizeOnboardingAccountMeta(raw) {
   const regime = ["self", "simplified", "our"].includes(flowSource.regime) ? flowSource.regime : base.flow.regime;
   const stepInput = Number(flowSource.step);
   const completed = flowSource.completed === true || flowSource.completed === 1 || flowSource.completed === "1" || flowSource.completed === "true";
-  const step = completed
+  let step = completed
     ? ONBOARDING_STEPS_TOTAL
     : Math.min(ONBOARDING_STEPS_TOTAL, Math.max(1, Math.round(Number.isFinite(stepInput) ? stepInput : base.flow.step)));
   const income = normalizeIncome(flowSource.income ?? base.flow.income);
+
+  if (!completed) {
+    const versionInput = Number(flowSource.version);
+    const rawVersion = Number.isFinite(versionInput) && versionInput > 0 ? Math.round(versionInput) : 0;
+    if (rawVersion < ONBOARDING_FLOW_VERSION) {
+      step = step <= 1 ? 1 : 2;
+    }
+  }
 
   return {
     flow: {
@@ -1956,14 +1990,7 @@ const state = {
   deadlineCompletionMeta: {},
   calendarPreServiceApplied: false,
   registrationDate: "",
-  profile: {
-    name: "ИП Сарсенов А.",
-    iin: "",
-    city: "Алматы",
-    activity: "IT-услуги",
-    simplifiedRate: "",
-    deadlineTrackingFrom: ""
-  },
+  profile: createDefaultProfile(),
   calcIncome: 500000,
   calcExpenses: 0,
   calcPeriod: "month",
@@ -2140,6 +2167,7 @@ async function init() {
       state.userId = data.session.user.id || state.userId;
       syncOnboardingStateFromAccountUser(data.session.user);
       prepareOnboardingAfterLogin();
+      applyAuthProfileDefaults(data.session.user);
       ensureOwnerEmailBinding();
       ensureTrialIfNeeded();
       ensureDeadlineTrackingFrom();
@@ -2232,12 +2260,7 @@ function loadState() {
   state.deadlineCompletionMeta = normalizeDeadlineCompletionMeta(saved.deadlineCompletionMeta);
   state.calendarPreServiceApplied = saved.calendarPreServiceApplied === true || saved.calendarPreServiceApplied === "true" || saved.calendarPreServiceApplied === 1;
   state.registrationDate = String(saved.registrationDate || "").trim();
-  state.profile = { ...state.profile, ...(saved.profile || {}) };
-  state.profile.simplifiedRate = normalizeProfileSimplifiedRate(state.profile.simplifiedRate);
-  const profileIin = String(state.profile.iin || "").trim();
-  if (PROFILE_DEFAULT_IIN_PLACEHOLDERS.has(profileIin)) {
-    state.profile.iin = "";
-  }
+  state.profile = sanitizeProfile({ ...state.profile, ...(saved.profile || {}) });
   state.calcIncome = Number(saved.calcIncome || state.calcIncome);
   state.calcExpenses = Number(saved.calcExpenses || state.calcExpenses);
   state.calcPeriod = saved.calcPeriod === "year" ? "year" : "month";
@@ -2482,10 +2505,19 @@ function isMobileViewport() {
   return window.innerWidth <= 768;
 }
 
+function getProfileDisplayName() {
+  const profileName = String(state.profile.name || "").trim();
+  if (profileName) {
+    return profileName;
+  }
+
+  return "Добавьте имя в профиле";
+}
+
 function syncMobileDrawerProfile() {
   const profileName = String(state.profile.name || "").trim();
   const fallbackName = String(state.userEmail || "Пользователь").trim();
-  const displayName = profileName || fallbackName;
+  const displayName = getProfileDisplayName();
   const initialsSource = profileName || fallbackName;
   const initials = initialsSource
     .split(/\s+/)
@@ -2659,7 +2691,8 @@ function openRegimeConfirmModal(requestedRegime, resolved, source = "") {
   pendingRegimeChange = {
     requestedRegime,
     resolved,
-    source
+    source,
+    skipHelpModalAfterConfirm: isSelfScenario
   };
 
   if (isSelfScenario) {
@@ -3070,7 +3103,7 @@ function updateAuthUi() {
   if (state.isLoggedIn) {
     els.publicApp.classList.add("hidden");
     els.dashboardApp.classList.remove("hidden");
-    els.accountName.textContent = state.profile.name || state.userEmail;
+    els.accountName.textContent = getProfileDisplayName();
     syncMobileDrawerProfile();
     syncMobileDrawerRegimeTabs();
     updatePlanUi();
@@ -3690,31 +3723,6 @@ function handleGlobalClick(event) {
     if (action === "onboarding-next" && shouldShowOnboarding()) {
       const onboarding = normalizeOnboarding(state.onboarding);
 
-      if (onboarding.step === 2) {
-        const nameInput = document.getElementById("onboardingProfileName");
-        const cityInput = document.getElementById("onboardingProfileCity");
-        const activityInput = document.getElementById("onboardingProfileActivity");
-
-        const name = String(nameInput && typeof nameInput.value === "string" ? nameInput.value : state.profile.name || "").trim();
-        if (!name) {
-          if (nameInput && typeof nameInput.focus === "function") {
-            nameInput.focus();
-          }
-          trackEvent("onboarding_profile_required");
-          return;
-        }
-
-        const city = String(cityInput && typeof cityInput.value === "string" ? cityInput.value : state.profile.city || "").trim();
-        const activity = String(activityInput && typeof activityInput.value === "string" ? activityInput.value : state.profile.activity || "").trim();
-
-        state.profile = {
-          ...state.profile,
-          name,
-          city,
-          activity
-        };
-      }
-
       const nextStep = Math.min(ONBOARDING_STEPS_TOTAL, onboarding.step + 1);
       state.onboarding = { ...onboarding, step: nextStep };
       saveState();
@@ -3924,7 +3932,13 @@ function handleGlobalClick(event) {
         syncRegimeControlsToState();
         return;
       }
-      applyResolvedRegimeChange(pending.requestedRegime, pending.resolved, pending.source || "confirm_modal");
+      const resolvedForApply = pending.skipHelpModalAfterConfirm
+        ? { ...pending.resolved, showHelpModal: false }
+        : pending.resolved;
+      applyResolvedRegimeChange(pending.requestedRegime, resolvedForApply, pending.source || "confirm_modal");
+      if (pending.skipHelpModalAfterConfirm) {
+        showAppToast("Вы смотрите сценарий самозанятого");
+      }
       return;
     }
 
@@ -5479,6 +5493,7 @@ function finalizeAuthSession(user, fallbackEmail = "") {
   state.userId = (user && user.id) || state.userId;
   syncOnboardingStateFromAccountUser(user);
   prepareOnboardingAfterLogin();
+  applyAuthProfileDefaults(user);
   ensureOwnerEmailBinding();
   ensureTrialIfNeeded();
   ensureDeadlineTrackingFrom();
@@ -7438,7 +7453,10 @@ function openTaxLoadModal() {
     modalCard.classList.toggle("tax-load-mobile-compact", isMobileCompact);
   }
 
-  els.taxLoadModalTitle.textContent = `Платить в этом месяце: ${fmt(payNowAmount)}`;
+  els.taxLoadModalTitle.innerHTML = `
+    <span class="tax-load-title-label">Платить в этом месяце:</span>
+    <span class="tax-load-title-amount">${fmt(payNowAmount)}</span>
+  `;
 
   const payLaterInnerHtml = model.payLaterTitle
     ? `
@@ -8172,7 +8190,7 @@ function renderDashboard() {
     lastRenderedPage = "onboarding";
     els.pageTitle.textContent = "Быстрый старт";
     renderSidebarActive();
-    els.accountName.textContent = state.profile.name || state.userEmail;
+    els.accountName.textContent = getProfileDisplayName();
     updatePlanUi();
     updateCalendarReminderToggleUi();
     updateMobileHeaderState();
@@ -8193,7 +8211,7 @@ function renderDashboard() {
   els.regimeSelect.value = state.regime;
   syncRegimeSelectAvailability();
   syncMobileDrawerRegimeTabs();
-  els.accountName.textContent = state.profile.name || state.userEmail;
+  els.accountName.textContent = getProfileDisplayName();
   updatePlanUi();
   updateCalendarReminderToggleUi();
   updateMobileHeaderState();
@@ -8897,34 +8915,8 @@ function renderOnboardingPage() {
   const income = onboarding.income;
   const regime = onboarding.regime;
   const taxes = calcByRegime(regime, income, 0);
-  const availability = getRegimeAvailability(regime, income);
-  const effectiveRate = income > 0 ? (taxes.total / income) * 100 : 0;
-
-  const profileName = String((state.profile && state.profile.name) || "").trim();
-  const profileCity = String((state.profile && state.profile.city) || "").trim();
-  const profileActivity = String((state.profile && state.profile.activity) || "").trim();
 
   state.onboarding = onboarding;
-
-  const cityOptions = KAZAKHSTAN_CITIES.map((city) => {
-    const selected = profileCity === city ? " selected" : "";
-    const safeCity = escapeHtml(city);
-    return `<option value="${safeCity}"${selected}>${safeCity}</option>`;
-  }).join("");
-  const onboardingActivityValue = String(profileActivity || "").trim();
-  const onboardingActivityOptions = [
-    `<option value="" ${onboardingActivityValue ? "" : "selected"}>Не выбрано</option>`,
-    ...BUSINESS_ACTIVITY_OPTIONS.map((option) => {
-      const safeOption = escapeHtml(option);
-      const selected = onboardingActivityValue === option ? " selected" : "";
-      return `<option value="${safeOption}"${selected}>${safeOption}</option>`;
-    })
-  ];
-  if (onboardingActivityValue && !BUSINESS_ACTIVITY_OPTIONS.includes(onboardingActivityValue)) {
-    onboardingActivityOptions.unshift(
-      `<option value="${escapeHtml(onboardingActivityValue)}" selected>${escapeHtml(onboardingActivityValue)}</option>`
-    );
-  }
 
   const onboardingRegimes = [
     {
@@ -8972,7 +8964,7 @@ function renderOnboardingPage() {
     stepBody = `
       <div class="onboarding-step-body">
         <h3>Шаг 1. Выберите режим</h3>
-        <p>Это можно изменить позже в один клик.</p>
+        <p>Это можно поменять позже в кабинете в один клик.</p>
         <div class="onboarding-regime-grid">${regimeCards}</div>
         <p class="onboarding-regime-hint">Не знаете какой выбрать? Мы подскажем после ввода дохода.</p>
       </div>
@@ -8980,41 +8972,16 @@ function renderOnboardingPage() {
         <button type="button" class="btn btn-primary" data-action="onboarding-next">Дальше</button>
       </div>
     `;
-  } else if (step === 2) {
+  } else {
+    const incomeAvailability = getRegimeAvailability(regime, income);
+    const incomeHint = incomeAvailability.available
+      ? `Ориентир по налогам для режима «${escapeHtml(regimeLabel(regime))}».`
+      : escapeHtml(incomeAvailability.reason || "Режим недоступен при таком доходе.");
+
     stepBody = `
       <div class="onboarding-step-body">
-        <h3>Шаг 2. Расскажите о себе</h3>
-        <p>Эти данные нужны для персонализации кабинета. Позже их можно изменить в настройках.</p>
-        <div class="onboarding-profile-grid">
-          <label class="onboarding-field onboarding-field-full" for="onboardingProfileName">
-            <span>Название ИП или ваше имя *</span>
-            <input id="onboardingProfileName" type="text" value="${escapeHtml(profileName)}" placeholder="Например, ИП Ахметов" required />
-          </label>
-          <label class="onboarding-field" for="onboardingProfileCity">
-            <span>Город (необязательно)</span>
-            <select id="onboardingProfileCity">
-              <option value="">Не выбрано</option>
-              ${cityOptions}
-            </select>
-          </label>
-          <label class="onboarding-field" for="onboardingProfileActivity">
-            <span>Вид деятельности (необязательно)</span>
-            <select id="onboardingProfileActivity">
-              ${onboardingActivityOptions.join("")}
-            </select>
-          </label>
-        </div>
-      </div>
-      <div class="onboarding-actions">
-        <button type="button" class="btn btn-ghost" data-action="onboarding-back">Назад</button>
-        <button type="button" class="btn btn-primary" data-action="onboarding-next" ${profileName ? "" : "disabled"}>Дальше</button>
-      </div>
-    `;
-  } else if (step === 3) {
-    stepBody = `
-      <div class="onboarding-step-body">
-        <h3>Шаг 3. Введите примерный доход</h3>
-        <p>Берите ориентир за месяц. Точную сумму добавите позже в журнале.</p>
+        <h3>Шаг 2. Укажите доход</h3>
+        <p>Возьмите ориентир за месяц. После этого сразу откроем кабинет и покажем расчёт.</p>
         <label class="onboarding-input-label" for="onboardingIncomeInput">Доход в месяц (₸)</label>
         <div class="onboarding-income-control">
           <button type="button" class="step-btn" data-onboarding-income-step="-50000">-</button>
@@ -9027,108 +8994,16 @@ function renderOnboardingPage() {
           <button type="button" data-onboarding-income-preset="700000">700 тыс ₸</button>
           <button type="button" data-onboarding-income-preset="1000000">1 млн ₸</button>
         </div>
-      </div>
-      <div class="onboarding-actions">
-        <button type="button" class="btn btn-ghost" data-action="onboarding-back">Назад</button>
-        <button type="button" class="btn btn-primary" data-action="onboarding-next" ${income > 0 ? "" : "disabled"}>Показать налоги</button>
-      </div>
-    `;
-  } else {
-    const availabilityHint = availability.available ? "" : `<p class="onboarding-warning">${escapeHtml(availability.reason)}</p>`;
-    const regimeComparisonRows = onboardingRegimes.map((item) => {
-      const rowTaxes = calcByRegime(item.id, income, 0);
-      const rowAvailability = getRegimeAvailability(item.id, income);
-      return {
-        ...item,
-        taxes: rowTaxes,
-        available: rowAvailability.available,
-        reason: rowAvailability.reason
-      };
-    });
-    const bestRegime = regimeComparisonRows
-      .filter((row) => row.available)
-      .sort((a, b) => a.taxes.total - b.taxes.total)[0];
-    const bestRegimeId = bestRegime ? bestRegime.id : "";
-    const regimeComparisonCards = regimeComparisonRows
-      .map((item) => {
-        const activeClass = item.id === regime ? " active" : "";
-        const unavailableClass = item.available ? "" : " unavailable";
-        const badge = item.id === bestRegimeId ? '<span class="onboarding-regime-badge onboarding-regime-badge-best">Выгоднее</span>' : "";
-        const meta = item.available
-          ? '<span class="onboarding-regime-limit">К уплате в месяц</span>'
-          : `<span class="onboarding-regime-note onboarding-regime-note-muted">${escapeHtml(item.reason || "Режим недоступен при текущем доходе")}</span>`;
-        return `
-          <article class="onboarding-regime-card onboarding-regime-card-readonly${activeClass}${unavailableClass}">
-            ${badge}
-            <strong>${renderOnboardingRegimeIcon(item.icon)}${item.title}</strong>
-            <span class="onboarding-regime-tax">${fmt(item.taxes.total)}</span>
-            ${meta}
-          </article>
-        `;
-      })
-      .join("");
-    const monthlyLines = regime === "self"
-      ? [
-          { label: "ОПВ (1%)", value: taxes.opv },
-          { label: "СО (1%, до 7 МЗП)", value: taxes.so },
-          { label: "ОПВР (1%)", value: taxes.opvr },
-          { label: "ВОСМС (1%)", value: taxes.vosms }
-        ]
-      : regime === "simplified"
-        ? [
-            { label: "ОПВ (10%)", value: taxes.opv },
-            { label: "СО (5%)", value: taxes.so },
-            { label: "ОПВР (3.5% от дохода, до 50 МЗП)", value: taxes.opvr },
-            { label: "ВОСМС", value: taxes.vosms }
-          ]
-        : [
-            { label: "ОПВ (10%)", value: taxes.opv },
-            { label: "СО (5%)", value: taxes.so },
-            { label: "ОПВР (3.5% от дохода, до 50 МЗП)", value: taxes.opvr },
-            { label: "ВОСМС", value: taxes.vosms },
-            { label: "СН", value: taxes.socTax }
-          ];
-    const periodicTitle = regime === "our" ? "Платить по итогам года" : "Платить раз в полгода";
-    const periodicLines = regime === "self"
-      ? []
-      : regime === "simplified"
-        ? [{ label: `ИПН (${formatRatePercent(Number(taxes.ipnRate || 0) || getActiveSimplifiedIpnRate())})`, value: taxes.ipn }]
-        : [{ label: "ИПН (10%)", value: taxes.ipn }];
-    const socialTaxHint = regime === "simplified" ? '<p class="onboarding-tax-note-muted">Соц. налог: освобождены</p>' : "";
-
-    stepBody = `
-      <div class="onboarding-step-body">
-        <h3>Шаг 4. Вот ваши налоги</h3>
-        <p>Оценка для режима <b>${regimeLabel(regime)}</b> при доходе <b>${fmt(income)}</b>.</p>
-        <div class="onboarding-regime-grid onboarding-regime-grid-review">${regimeComparisonCards}</div>
         <article class="onboarding-tax-card">
-          <small>К уплате в месяц</small>
+          <small>${escapeHtml(regimeLabel(regime))}</small>
           <strong>${fmt(taxes.total)}</strong>
-          <span class="onboarding-tax-subtitle">Точная сумма зависит от фактических данных</span>
-          <span>Эффективная ставка: ${formatPct(effectiveRate)}</span>
-          ${availabilityHint}
+          <span class="onboarding-tax-subtitle">${incomeHint}</span>
+          <span>Доход можно скорректировать позже в разделе «Доходы».</span>
         </article>
-        <div class="onboarding-tax-breakdown">
-          <div class="onboarding-tax-groups">
-            <section class="onboarding-tax-group">
-              <h4>Платить ежемесячно</h4>
-              ${monthlyLines.map((line) => `<div class="tax-row"><span class="text-muted">${line.label}</span><strong class="amount-sensitive">${fmt(line.value)}</strong></div>`).join("")}
-            </section>
-            ${
-              periodicLines.length
-                ? `<section class="onboarding-tax-group">
-                     <h4>${periodicTitle}</h4>
-                     ${periodicLines.map((line) => `<div class="tax-row"><span class="text-muted">${line.label}</span><strong class="amount-sensitive">${fmt(line.value)}</strong></div>`).join("")}
-                   </section>`
-                : ""
-            }
-          </div>
-          ${socialTaxHint}
-        </div>
       </div>
       <div class="onboarding-actions">
         <button type="button" class="btn btn-ghost" data-action="onboarding-back">Назад</button>
-        <button type="button" class="btn btn-primary" data-action="onboarding-complete-income">Сохранить и перейти в кабинет</button>
+        <button type="button" class="btn btn-primary" data-action="onboarding-complete-income" ${income > 0 ? "" : "disabled"}>Сохранить и перейти в кабинет</button>
         <button type="button" class="btn btn-ghost" data-action="onboarding-complete">Открыть без сохранения</button>
       </div>
     `;
@@ -9136,9 +9011,7 @@ function renderOnboardingPage() {
 
   const stepPills = [
     { index: 1, label: "Режим" },
-    { index: 2, label: "Профиль" },
-    { index: 3, label: "Доход" },
-    { index: 4, label: "Налоги" }
+    { index: 2, label: "Доход" }
   ]
     .map((item) => {
       const isDone = item.index < step;
@@ -9156,7 +9029,7 @@ function renderOnboardingPage() {
       <article class="card onboarding-card onboarding-step-${step}">
         <p class="onboarding-kicker">Первый запуск</p>
         <h2>Узнайте сколько платить налогов — за 1 минуту</h2>
-        <p class="onboarding-lead">Выберите режим, заполните профиль, укажите примерный доход и сразу увидите ориентир по налогам.</p>
+        <p class="onboarding-lead">Выберите режим и укажите доход — сразу увидите ориентир по налогам и попадёте в кабинет.</p>
         <div class="onboarding-progress" aria-label="Прогресс онбординга">${stepPills}</div>
         ${stepBody}
       </article>
@@ -11607,7 +11480,7 @@ function renderSettingsPage() {
       <article class="card">
         <h3>Профиль ИП</h3>
         <form id="settingsForm" class="stack-form">
-          <label>ФИО / Наименование<input name="name" type="text" value="${escapeHtml(state.profile.name)}" /></label>
+          <label>ФИО / Наименование<input name="name" type="text" value="${escapeHtml(state.profile.name)}" placeholder="Введите ваше имя или название ИП" /></label>
           <label>БИН/ИИН
             <input id="settingsIinInput" name="iin" type="text" value="${escapeHtml(maskedIin)}" data-full="${escapeHtml(state.profile.iin)}" data-masked="${escapeHtml(maskedIin)}" data-revealed="false" autocomplete="off" placeholder="Введите БИН/ИИН" />
           </label>
