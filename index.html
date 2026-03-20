@@ -1,10 +1,18 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MyEsep.kz — Расчёт налогов для ИП и самозанятых в Казахстане</title>
   <meta name="description" content="Узнайте, сколько платить в месяц: упрощёнка, ОУР, самозанятый. Сравнение режимов, сроки и напоминания. Без бухгалтера — результат за 30 секунд." />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="MyEsep.kz" />
+  <meta property="og:url" content="https://myesep.kz/" />
+  <meta property="og:title" content="MyEsep.kz — Расчёт налогов для ИП и самозанятых в Казахстане" />
+  <meta property="og:description" content="Узнайте, сколько платить в месяц: упрощёнка, ОУР, самозанятый. Сравнение режимов, сроки и напоминания. Без бухгалтера — результат за 30 секунд." />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="MyEsep.kz — Расчёт налогов для ИП и самозанятых в Казахстане" />
+  <meta name="twitter:description" content="Узнайте, сколько платить в месяц: упрощёнка, ОУР, самозанятый. Сравнение режимов, сроки и напоминания. Без бухгалтера — результат за 30 секунд." />
   <meta name="theme-color" content="#111a36" />
   <link rel="icon" href="./favicon.ico" sizes="any" />
   <link rel="icon" type="image/png" sizes="32x32" href="./favicon-32x32.png" />
@@ -15,7 +23,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Montserrat:wght@600;700;800&family=Rubik:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=20260318-pro-pricing-1" />
+  <link rel="stylesheet" href="./styles.css?v=20260318-feature-info-modal-2" />
 </head>
 <body>
   <div id="publicApp" class="public-app">
@@ -29,7 +37,7 @@
 
     <section class="hero">
       <div class="chip">Новый налоговый кодекс 2026 · Казахстан</div>
-      <h1>Знай, сколько платить.<br /><span>Не плати лишнего.</span></h1>
+      <h1>Знай, сколько платить.<br /><span>Не переплачивай.</span></h1>
       <p>
         <span class="hero-subtitle-desktop">С 2026 года налоговые правила для ИП изменились. Введите доход — получите точный расчёт ОПВ, СО и ИПН за секунды. Без бухгалтера. Без карты.</span>
         <span class="hero-subtitle-mobile">С 2026 года налоговые правила для ИП изменились. Введите доход — получите точный расчёт налогов за секунды. Без бухгалтера. Без карты.</span>
@@ -312,14 +320,14 @@
     <div id="mobileDrawerOverlay" class="hidden" data-action="close-mobile-drawer"></div>
     <aside id="mobileDrawer" class="hidden" aria-label="Мобильное меню">
       <button type="button" class="mobile-drawer-close" data-action="close-mobile-drawer" aria-label="Закрыть">×</button>
-      <div class="mobile-drawer-profile">
+      <button type="button" class="mobile-drawer-profile" data-page="settings" aria-label="Открыть настройки профиля">
         <div id="mobileDrawerAvatar" class="mobile-drawer-avatar" aria-hidden="true">П</div>
         <div class="mobile-drawer-user-main">
           <div id="mobileDrawerUserName" class="mobile-drawer-user-name">Пользователь</div>
           <div id="mobileDrawerUserEmail" class="mobile-drawer-user-email">email@example.com</div>
         </div>
         <div id="mobileDrawerPlanBadge" class="mobile-drawer-plan-badge"><span class="plan-badge plan-trial">Trial</span></div>
-      </div>
+      </button>
       <div class="mobile-drawer-regime-wrap">
         <div class="mobile-drawer-regime-label">Налоговый режим</div>
         <div class="mobile-drawer-regime-tabs" role="tablist" aria-label="Выбор налогового режима">
@@ -503,8 +511,9 @@
       </div>
 
       <button id="proModalCta" class="btn btn-primary" data-action="upgrade-pro" title="затем 1 990 ₸/мес">Подключить Pro</button>
-      <p style="font-size:12px;color:#888;text-align:center;margin-top:8px">После 30 дней бесплатного периода · Без карты на старте</p>
+      <p id="proModalSubnote" style="font-size:12px;color:#888;text-align:center;margin-top:8px">После 30 дней бесплатного периода · Без карты на старте</p>
       <p id="proModalCtaMeta" class="pro-cta-meta"></p>
+      <button id="proModalCancelBtn" type="button" class="btn pro-secondary-link" data-action="confirm-cancel-pro" hidden>Отменить подписку</button>
     </div>
   </div>
 
@@ -634,6 +643,44 @@
     </div>
   </div>
 
+  <div id="featureInfoModal" class="modal hidden">
+    <div class="modal-card feature-info-modal-card">
+      <div class="modal-head feature-info-head">
+        <h3 id="featureInfoTitle">Возможность Pro</h3>
+        <button type="button" class="icon-btn" data-action="close-feature-info" aria-label="Закрыть">&times;</button>
+      </div>
+      <p id="featureInfoText" class="feature-info-copy"></p>
+      <p class="feature-info-note">Эта функция включена в Pro-подписку.</p>
+    </div>
+  </div>
+
+  <div id="regimeHelpModal" class="modal hidden">
+    <div class="modal-card regime-help-modal-card">
+      <div class="modal-head regime-help-head">
+        <h3 id="regimeHelpTitle">Почему режим недоступен?</h3>
+        <button type="button" class="icon-btn" data-action="close-regime-help" aria-label="Закрыть">&times;</button>
+      </div>
+      <div id="regimeHelpBody" class="regime-help-body"></div>
+      <div class="regime-help-actions">
+        <button type="button" class="btn btn-primary" data-action="close-regime-help">Понятно</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="regimeConfirmModal" class="modal hidden">
+    <div class="modal-card regime-confirm-modal-card">
+      <div class="modal-head regime-help-head">
+        <h3 id="regimeConfirmTitle">Переключить режим?</h3>
+        <button type="button" class="icon-btn" data-action="close-regime-confirm" aria-label="Закрыть">&times;</button>
+      </div>
+      <div id="regimeConfirmBody" class="regime-help-body"></div>
+      <div class="regime-confirm-actions">
+        <button type="button" class="btn btn-ghost" data-action="close-regime-confirm">Остаться на текущем</button>
+        <button id="regimeConfirmSubmit" type="button" class="btn btn-primary" data-action="confirm-regime-change">Переключить режим</button>
+      </div>
+    </div>
+  </div>
+
   <div id="mobileMoreModal" class="modal hidden mobile-more-modal">
     <div class="modal-card mobile-more-sheet" role="dialog" aria-modal="true" aria-label="Дополнительные действия">
       <div class="mobile-more-handle" aria-hidden="true"></div>
@@ -654,7 +701,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./config.js"></script>
-  <script src="./app.js?v=20260318-prelaunch-subscription-4" defer></script>
+  <script src="./app.js?v=20260318-prelaunch-subscription-8" defer></script>
   <!-- Yandex.Metrika counter -->
   <script type="text/javascript">
     (function(m,e,t,r,i,k,a){
@@ -671,6 +718,9 @@
   </noscript>
 </body>
 </html>
+
+
+
 
 
 

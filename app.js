@@ -820,6 +820,16 @@ function getProDaysLeft(subscription = state.subscription) {
   return Math.max(1, getDaysLeft(expiry));
 }
 
+function formatDaysRu(days) {
+  const value = Math.abs(Number(days) || 0);
+  const last = value % 10;
+  const lastTwo = value % 100;
+
+  if (last === 1 && lastTwo !== 11) return `${value} день`;
+  if (last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14)) return `${value} дня`;
+  return `${value} дней`;
+}
+
 function hasUsedFreeProTrial(subscription = state.subscription) {
   const source = normalizeSubscription(subscription);
   return Boolean(String(source.proStartedAt || "").trim() || String(source.lastExpiredPlanExpiry || "").trim());
@@ -926,6 +936,7 @@ function renderProModal(featureKey = "") {
   const ctaEl = document.getElementById("proModalCta");
   const cancelBtnEl = document.getElementById("proModalCancelBtn");
   const ctaMetaEl = document.getElementById("proModalCtaMeta");
+  const subnoteEl = document.getElementById("proModalSubnote");
   const focusCardEl = document.getElementById("proFocusCard");
   const focusTitleEl = document.getElementById("proFocusTitle");
   const focusTextEl = document.getElementById("proFocusText");
@@ -991,16 +1002,23 @@ function renderProModal(featureKey = "") {
   }
 
   if (proActive) {
-    statusEl.innerHTML = `<span class="pro-status-badge active">Ваш план: Pro (${proDaysLeft} дн.)</span>`;
+    titleEl.textContent = "Пробный Pro активен";
+    statusEl.innerHTML = `<span class="pro-status-badge active">Осталось ${formatDaysRu(proDaysLeft)}</span>`;
 
 
     statusEl.className = "pro-status active";
-    ctaEl.textContent = "Pro уже активен";
+    ctaEl.textContent = "Все функции уже доступны";
     ctaEl.disabled = true;
     ctaEl.removeAttribute("title");
     if (ctaMetaEl) {
       ctaMetaEl.hidden = true;
       ctaMetaEl.textContent = "";
+    }
+    if (subnoteEl) {
+      subnoteEl.hidden = false;
+      subnoteEl.textContent = state.subscription.planExpiry
+        ? `Пробный доступ активен до ${formatDateDayMonthLong(state.subscription.planExpiry)}.`
+        : `Пробный доступ уже активен.`;
     }
   } else if (freeTrialAlreadyUsed) {
     statusEl.innerHTML = `<span class="pro-status-badge trial">Ваш план: Trial</span>`;
@@ -1012,6 +1030,10 @@ function renderProModal(featureKey = "") {
       ctaMetaEl.hidden = true;
       ctaMetaEl.textContent = "";
     }
+    if (subnoteEl) {
+      subnoteEl.hidden = false;
+      subnoteEl.textContent = "Тариф Pro — 1 990 ₸/мес · Без карты на старте";
+    }
   } else {
     statusEl.innerHTML = `<span class="pro-status-badge trial">Ваш план: Trial</span>`;
     statusEl.className = "pro-status trial";
@@ -1022,12 +1044,16 @@ function renderProModal(featureKey = "") {
       ctaMetaEl.textContent = "";
       ctaMetaEl.hidden = true;
     }
+    if (subnoteEl) {
+      subnoteEl.hidden = false;
+      subnoteEl.textContent = "После 30 дней бесплатного периода · Без карты на старте";
+    }
   }
 
   if (featureKey) {
     reasonEl.textContent = `${getFeatureTitle(featureKey)}: ${getPaywallReasonText(featureKey)}`;
   } else if (proActive) {
-    reasonEl.textContent = "Доступ активен: напоминания, экспорт и аналитика уже работают в вашем аккаунте.";
+    reasonEl.textContent = "Поздравляем! Напоминания, экспорт и аналитика уже доступны в вашем аккаунте.";
   } else if (freeTrialAlreadyUsed) {
     reasonEl.textContent = "30 дней бесплатного Pro уже были активированы для этого аккаунта.";
   } else if (isMobileCompact) {
@@ -1968,6 +1994,7 @@ const state = {
 let dashboardDemoMode = false;
 let dashboardDemoIncomes = [];
 let pendingIncomeDeleteId = null;
+let pendingRegimeChange = null;
 let lastRenderedPage = null;
 let calculatorInputRenderTimer = null;
 let appToastTimer = null;
@@ -2050,6 +2077,13 @@ const els = {
   featureInfoModal: document.getElementById("featureInfoModal"),
   featureInfoTitle: document.getElementById("featureInfoTitle"),
   featureInfoText: document.getElementById("featureInfoText"),
+  regimeHelpModal: document.getElementById("regimeHelpModal"),
+  regimeHelpTitle: document.getElementById("regimeHelpTitle"),
+  regimeHelpBody: document.getElementById("regimeHelpBody"),
+  regimeConfirmModal: document.getElementById("regimeConfirmModal"),
+  regimeConfirmTitle: document.getElementById("regimeConfirmTitle"),
+  regimeConfirmBody: document.getElementById("regimeConfirmBody"),
+  regimeConfirmSubmit: document.getElementById("regimeConfirmSubmit"),
   mobileMoreModal: document.getElementById("mobileMoreModal"),
   mobileMenuBtn: document.getElementById("mobileMenuBtn"),
   mobileDrawer: document.getElementById("mobileDrawer"),
@@ -2168,10 +2202,8 @@ function bindBaseEvents() {
 
   if (els.regimeSelect) {
     els.regimeSelect.addEventListener("change", (event) => {
-      state.regime = event.target.value;
-      saveState();
-      renderDashboard();
-      trackEvent("regime_change", { regime: state.regime });
+      const nextRegime = String(event.target.value || "").trim();
+      requestRegimeChange(nextRegime, "header_select");
     });
   }
 }
@@ -2483,13 +2515,57 @@ function syncMobileDrawerRegimeTabs() {
 
   const allowedRegimes = new Set(["self", "simplified", "our"]);
   const activeRegime = allowedRegimes.has(state.regime) ? state.regime : "simplified";
+  const monthlyIncome = getSelectedRegimeMonthlyIncome();
+  const availabilityOptions = getRegimeAvailabilityOptions();
 
   regimeButtons.forEach((button) => {
     const buttonRegime = String(button.dataset.regime || "").trim();
     const isActive = buttonRegime === activeRegime;
+    const availability = allowedRegimes.has(buttonRegime)
+      ? getRegimeAvailability(buttonRegime, monthlyIncome, availabilityOptions)
+      : { available: true, reason: "" };
     button.classList.toggle("active", isActive);
+    button.classList.toggle("is-unavailable", !availability.available);
+    button.classList.toggle("is-warning", availability.available && !!availability.requiresIpClosure);
     button.setAttribute("aria-pressed", isActive ? "true" : "false");
     button.setAttribute("aria-selected", isActive ? "true" : "false");
+    button.setAttribute("aria-disabled", availability.available ? "false" : "true");
+    button.dataset.unavailableReason = availability.reason || "";
+    button.setAttribute(
+      "title",
+      availability.available
+        ? (availability.requiresIpClosure ? availability.reason || "Перед реальным переходом сначала закройте ИП" : "")
+        : availability.reason || "Режим недоступен"
+    );
+  });
+}
+
+function syncRegimeSelectAvailability() {
+  if (!els.regimeSelect) {
+    return;
+  }
+
+  const monthlyIncome = getSelectedRegimeMonthlyIncome();
+  const availabilityOptions = getRegimeAvailabilityOptions();
+
+  Array.from(els.regimeSelect.options).forEach((option) => {
+    const regime = String(option.value || "").trim();
+    if (!["self", "simplified", "our"].includes(regime)) {
+      option.disabled = false;
+      return;
+    }
+
+    const availability = getRegimeAvailability(regime, monthlyIncome, availabilityOptions);
+    option.disabled = false;
+    option.textContent = regime === "self"
+      ? (!availability.available
+        ? "Самозанятый (недоступен)"
+        : availability.requiresIpClosure
+          ? "Самозанятый"
+          : "Самозанятый")
+      : regime === "simplified"
+        ? "Упрощенка (910)"
+        : "ОУР";
   });
 }
 
@@ -2531,6 +2607,149 @@ function closeMobileDrawer() {
     els.mobileDrawer.classList.add("hidden");
     els.mobileDrawerOverlay.classList.add("hidden");
   }, 250);
+}
+
+function closeMobileDrawerAndThen(callback) {
+  if (!isMobileViewport() || !els.mobileDrawer || !els.mobileDrawerOverlay || typeof callback !== "function") {
+    callback?.();
+    return;
+  }
+
+  closeMobileDrawer();
+  window.setTimeout(() => {
+    callback();
+  }, 260);
+}
+
+function syncRegimeControlsToState() {
+  if (els.regimeSelect) {
+    els.regimeSelect.value = state.regime;
+    syncRegimeSelectAvailability();
+  }
+  syncMobileDrawerRegimeTabs();
+}
+
+function hasMeaningfulRegimeSwitchData() {
+  const hasSavedIncomes = Array.isArray(state.incomes) && state.incomes.some((row) => normalizeIncome(row.amount) > 0);
+  const defaultPlanner = getDefaultTaxPlanner();
+  const plannerIncome = normalizeIncome(state.taxPlanner && state.taxPlanner.income);
+  const plannerExpenses = normalizeIncome(state.taxPlanner && state.taxPlanner.expenses);
+  const plannerReserve = Math.round(Number((state.taxPlanner && state.taxPlanner.reservePct) ?? defaultPlanner.reservePct) || 0);
+  const hasPlannerChanges =
+    plannerIncome !== defaultPlanner.income
+    || plannerExpenses !== defaultPlanner.expenses
+    || plannerReserve !== defaultPlanner.reservePct;
+  const hasCalculatorChanges =
+    normalizeIncome(state.calcIncome) !== 500000
+    || normalizeIncome(state.calcExpenses) !== 0
+    || state.calcPeriod !== "month";
+
+  return hasSavedIncomes || hasPlannerChanges || hasCalculatorChanges;
+}
+
+function openRegimeConfirmModal(requestedRegime, resolved, source = "") {
+  if (!els.regimeConfirmModal || !els.regimeConfirmTitle || !els.regimeConfirmBody || !els.regimeConfirmSubmit) {
+    return false;
+  }
+
+  const targetRegime = resolved && resolved.regime ? resolved.regime : requestedRegime;
+  const targetLabel = regimeLabel(targetRegime);
+  const isSelfScenario = requestedRegime === "self" && resolved && resolved.showHelpModal && targetRegime === "self";
+
+  pendingRegimeChange = {
+    requestedRegime,
+    resolved,
+    source
+  };
+
+  if (isSelfScenario) {
+    els.regimeConfirmTitle.textContent = "Перейти к сценарию самозанятого?";
+    els.regimeConfirmBody.innerHTML = `
+      <p class="regime-help-lead">По текущему доходу режим самозанятого вам подходит. Мы можем пересчитать суммы и подсказки под этот сценарий.</p>
+      <article class="regime-help-reason">
+        <h4>Важно перед реальным переходом</h4>
+        <p>Если у вас уже есть ИП, сначала нужно прекратить или закрыть его. Сервис не меняет ваш режим автоматически — он только показывает расчёт.</p>
+      </article>
+    `;
+    els.regimeConfirmSubmit.textContent = "Посмотреть сценарий";
+  } else {
+    els.regimeConfirmTitle.textContent = "Переключить режим?";
+    els.regimeConfirmBody.innerHTML = `
+      <p class="regime-help-lead">После переключения суммы налогов, сроки и подсказки пересчитаются под режим «${escapeHtml(targetLabel)}».</p>
+      <article class="regime-help-reason">
+        <h4>Что важно помнить</h4>
+        <p>Это не меняет ваш режим в налоговой автоматически — меняется только расчёт внутри сервиса.</p>
+      </article>
+    `;
+    els.regimeConfirmSubmit.textContent = "Переключить режим";
+  }
+
+  openModal(els.regimeConfirmModal);
+  return true;
+}
+
+function applyResolvedRegimeChange(requestedRegime, resolved, source = "") {
+  if (!resolved || !resolved.regime) {
+    syncRegimeControlsToState();
+    return;
+  }
+
+  state.regime = resolved.regime;
+  saveState();
+  renderDashboard();
+  syncRegimeControlsToState();
+  if (resolved.showHelpModal) {
+    window.setTimeout(() => {
+      openRegimeHelpModal(requestedRegime);
+    }, 40);
+  }
+  trackEvent("regime_change", { regime: state.regime, requestedRegime, source });
+}
+
+function requestRegimeChange(nextRegime, source = "header_select") {
+  const requestedRegime = String(nextRegime || "").trim();
+  if (!["self", "simplified", "our"].includes(requestedRegime)) {
+    return;
+  }
+
+  const resolved = resolveAllowedRegime(requestedRegime);
+  const shouldSwitch = state.regime !== resolved.regime;
+  const shouldOnlyExplain = !shouldSwitch && resolved.showHelpModal;
+  const shouldConfirm = shouldSwitch && hasMeaningfulRegimeSwitchData();
+
+  if (shouldConfirm) {
+    syncRegimeControlsToState();
+    const openConfirm = () => {
+      openRegimeConfirmModal(requestedRegime, resolved, source);
+    };
+
+    if (source === "mobile_drawer") {
+      closeMobileDrawerAndThen(openConfirm);
+    } else {
+      openConfirm();
+    }
+    return;
+  }
+
+  if (shouldOnlyExplain) {
+    syncRegimeControlsToState();
+    if (source === "mobile_drawer") {
+      closeMobileDrawerAndThen(() => openRegimeHelpModal(requestedRegime));
+    } else {
+      openRegimeHelpModal(requestedRegime);
+    }
+    return;
+  }
+
+  if (shouldSwitch) {
+    if (source === "mobile_drawer" && resolved.showHelpModal) {
+      closeMobileDrawerAndThen(() => applyResolvedRegimeChange(requestedRegime, resolved, source));
+      return;
+    }
+    applyResolvedRegimeChange(requestedRegime, resolved, source);
+  } else {
+    syncRegimeControlsToState();
+  }
 }
 
 function isRemindersEmailEnabled() {
@@ -3335,17 +3554,14 @@ function handleGlobalClick(event) {
       if (!["self", "simplified", "our"].includes(nextRegime)) {
         return;
       }
+      requestRegimeChange(nextRegime, "mobile_drawer");
+      return;
+    }
 
-      if (state.regime === nextRegime) {
-        syncMobileDrawerRegimeTabs();
-        return;
-      }
-
-      state.regime = nextRegime;
-      saveState();
-      renderDashboard();
-      syncMobileDrawerRegimeTabs();
-      trackEvent("regime_change", { regime: state.regime, source: "mobile_drawer" });
+    if (action === "open-unavailable-regime") {
+      const regime = String(actionEl.dataset.regime || "").trim();
+      const income = Number(actionEl.dataset.income || getSelectedRegimeMonthlyIncome()) || getSelectedRegimeMonthlyIncome();
+      openRegimeHelpModal(regime, income);
       return;
     }
 
@@ -3521,14 +3737,15 @@ function handleGlobalClick(event) {
       const onboarding = normalizeOnboarding(state.onboarding);
       const income = Math.max(0, onboarding.income);
       const shouldSaveFirstIncome = action === "onboarding-complete-income";
+      const resolvedRegime = resolveAllowedRegime(onboarding.regime, income);
       const draftExpenses = onboarding.regime === "our" ? normalizeIncome(income * 0.3) : 0;
       const reserveSource = state.taxPlanner && Number.isFinite(Number(state.taxPlanner.reservePct))
         ? Number(state.taxPlanner.reservePct)
         : 15;
 
-      state.regime = onboarding.regime;
+      state.regime = resolvedRegime.regime;
       state.calcIncome = income;
-      state.calcExpenses = onboarding.regime === "our" ? draftExpenses : 0;
+      state.calcExpenses = resolvedRegime.regime === "our" ? draftExpenses : 0;
       state.taxPlanner = normalizeTaxPlanner(
         {
           ...(state.taxPlanner || {}),
@@ -3570,11 +3787,14 @@ function handleGlobalClick(event) {
         flow: {
           completed: true,
           step: ONBOARDING_STEPS_TOTAL,
-          regime: onboarding.regime,
+          regime: resolvedRegime.regime,
           income
         }
       });
       renderDashboard();
+      if (resolvedRegime.switched) {
+        showAppToast(getSelfRegimeFallbackMessage(resolvedRegime.reason));
+      }
       trackEvent("onboarding_complete", { page: state.page, regime: state.regime, income, savedIncome: shouldSaveFirstIncome });
       return;
     }
@@ -3681,6 +3901,30 @@ function handleGlobalClick(event) {
 
     if (action === "close-pro") {
       closeModal(els.proModal);
+      return;
+    }
+
+    if (action === "close-regime-help") {
+      closeModal(els.regimeHelpModal);
+      return;
+    }
+
+    if (action === "close-regime-confirm") {
+      pendingRegimeChange = null;
+      syncRegimeControlsToState();
+      closeModal(els.regimeConfirmModal);
+      return;
+    }
+
+    if (action === "confirm-regime-change") {
+      const pending = pendingRegimeChange;
+      pendingRegimeChange = null;
+      closeModal(els.regimeConfirmModal);
+      if (!pending) {
+        syncRegimeControlsToState();
+        return;
+      }
+      applyResolvedRegimeChange(pending.requestedRegime, pending.resolved, pending.source || "confirm_modal");
       return;
     }
 
@@ -3923,6 +4167,18 @@ function handleGlobalClick(event) {
 
   if (event.target === els.featureInfoModal) {
     closeModal(els.featureInfoModal);
+    return;
+  }
+
+  if (event.target === els.regimeHelpModal) {
+    closeModal(els.regimeHelpModal);
+    return;
+  }
+
+  if (event.target === els.regimeConfirmModal) {
+    pendingRegimeChange = null;
+    syncRegimeControlsToState();
+    closeModal(els.regimeConfirmModal);
     return;
   }
 
@@ -4797,7 +5053,7 @@ async function handleGlobalSubmit(event) {
 
     try {
       await sendFeedbackToSheets(payload);
-      setFeedbackStatus("Спасибо! Сообщение отправлено. Мы получили его в таблицу.", "ok");
+      setFeedbackStatus("Сообщение отправлено в Telegram. Ответим в течение 24 часов.", "ok");
       form.reset();
 
       const defaultCategory = form.querySelector('input[name="category"][value="bug"]');
@@ -5364,6 +5620,60 @@ function openFeatureInfoModal(featureKey) {
   openModal(els.featureInfoModal);
 }
 
+function openRegimeHelpModal(regime, monthlyIncome = getSelectedRegimeMonthlyIncome()) {
+  const safeRegime = String(regime || "").trim();
+  if (safeRegime !== "self" || !els.regimeHelpModal || !els.regimeHelpTitle || !els.regimeHelpBody) {
+    return;
+  }
+
+  const availabilityOptions = getRegimeAvailabilityOptions();
+  const reasons = getSelfRegimeRestrictionReasons(monthlyIncome, availabilityOptions);
+  const availability = getRegimeAvailability("self", monthlyIncome, availabilityOptions);
+  const hasLimitRestriction = reasons.some((reason) => reason.id === "limit");
+  const hasIpRestriction = reasons.some((reason) => reason.id === "ip");
+
+  if (!reasons.length && !availability.requiresIpClosure) {
+    return;
+  }
+
+  if (!hasLimitRestriction && hasIpRestriction && availability.available) {
+    els.regimeHelpTitle.textContent = "Самозанятый подходит по доходу";
+    els.regimeHelpBody.innerHTML = `
+      <p class="regime-help-lead">Ваш текущий доход в пределах лимита самозанятого, поэтому этот режим можно посмотреть уже сейчас.</p>
+      <div class="regime-help-reasons">
+        ${reasons
+          .map((reason) => `
+            <article class="regime-help-reason">
+              <h4>${escapeHtml(reason.title)}</h4>
+              <p>${escapeHtml(reason.text)}</p>
+            </article>
+          `)
+          .join("")}
+      </div>
+      <p class="regime-help-note">Важно: сейчас вы смотрите расчёт как сценарий. Перед фактическим переходом на самозанятость сначала прекратите ИП — сервис не проверяет это автоматически.</p>
+    `;
+    openModal(els.regimeHelpModal);
+    return;
+  }
+
+  els.regimeHelpTitle.textContent = "Почему Самозанятый недоступен?";
+  els.regimeHelpBody.innerHTML = `
+    <p class="regime-help-lead">Сейчас этот режим нельзя выбрать для вашего профиля. Вот почему:</p>
+    <div class="regime-help-reasons">
+      ${reasons
+        .map((reason) => `
+          <article class="regime-help-reason">
+            <h4>${escapeHtml(reason.title)}</h4>
+            <p>${escapeHtml(reason.text)}</p>
+          </article>
+        `)
+        .join("")}
+    </div>
+    <p class="regime-help-note">Пока лучше остаться на Упрощёнке (910) — для текущих условий это корректный вариант.</p>
+  `;
+  openModal(els.regimeHelpModal);
+}
+
 function calcSelfEmployed(income) {
   const safeIncome = Math.max(0, Number(income) || 0);
   const opv = safeIncome * SELF_SOCIAL_COMPONENT_RATE;
@@ -5643,43 +5953,159 @@ function getRegimeLimit(regime) {
 
 function isIpAccountProfile() {
   const profile = state.profile && typeof state.profile === "object" ? state.profile : {};
-  const profileName = String(profile.name || "").toLowerCase();
-  const iinDigits = String(profile.iin || "").replace(/\D/g, "");
-  return profileName.includes("ип") || iinDigits.length === 12;
+  const rawProfileName = String(profile.name || "").trim();
+  if (!rawProfileName) {
+    return false;
+  }
+
+  const normalizedProfileName = ` ${rawProfileName.toLowerCase().replace(/[«»"'()]/g, " ")} `;
+  return /\sип(?:\s|$)/i.test(normalizedProfileName);
+}
+
+function getSelfRegimeRestrictionReasons(monthlyIncome, options = {}) {
+  const safeMonthlyIncome = Math.max(0, Number(monthlyIncome) || 0);
+  const disallowSelfForIp = Boolean(options.disallowSelfForIp);
+  const reasons = [];
+
+  if (disallowSelfForIp) {
+    reasons.push({
+      id: "ip",
+      title: "У вас уже есть статус ИП",
+      text: "Чтобы перейти на самозанятость, сначала нужно прекратить или закрыть ИП."
+    });
+  }
+
+  if (safeMonthlyIncome > SELF_LIMIT_MONTHLY) {
+    reasons.push({
+      id: "limit",
+      title: "Доход выше лимита самозанятого",
+      text: `Лимит режима — 300 МРП в месяц (${fmt(SELF_LIMIT_MONTHLY)}). При таком доходе самозанятость уже не подходит.`
+    });
+  }
+
+  return reasons;
 }
 
 function getRegimeAvailability(regime, monthlyIncome, options = {}) {
   const safeMonthlyIncome = Math.max(0, Number(monthlyIncome) || 0);
   const disallowSelfForIp = Boolean(options.disallowSelfForIp);
 
-  if (regime === "self" && disallowSelfForIp) {
+  const selfRestrictions = regime === "self"
+    ? getSelfRegimeRestrictionReasons(safeMonthlyIncome, { disallowSelfForIp })
+    : [];
+
+  const hasIpRestriction = selfRestrictions.some((reason) => reason.id === "ip");
+  const hasLimitRestriction = selfRestrictions.some((reason) => reason.id === "limit");
+
+  if (hasLimitRestriction) {
     return {
       available: false,
-      reason: "Доступно только без статуса ИП (нужно прекратить ИП)"
+      blocked: true,
+      requiresIpClosure: hasIpRestriction,
+      reason: `Превышен лимит режима (300 МРП = ${fmt(SELF_LIMIT_MONTHLY)})`
     };
   }
 
-  if (regime === "self" && safeMonthlyIncome > SELF_LIMIT_MONTHLY) {
+  if (regime === "self" && hasIpRestriction) {
     return {
-      available: false,
-      reason: `Превышен лимит режима (300 МРП = ${fmt(SELF_LIMIT_MONTHLY)})`
+      available: true,
+      blocked: false,
+      requiresIpClosure: true,
+      reason: "По доходу режим подходит, но перед реальным переходом нужно закрыть ИП."
     };
   }
 
   const limit = getRegimeLimit(regime);
   if (!limit) {
-    return { available: true, reason: "" };
+    return { available: true, blocked: false, requiresIpClosure: false, reason: "" };
   }
 
   const annualIncome = annualizeIncome(safeMonthlyIncome);
   if (annualIncome <= limit) {
-    return { available: true, reason: "" };
+    return { available: true, blocked: false, requiresIpClosure: false, reason: "" };
   }
 
   return {
     available: false,
+    blocked: true,
+    requiresIpClosure: false,
     reason: `Превышен лимит ${fmt(limit)} в год`
   };
+}
+
+function getRegimeAvailabilityOptions() {
+  return {
+    disallowSelfForIp: isIpAccountProfile()
+  };
+}
+
+function getSelectedRegimeMonthlyIncome() {
+  const currentMonthIncome = normalizeIncome(getCurrentMonthIncome(state.incomes));
+  if (currentMonthIncome > 0) {
+    return currentMonthIncome;
+  }
+
+  const plannerIncome = normalizeIncome(state.taxPlanner && state.taxPlanner.income);
+  if (plannerIncome > 0) {
+    return plannerIncome;
+  }
+
+  return normalizeIncome(state.calcIncome);
+}
+
+function getSelfRegimeFallbackMessage(reason) {
+  const safeReason = String(reason || "").toLowerCase();
+  if (safeReason.includes("ип")) {
+    return "Самозанятый недоступен для ИП — переключили на Упрощёнку.";
+  }
+  if (safeReason.includes("300 мрп")) {
+    return "Доход выше лимита Самозанятого — переключили на Упрощёнку.";
+  }
+  return "Режим Самозанятый недоступен — переключили на Упрощёнку.";
+}
+
+function resolveAllowedRegime(nextRegime, monthlyIncome = getSelectedRegimeMonthlyIncome()) {
+  const safeRegime = String(nextRegime || "").trim();
+  if (!["self", "simplified", "our"].includes(safeRegime)) {
+    return { regime: "simplified", switched: false, reason: "", showHelpModal: false };
+  }
+
+  if (safeRegime !== "self") {
+    return { regime: safeRegime, switched: false, reason: "", showHelpModal: false };
+  }
+
+  const availability = getRegimeAvailability("self", monthlyIncome, getRegimeAvailabilityOptions());
+  if (availability.available) {
+    return {
+      regime: "self",
+      switched: false,
+      reason: availability.reason || "",
+      showHelpModal: Boolean(availability.requiresIpClosure)
+    };
+  }
+
+  return {
+    regime: "simplified",
+    switched: true,
+    reason: availability.reason || "",
+    showHelpModal: true
+  };
+}
+
+function syncSelectedRegimeAvailability(options = {}) {
+  const resolved = resolveAllowedRegime(state.regime, options.monthlyIncome);
+  if (resolved.regime === state.regime) {
+    return false;
+  }
+
+  state.regime = resolved.regime;
+  saveState();
+
+  if (options.notify) {
+    showAppToast(getSelfRegimeFallbackMessage(resolved.reason));
+  }
+
+  return true;
 }
 
 function renderLandingSummary(bestRow, secondRow, multiplier, periodLabel, income) {
@@ -6151,7 +6577,11 @@ async function sendFeedbackToSheets(payload) {
   if (!BOT_TOKEN) {
     throw new Error("Не настроен telegramBotToken в config.js.");
   }
-  const text = `📩 Обратная связь MyEsep\n\n👤 ${payload.name || "Аноним"}\n📧 ${payload.email || "не указан"}\n💬 ${payload.message || payload.text || JSON.stringify(payload)}`;
+  const categoryLabel = payload.categoryLabel || payload.category || "Без категории";
+  const subject = payload.subject || "Без темы";
+  const message = payload.message || payload.text || "Без текста";
+  const replyEmail = payload.replyEmail || payload.accountEmail || "не указан";
+  const text = `📩 Обратная связь MyEsep\n\n📂 Категория: ${categoryLabel}\n📝 Тема: ${subject}\n👤 Email: ${replyEmail}\n💬 Сообщение:\n${message}`;
 
   const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
     method: "POST",
@@ -7706,6 +8136,21 @@ function handleGlobalKeyDown(event) {
   if (event.key === "Escape" && els.featureInfoModal && !els.featureInfoModal.classList.contains("hidden")) {
     event.preventDefault();
     closeModal(els.featureInfoModal);
+    return;
+  }
+
+  if (event.key === "Escape" && els.regimeHelpModal && !els.regimeHelpModal.classList.contains("hidden")) {
+    event.preventDefault();
+    closeModal(els.regimeHelpModal);
+    return;
+  }
+
+  if (event.key === "Escape" && els.regimeConfirmModal && !els.regimeConfirmModal.classList.contains("hidden")) {
+    event.preventDefault();
+    pendingRegimeChange = null;
+    syncRegimeControlsToState();
+    closeModal(els.regimeConfirmModal);
+    return;
   }
 }
 function renderDashboard() {
@@ -7741,9 +8186,12 @@ function renderDashboard() {
   }
   document.body.classList.remove("onboarding-page-active");
 
+  syncSelectedRegimeAvailability();
+
   els.pageTitle.textContent = PAGE_TITLES[state.page] || PAGE_TITLES.dashboard;
   renderSidebarActive();
   els.regimeSelect.value = state.regime;
+  syncRegimeSelectAvailability();
   syncMobileDrawerRegimeTabs();
   els.accountName.textContent = state.profile.name || state.userEmail;
   updatePlanUi();
@@ -9444,7 +9892,9 @@ function renderTaxesPage() {
       const cardClass = `${isBest ? " best" : ""}${isCurrent ? " current" : ""}${row.availability.available ? "" : " unavailable"}`;
 
       let deltaText = suppressBestBadge ? "введите доход для сравнения" : isBest ? "Минимальная нагрузка в сценарии" : `+${fmt(Math.max(delta, 0))} к лучшему`;
-      if (!row.availability.available) {
+      if (row.availability.requiresIpClosure) {
+        deltaText = row.availability.reason || "По доходу подходит, но сначала нужно закрыть ИП.";
+      } else if (!row.availability.available) {
         deltaText = row.availability.reason || "Недоступно по лимиту";
       }
 
@@ -9456,6 +9906,9 @@ function renderTaxesPage() {
         badges.push('<span class="tax-compare-badge current">ВАШ РЕЖИМ</span>');
       }
       const badgesHtml = badges.length ? `<div class="tax-compare-badges">${badges.join("")}</div>` : "";
+      const explainAction = row.regimeId === "self" && (!row.availability.available || row.availability.requiresIpClosure)
+        ? `<button type="button" class="tax-compare-explain" data-action="open-unavailable-regime" data-regime="${row.regimeId}" data-income="${planner.income}">${row.availability.available ? "Важно перед переходом" : "Почему недоступно?"}</button>`
+        : "";
 
       return `
         <article class="tax-compare-card${cardClass}">
@@ -9464,6 +9917,7 @@ function renderTaxesPage() {
           <div class="tax-compare-value amount-sensitive">${fmt(row.tax.total)}</div>
           <div class="tax-compare-context">при доходе <span class="amount-sensitive">${fmt(planner.income)}</span>/мес</div>
           <div class="tax-compare-note">${deltaText}</div>
+          ${explainAction}
         </article>
       `;
     })
@@ -9976,7 +10430,7 @@ function getFilteredCalendarRows() {
 
 function renderCalendarPage() {
   closeCalendarReminderPopover();
-  const isMobileCalendar = window.innerWidth <= 768;
+  const isMobileCalendar = window.innerWidth <= 960;
 
   state.calendarFilters = {
     ...getDefaultCalendarFilters(),
@@ -10268,7 +10722,7 @@ function renderCalculatorPage() {
   const periodLabel = getCalcPeriodLabel();
   const incomeInputValue = getCalcInputIncome();
   const expensesInputValue = getCalcInputExpenses();
-  const shouldBlockSelfInCalculator = state.regime === "simplified" || state.regime === "our";
+  const shouldBlockSelfInCalculator = isIpAccountProfile();
 
   const rows = [
     { id: "self", label: "Самозанятый", taxData: calcSelfEmployed(state.calcIncome), limitLabel: `${fmt(SELF_LIMIT_ANNUAL)}/год` },
