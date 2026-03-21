@@ -7137,8 +7137,7 @@ function renderLandingDeadlines() {
       const cardSubtitle = isSocialPayments ? "ОПВ, ОПВР, СО, ВОСМС" : "";
       const regimeLabelText = getLandingDeadlineRegimeLabel(row.regime, landingRegime);
       const regimeMetaLabel = isSocialPayments ? "Ежемесячная уплата соцплатежей" : regimeLabelText;
-      const quickStepsCount = state.isLoggedIn ? 0 : Math.max(1, getLandingDeadlineLiteSteps(row).length);
-      const ctaLabel = state.isLoggedIn ? "Открыть чеклист" : `Показать ${quickStepsCount} ${getLandingStepWord(quickStepsCount)}`;
+      const ctaLabel = state.isLoggedIn ? "Открыть чеклист" : "Что платить";
 
       return `
         <article class="deadline-card ${typeClass}${cardClass}">
@@ -7149,7 +7148,6 @@ function renderLandingDeadlines() {
           <h3 class="deadline-title">${escapeHtml(cardTitle)}</h3>
           ${cardSubtitle ? `<p class="deadline-tax-set">${escapeHtml(cardSubtitle)}</p>` : ""}
           <div class="deadline-meta">
-            <span class="deadline-type">${getLandingDeadlineTypeLabel(row.type)}</span>
             <span class="deadline-regime">${escapeHtml(regimeMetaLabel)}</span>
           </div>
           <div class="deadline-card-actions">
@@ -9024,7 +9022,7 @@ function renderOnboardingPage() {
       id: "our",
       title: "ОУР",
       icon: "building-2",
-      note: "Если есть расходы",
+      note: "Для более сложного учёта",
       limit: "Без лимита"
     }
   ];
