@@ -1401,6 +1401,49 @@ function sanitizeProfile(raw) {
   return next;
 }
 
+function normalizeSubscriptionByUser(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return {};
+  }
+
+  return Object.entries(raw).reduce((acc, [key, value]) => {
+    const safeKey = String(key || "").trim();
+    if (!safeKey) return acc;
+    acc[safeKey] = normalizeSubscription(value);
+    return acc;
+  }, {});
+}
+
+function normalizeIncomeEntries(raw) {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  return raw
+    .filter((row) => row && typeof row === "object")
+    .map((row) => ({
+      id: Number(row.id || 0) || 0,
+      amount: normalizeIncome(row.amount),
+      date: String(row.date || "").trim(),
+      category: String(row.category || "").trim(),
+      comment: String(row.comment || "").trim()
+    }))
+    .filter((row) => row.id > 0 && row.amount >= 0 && row.date);
+}
+
+function normalizeIncomesByUser(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return {};
+  }
+
+  return Object.entries(raw).reduce((acc, [key, value]) => {
+    const safeKey = String(key || "").trim();
+    if (!safeKey) return acc;
+    acc[safeKey] = normalizeIncomeEntries(value);
+    return acc;
+  }, {});
+}
+
 function normalizeProfileByUser(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     return {};
@@ -1439,6 +1482,36 @@ function applyAuthProfileDefaults(user) {
     profileByUser[identityKey] = sanitized;
   }
   state.profileByUser = profileByUser;
+}
+
+function applyAuthSubscriptionDefaults(user) {
+  const currentUserId = String(user && user.id ? user.id : state.userId || "").trim();
+  const currentEmail = normalizeEmail(user && user.email ? user.email : state.userEmail || "");
+  const identityKey = getOnboardingIdentityKey(currentUserId, currentEmail);
+  const subscriptionByUser = normalizeSubscriptionByUser(state.subscriptionByUser);
+  const storedSubscription = identityKey ? subscriptionByUser[identityKey] : null;
+  const nextSubscription = normalizeSubscription(storedSubscription || createDefaultSubscription());
+
+  state.subscription = nextSubscription;
+  if (identityKey) {
+    subscriptionByUser[identityKey] = nextSubscription;
+  }
+  state.subscriptionByUser = subscriptionByUser;
+}
+
+function applyAuthIncomeDefaults(user) {
+  const currentUserId = String(user && user.id ? user.id : state.userId || "").trim();
+  const currentEmail = normalizeEmail(user && user.email ? user.email : state.userEmail || "");
+  const identityKey = getOnboardingIdentityKey(currentUserId, currentEmail);
+  const incomesByUser = normalizeIncomesByUser(state.incomesByUser);
+  const storedIncomes = identityKey ? incomesByUser[identityKey] : null;
+  const nextIncomes = normalizeIncomeEntries(storedIncomes || []);
+
+  state.incomes = nextIncomes;
+  if (identityKey) {
+    incomesByUser[identityKey] = nextIncomes;
+  }
+  state.incomesByUser = incomesByUser;
 }
 
 function normalizeOnboarding(raw) {
@@ -1742,6 +1815,8 @@ function seedFreshOnboardingForUser(user, fallbackIncome = state.calcIncome) {
   const userEmail = normalizeEmail(user && user.email ? user.email : "");
   const identityKey = getOnboardingIdentityKey(userId, userEmail);
   const onboardingByUser = normalizeOnboardingByUser(state.onboardingByUser);
+  const subscriptionByUser = normalizeSubscriptionByUser(state.subscriptionByUser);
+  const incomesByUser = normalizeIncomesByUser(state.incomesByUser);
   const freshOnboarding = normalizeOnboarding({
     version: ONBOARDING_FLOW_VERSION,
     completed: false,
@@ -1770,6 +1845,16 @@ function seedFreshOnboardingForUser(user, fallbackIncome = state.calcIncome) {
     profileByUser[identityKey] = freshProfile;
   }
   state.profileByUser = profileByUser;
+  state.subscription = createDefaultSubscription();
+  if (identityKey) {
+    subscriptionByUser[identityKey] = normalizeSubscription(state.subscription);
+  }
+  state.subscriptionByUser = subscriptionByUser;
+  state.incomes = [];
+  if (identityKey) {
+    incomesByUser[identityKey] = [];
+  }
+  state.incomesByUser = incomesByUser;
 }
 
 function shouldShowOnboarding() {
@@ -2057,6 +2142,7 @@ const state = {
   ownerTrialPreview: false,
   regime: "simplified",
   incomes: [],
+  incomesByUser: {},
   doneDeadlines: [],
   deadlineCompletionMeta: {},
   calendarPreServiceApplied: false,
@@ -2075,6 +2161,7 @@ const state = {
   remindersEnabled: false,
   reminders: null,
   subscription: createDefaultSubscription(),
+  subscriptionByUser: {},
   paywallFeature: "",
   incomeEditId: null,
   incomeFilters: getDefaultIncomeFilters(),
@@ -2237,9 +2324,13 @@ async function init() {
       state.isLoggedIn = true;
       state.userEmail = data.session.user.email || state.userEmail;
       state.userId = data.session.user.id || state.userId;
+      dashboardDemoMode = false;
+      dashboardDemoIncomes = [];
       syncOnboardingStateFromAccountUser(data.session.user);
       prepareOnboardingAfterLogin();
+      applyAuthIncomeDefaults(data.session.user);
       applyAuthProfileDefaults(data.session.user);
+      applyAuthSubscriptionDefaults(data.session.user);
       ensureOwnerEmailBinding();
       ensureTrialIfNeeded();
       ensureDeadlineTrackingFrom();
@@ -2327,7 +2418,14 @@ function loadState() {
 
   state.userId = String(saved.userId || state.userId || "").trim();
   state.regime = saved.regime || state.regime;
-  state.incomes = Array.isArray(saved.incomes) ? saved.incomes : state.incomes;
+  state.incomes = normalizeIncomeEntries(saved.incomes);
+  state.incomesByUser = normalizeIncomesByUser(saved.incomesByUser);
+  if (Object.keys(state.incomesByUser).length === 0) {
+    const legacyIncomesKey = getOnboardingIdentityKey(String(saved.userId || "").trim(), String(saved.userEmail || "").trim());
+    if (legacyIncomesKey && Array.isArray(saved.incomes)) {
+      state.incomesByUser[legacyIncomesKey] = normalizeIncomeEntries(saved.incomes);
+    }
+  }
   state.doneDeadlines = Array.isArray(saved.doneDeadlines) ? saved.doneDeadlines : [];
   state.deadlineCompletionMeta = normalizeDeadlineCompletionMeta(saved.deadlineCompletionMeta);
   state.calendarPreServiceApplied = saved.calendarPreServiceApplied === true || saved.calendarPreServiceApplied === "true" || saved.calendarPreServiceApplied === 1;
@@ -2374,12 +2472,19 @@ function loadState() {
   state.deadlineReminderIds = [...new Set(state.deadlineReminderIds.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0))];
 
   state.subscription = normalizeSubscription(saved.subscription);
+  state.subscriptionByUser = normalizeSubscriptionByUser(saved.subscriptionByUser);
   if (!saved.subscription && (saved.plan || saved.planExpiry)) {
     state.subscription = normalizeSubscription({
       ...state.subscription,
       plan: saved.plan || state.subscription.plan,
       planExpiry: saved.planExpiry || state.subscription.planExpiry
     });
+  }
+  if (Object.keys(state.subscriptionByUser).length === 0) {
+    const legacySubscriptionKey = getOnboardingIdentityKey(String(saved.userId || "").trim(), String(saved.userEmail || "").trim());
+    if (legacySubscriptionKey && (saved.subscription || saved.plan || saved.planExpiry)) {
+      state.subscriptionByUser[legacySubscriptionKey] = normalizeSubscription(state.subscription);
+    }
   }
 
   const savedFilters = saved.incomeFilters && typeof saved.incomeFilters === "object" ? saved.incomeFilters : {};
@@ -2444,14 +2549,22 @@ function saveState() {
   const onboardingByUser = normalizeOnboardingByUser(state.onboardingByUser);
   const onboardingIdentityKey = getOnboardingIdentityKey();
   const profileByUser = normalizeProfileByUser(state.profileByUser);
+  const subscriptionByUser = normalizeSubscriptionByUser(state.subscriptionByUser);
+  const incomesByUser = normalizeIncomesByUser(state.incomesByUser);
   if (onboardingIdentityKey) {
     onboardingByUser[onboardingIdentityKey] = onboardingSnapshot;
     profileByUser[onboardingIdentityKey] = sanitizeProfile(state.profile);
+    subscriptionByUser[onboardingIdentityKey] = normalizeSubscription(state.subscription);
+    incomesByUser[onboardingIdentityKey] = normalizeIncomeEntries(state.incomes);
   }
   state.onboarding = onboardingSnapshot;
   state.onboardingByUser = onboardingByUser;
   state.profile = sanitizeProfile(state.profile);
   state.profileByUser = profileByUser;
+  state.subscription = normalizeSubscription(state.subscription);
+  state.subscriptionByUser = subscriptionByUser;
+  state.incomes = normalizeIncomeEntries(state.incomes);
+  state.incomesByUser = incomesByUser;
   localStorage.setItem(
     STORAGE_KEY,
     JSON.stringify({
@@ -2459,6 +2572,7 @@ function saveState() {
       userId: state.userId,
       regime: state.regime,
       incomes: state.incomes,
+      incomesByUser: state.incomesByUser,
       doneDeadlines: state.doneDeadlines,
       deadlineCompletionMeta: state.deadlineCompletionMeta,
       calendarPreServiceApplied: state.calendarPreServiceApplied,
@@ -2482,6 +2596,7 @@ function saveState() {
       knowledgeFilters: state.knowledgeFilters,
       taxPlanner: state.taxPlanner,
       subscription: state.subscription,
+      subscriptionByUser: state.subscriptionByUser,
       plan: state.subscription.plan,
       planExpiry: state.subscription.planExpiry,
       paywallFeature: state.paywallFeature,
@@ -2595,7 +2710,7 @@ function getProfileDisplayName() {
     return profileName;
   }
 
-  return "Добавьте имя в профиле";
+  return String(state.userEmail || "Пользователь").trim();
 }
 
 function syncMobileDrawerProfile() {
@@ -2615,7 +2730,10 @@ function syncMobileDrawerProfile() {
   }
 
   if (els.mobileDrawerUserEmail) {
-    els.mobileDrawerUserEmail.textContent = state.userEmail || "email@example.com";
+    const emailValue = String(state.userEmail || "email@example.com").trim();
+    const shouldShowSecondaryEmail = Boolean(profileName) && Boolean(emailValue);
+    els.mobileDrawerUserEmail.textContent = shouldShowSecondaryEmail ? emailValue : "";
+    els.mobileDrawerUserEmail.hidden = !shouldShowSecondaryEmail;
   }
 
   if (els.mobileDrawerAvatar) {
@@ -3836,21 +3954,21 @@ function handleGlobalClick(event) {
         : 15;
 
       state.regime = resolvedRegime.regime;
-      state.calcIncome = income;
-      state.calcExpenses = resolvedRegime.regime === "our" ? draftExpenses : 0;
-      state.taxPlanner = normalizeTaxPlanner(
-        {
-          ...(state.taxPlanner || {}),
-          income,
-          expenses: draftExpenses,
-          reservePct: reserveSource
-        },
-        income,
-        draftExpenses,
-        reserveSource
-      );
 
       if (shouldSaveFirstIncome && income > 0) {
+        state.calcIncome = income;
+        state.calcExpenses = resolvedRegime.regime === "our" ? draftExpenses : 0;
+        state.taxPlanner = normalizeTaxPlanner(
+          {
+            ...(state.taxPlanner || {}),
+            income,
+            expenses: draftExpenses,
+            reservePct: reserveSource
+          },
+          income,
+          draftExpenses,
+          reserveSource
+        );
         const today = new Date().toISOString().slice(0, 10);
         const nextId = Math.max(0, ...state.incomes.map((x) => x.id)) + 1;
         state.incomes.unshift({
@@ -3860,6 +3978,23 @@ function handleGlobalClick(event) {
           category: "Первый доход",
           comment: "Добавлено из онбординга"
         });
+        dashboardDemoMode = false;
+        dashboardDemoIncomes = [];
+      } else {
+        state.incomes = [];
+        state.calcIncome = 0;
+        state.calcExpenses = 0;
+        state.taxPlanner = normalizeTaxPlanner(
+          {
+            ...(state.taxPlanner || {}),
+            income: 0,
+            expenses: 0,
+            reservePct: reserveSource
+          },
+          0,
+          0,
+          reserveSource
+        );
         dashboardDemoMode = false;
         dashboardDemoIncomes = [];
       }
@@ -5576,9 +5711,13 @@ function finalizeAuthSession(user, fallbackEmail = "") {
   state.ownerTrialPreview = false;
   state.userEmail = (user && user.email) || fallbackEmail;
   state.userId = (user && user.id) || state.userId;
+  dashboardDemoMode = false;
+  dashboardDemoIncomes = [];
   syncOnboardingStateFromAccountUser(user);
   prepareOnboardingAfterLogin();
+  applyAuthIncomeDefaults(user);
   applyAuthProfileDefaults(user);
+  applyAuthSubscriptionDefaults(user);
   ensureOwnerEmailBinding();
   ensureTrialIfNeeded();
   ensureDeadlineTrackingFrom();
@@ -5659,7 +5798,13 @@ async function logout() {
 
   state.isLoggedIn = false;
   state.ownerTrialPreview = false;
+  state.userEmail = "";
+  state.userId = "";
+  state.incomes = [];
+  dashboardDemoMode = false;
+  dashboardDemoIncomes = [];
   state.profile = createDefaultProfile();
+  state.subscription = createDefaultSubscription();
   lastRenderedPage = null;
   closeOnboardingTour(false, "logout");
   updateAuthUi();
@@ -9039,8 +9184,13 @@ function renderOnboardingPage() {
       return `
         <button type="button" class="onboarding-regime-card${activeClass}" data-onboarding-regime="${item.id}">
           ${badgeHtml}
-          <strong>${renderOnboardingRegimeIcon(item.icon)}${item.title}</strong>
-          <span class="onboarding-regime-note">${item.note}</span>
+          <strong>
+            ${renderOnboardingRegimeIcon(item.icon)}
+            <span class="onboarding-regime-title-wrap">
+              <span class="onboarding-regime-title-main">${escapeHtml(item.title)}</span>
+              <span class="onboarding-regime-title-meta"> — ${escapeHtml(item.note)}</span>
+            </span>
+          </strong>
           <span class="onboarding-regime-limit">${item.limit}</span>
         </button>
       `;
