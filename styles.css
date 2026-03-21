@@ -412,6 +412,17 @@ h3,
 
 .trust-card-penalty {
   border-left: 3px solid #e53e3e;
+  border-right: 3px solid #e53e3e;
+}
+
+.trust-card-regime {
+  border-left: 3px solid #7c5cff;
+  border-right: 3px solid #7c5cff;
+}
+
+.trust-card-updates {
+  border-left: 3px solid #35c9a5;
+  border-right: 3px solid #35c9a5;
 }
 
 .trust-card::before {
