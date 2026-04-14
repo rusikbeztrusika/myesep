@@ -13,22 +13,34 @@
   <meta name="twitter:card" content="summary" />
   <meta name="twitter:title" content="MyEsep.kz — Расчёт налогов для ИП и самозанятых в Казахстане" />
   <meta name="twitter:description" content="Узнайте, сколько платить в месяц: упрощёнка, ОУР, самозанятый. Сравнение режимов, сроки и напоминания. Без бухгалтера — результат за 30 секунд." />
-  <meta name="theme-color" content="#111a36" />
+  <meta name="theme-color" content="#0b1424" />
   <link rel="icon" href="./favicon.ico" sizes="any" />
   <link rel="icon" type="image/png" sizes="32x32" href="./favicon-32x32.png" />
   <link rel="icon" type="image/png" sizes="16x16" href="./favicon-16x16.png" />
   <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png" />
   <link rel="manifest" href="./site.webmanifest" />
-  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      if (window.lucide && typeof window.lucide.createIcons === "function") {
+        window.lucide.createIcons();
+      }
+    });
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Montserrat:wght@600;700;800&family=Rubik:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=20260318-feature-info-modal-2" />
+  <link rel="stylesheet" href="./styles.css?v=20260414-income-cta-fix-v1" />
 </head>
 <body>
   <div id="publicApp" class="public-app">
     <header class="public-nav">
       <div class="logo" data-action="go-home" role="button" tabindex="0" aria-label="Перейти на главную">MyEsep<span>.kz</span></div>
+      <nav class="public-nav-links" aria-label="Разделы лендинга">
+        <a class="nav-link nav-anchor" href="#landingCalculator">Калькулятор</a>
+        <a class="nav-link nav-anchor" href="#landingHowItWorks">Как это работает</a>
+        <a class="nav-link nav-anchor" href="#landingFaq">Частые вопросы</a>
+      </nav>
       <div class="nav-actions">
         <button class="nav-link" data-action="open-login">Войти</button>
         <button class="btn btn-primary" data-action="open-signup">Начать бесплатно</button>
@@ -36,40 +48,49 @@
     </header>
 
     <section class="hero">
-      <div class="chip">Для ИП и самозанятых Казахстана</div>
-      <h1>Знай, сколько платить.<br /><span>Не переплачивай.</span></h1>
+      <h1><span class="hero-title-main">Расчёт налогов для ИП</span><span class="hero-title-accent">без бухгалтера и без ошибок</span></h1>
       <p>
-        <span class="hero-subtitle-desktop">Актуально по правилам 2026 года. Введите доход и сразу увидите расчёт налогов и взносов. Без бухгалтера. Без карты.</span>
-        <span class="hero-subtitle-mobile">Актуально по правилам 2026 года. Введите доход и сразу увидите расчёт налогов и взносов. Без бухгалтера. Без карты.</span>
+        <span class="hero-subtitle-desktop">MyEsep считает налоги по правилам 2026, напоминает о сроках и готовит данные для ФНО 910. Понятно и вовремя.</span>
+        <span class="hero-subtitle-mobile">MyEsep считает налоги по правилам 2026, напоминает о сроках и готовит данные для ФНО 910. Понятно и вовремя.</span>
       </p>
-      <button class="btn btn-primary btn-glow" data-action="open-signup">Считать налоги бесплатно ></button>
+      <button class="btn btn-primary btn-glow" data-action="open-signup">Считать налоги бесплатно</button>
+      <p class="hero-cta-note">Первый расчёт за 2 минуты. Бесплатно.</p>
     </section>
 
-    <section class="trust-strip">
-      <article class="trust-card trust-card-penalty">
-        <h3 class="trust-title"><span class="icon-inline" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><rect x="3" y="4" width="18" height="17" rx="3"></rect><path d="M8 2.8v3.5"></path><path d="M16 2.8v3.5"></path><path d="M3 9h18"></path><path d="M12 12.8v4"></path><circle cx="12" cy="18.2" r="0.7"></circle></svg></span>Штраф за просрочку — до 118&nbsp;000&nbsp;₸</h3>
-        <p>Сервис показывает критичные сроки и напоминает за 7, 3 и 1 день до даты уплаты.</p>
-      </article>
-      <article class="trust-card trust-card-regime">
-        <h3 class="trust-title"><span class="icon-inline" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><rect x="3" y="5" width="7" height="14" rx="2"></rect><rect x="14" y="5" width="7" height="14" rx="2"></rect><path d="M10 9h4"></path><path d="M12 7l2 2-2 2"></path><path d="M14 15h-4"></path><path d="M12 13l-2 2 2 2"></path></svg></span>Не знаете какой режим выгоднее?</h3>
-        <p>Введите доход — за 30 секунд покажем какой режим выгоднее и сколько сэкономите.</p>
-      </article>
-      <article class="trust-card trust-card-updates">
-        <h3 class="trust-title"><span class="icon-inline" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><rect x="5" y="3" width="14" height="18" rx="3"></rect><line x1="8" y1="8" x2="16" y2="8"></line><line x1="8" y1="12" x2="16" y2="12"></line><line x1="8" y1="16" x2="11" y2="16"></line><path d="M14 16l1.5 1.5L18 15"></path></svg></span>Ставки 2026 уже обновлены</h3>
-        <p>МРП, ОПВ, СО, ВОСМС и ИПН рассчитываются по актуальным данным нового кодекса.</p>
-      </article>
-    </section>
-
-    <section class="quick-calc card-dark">
-      <div class="calc-head">
-        <h2 class="calc-title"><span class="icon-inline icon-inline-lg" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><rect x="4" y="3" width="16" height="18" rx="3"></rect><line x1="8" y1="8" x2="16" y2="8"></line><line x1="8" y1="12" x2="16" y2="12"></line><line x1="8" y1="16" x2="13" y2="16"></line></svg></span>Рассчитайте налоги прямо сейчас</h2>
-        <div class="calc-head-meta">
-          <span>Без регистрации</span>
-          <div class="landing-period-switch" role="tablist" aria-label="Период расчета">
-            <button type="button" class="active" data-landing-period="month">В месяц</button>
-            <button type="button" data-landing-period="year">В год</button>
-          </div>
+    <section class="landing-overview">
+      <article class="overview-card overview-side overview-card-savings">
+        <div class="overview-head">
+          <span class="overview-icon" aria-hidden="true"><i data-lucide="calculator"></i></span>
         </div>
+        <div class="overview-copy">
+          <h3>Сколько откладывать</h3>
+          <p>Сервис считает налоги и показывает точную сумму резерва каждый месяц.</p>
+        </div>
+      </article>
+      <article class="overview-card overview-side overview-card-operations">
+        <div class="overview-head">
+          <span class="overview-icon" aria-hidden="true"><i data-lucide="users"></i></span>
+        </div>
+        <div class="overview-copy">
+          <h3>Доходы и сотрудники</h3>
+          <p>Вносите доходы, добавляйте сотрудников — всё в одном месте.</p>
+        </div>
+      </article>
+      <article class="overview-card overview-side overview-card-reporting">
+        <div class="overview-head">
+          <span class="overview-icon" aria-hidden="true"><i data-lucide="file-text"></i></span>
+        </div>
+        <div class="overview-copy">
+          <h3>Данные для ФНО 910</h3>
+          <p>Все цифры готовы к декларации — без ручной работы.</p>
+        </div>
+      </article>
+    </section>
+
+    <section id="landingCalculator" class="quick-calc card-dark landing-anchor-target">
+      <div class="calc-head">
+        <h2 class="calc-title"><span class="icon-inline icon-inline-lg" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><rect x="4" y="3" width="16" height="18" rx="3"></rect><line x1="8" y1="8" x2="16" y2="8"></line><line x1="8" y1="12" x2="16" y2="12"></line><line x1="8" y1="16" x2="13" y2="16"></line></svg></span>Рассчитайте налоги за 30 секунд</h2>
+        <p class="calc-subtitle">Введите доход и сразу увидите, сколько платить и сколько лучше отложить заранее.</p>
       </div>
 
       <div class="calc-input-row">
@@ -78,12 +99,12 @@
           <button type="button" class="step-btn" data-landing-step="-50000">-</button>
           <div class="landing-income-wrap">
             <span>₸</span>
-            <input id="landingIncome" type="number" value="400000" min="0" step="10000" />
+            <input id="landingIncome" type="text" value="400 000" inputmode="numeric" autocomplete="off" spellcheck="false" />
           </div>
           <button type="button" class="step-btn" data-landing-step="50000">+</button>
         </div>
       </div>
-      <p class="calc-input-note">Ввод всегда в месяц. Переключатель сверху меняет период показа налога.</p>
+      <p class="calc-input-note">Без бухгалтера. Без сложных таблиц. Понятно на обычном языке.</p>
 
       <div class="income-presets" aria-label="Быстрый выбор дохода">
         <button type="button" data-landing-preset="300000">300 тыс ₸</button>
@@ -92,23 +113,31 @@
         <button type="button" data-landing-preset="1000000">1 млн ₸</button>
       </div>
 
-      <div id="landingSummary" class="landing-summary"></div>
+      <div class="landing-business-row">
+        <div class="landing-period-switch landing-business-switch" role="tablist" aria-label="Ваш текущий статус">
+          <button type="button" class="active" data-landing-business-status="has_ip">У меня есть ИП</button>
+          <button type="button" data-landing-business-status="no_ip">У меня нет ИП</button>
+        </div>
+        <span class="landing-business-label">Что у вас сейчас</span>
+      </div>
 
-      <div class="calc-mini-note">
-        <span aria-hidden="true">i</span>
-        <span>Сравнение режимов ниже показывает ориентир по налоговой нагрузке. Доход всегда вводится в месяц.</span>
+      <div class="landing-top-grid">
+        <div id="landingActivity" class="landing-activity"></div>
+
+        <div id="landingSummary" class="landing-summary"></div>
       </div>
 
       <div id="landingCards" class="regime-cards"></div>
 
       <div class="quick-footer">
-        <button class="btn btn-primary btn-with-icon" data-action="open-signup"><span class="icon-inline" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><rect x="3" y="4" width="18" height="14" rx="2"></rect><path d="M8 20h8"></path><path d="M12 12l4-4"></path><path d="M16 8h-4"></path><path d="M16 8v4"></path></svg></span>Сохранить и перейти в личный кабинет →</button>
+        <button class="btn btn-primary btn-with-icon" data-action="open-signup"><span class="icon-inline" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><rect x="3" y="4" width="18" height="14" rx="2"></rect><path d="M8 20h8"></path><path d="M12 12l4-4"></path><path d="M16 8h-4"></path><path d="M16 8v4"></path></svg></span>Сохранить расчёт бесплатно</button>
       </div>
+
+      <p class="calc-mini-note">Это предварительный расчёт по выбранному режиму. После регистрации MyEsep сохранит данные, покажет сроки платежей и подготовит цифры для ФНО 910.</p>
     </section>
-    <section class="landing-block how-it-works landing-animate landing-delay-1">
+    <section id="landingHowItWorks" class="landing-block how-it-works landing-animate landing-delay-1 landing-anchor-target">
       <div class="landing-block-head">
         <h2>Как это работает</h2>
-        <span>3 шага</span>
       </div>
       <div class="how-grid">
         <article class="how-card">
@@ -161,18 +190,38 @@
       </div>
     </section>
 
-    <section class="landing-block landing-deadlines landing-animate landing-delay-2">
-      <div class="landing-block-head">
-        <h2>Ближайшие налоговые сроки</h2>
-        <span>Календарь 2026</span>
+    <section id="landingDeadlinesSection" class="landing-block landing-deadlines landing-animate landing-delay-2 landing-anchor-target">
+      <div class="landing-calendar-head">
+        <div class="landing-calendar-copy">
+          <h2 class="landing-calendar-title">
+            <span class="landing-calendar-title-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <rect x="3" y="5" width="18" height="16" rx="2"></rect>
+                <line x1="16" y1="3" x2="16" y2="7"></line>
+                <line x1="8" y1="3" x2="8" y2="7"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+              </svg>
+            </span>
+            <span>Налоговые сроки 2026</span>
+          </h2>
+          <p>Сразу видно срок оплаты, за какой период платёж и сколько времени осталось.</p>
+        </div>
+        <button type="button" class="btn btn-primary landing-calendar-cta" data-action="open-signup">
+          <span class="icon-inline" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M6 9.5a6 6 0 1 1 12 0v3.1c0 .7.28 1.38.78 1.88L20 15.8H4l1.22-1.32c.5-.5.78-1.18.78-1.88z"></path>
+              <path d="M10 18a2 2 0 0 0 4 0"></path>
+            </svg>
+          </span>
+          Зарегистрироваться и включить уведомления
+        </button>
       </div>
-      <div id="landingDeadlines" class="deadline-grid"></div>
+      <div id="landingDeadlines" class="deadline-grid landing-calendar-grid"></div>
     </section>
 
-    <section class="landing-block landing-faq landing-animate landing-delay-3">
+    <section id="landingFaq" class="landing-block landing-faq landing-animate landing-delay-3 landing-anchor-target">
       <div class="landing-block-head">
         <h2>Частые вопросы</h2>
-        <span>FAQ</span>
       </div>
       <div class="faq-list">
         <details class="faq-item" open>
@@ -197,6 +246,8 @@
         </details>
       </div>
       <div class="landing-final-cta">
+        <h2>Попробуйте MyEsep бесплатно</h2>
+        <p>Получите понятный расчёт налогов, ведите доходы в одном месте и заранее понимайте, сколько и когда платить.</p>
         <button class="btn btn-primary btn-glow btn-with-icon" data-action="open-signup">
           <span class="icon-inline" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">
@@ -206,8 +257,8 @@
               <path d="M16 8h-4"></path>
               <path d="M16 8v4"></path>
             </svg>
-          </span>Начать считать налоги бесплатно ></button>
-        <p>Без карты. Доступ за 2 минуты.</p>
+          </span>Зарегистрироваться бесплатно</button>
+        <p class="landing-final-note">Без карты. Доступ сразу после регистрации.</p>
         <div class="landing-proof">
           <span>
             <i class="proof-lucide" data-lucide="map-pin" aria-hidden="true"></i>
@@ -225,9 +276,57 @@
       </div>
     </section>
     <footer class="public-legal-footer">
-      <a href="/privacy-policy.html" target="_blank" rel="noopener noreferrer">Политика конфиденциальности</a>
-      <span aria-hidden="true">·</span>
-      <a href="/terms-of-service.html" target="_blank" rel="noopener noreferrer">Пользовательское соглашение</a>
+      <div class="public-footer-grid">
+        <div class="public-footer-brand">
+          <div class="public-footer-brand-row">
+            <div class="public-footer-logo">MyEsep<span>.kz</span></div>
+          </div>
+          <!-- Обновлённый текст под логотипом -->
+          <p>Считайте налоги по правилам 2026, не пропускайте сроки и забудьте про бухгалтера.</p>
+        </div>
+
+        <div class="public-footer-col">
+          <h3>Продукт</h3>
+          <a href="#landingCalculator">Калькулятор налогов</a>
+          <a href="#landingHowItWorks">Как это работает</a>
+          <!-- Переименована ссылка в колонке "Продукт" -->
+          <a href="#landingDeadlinesSection">Календарь сроков</a>
+        </div>
+
+        <div class="public-footer-col">
+          <h3>Поддержка</h3>
+          <a href="#landingFaq">Частые вопросы</a>
+          <a href="/privacy-policy.html" target="_blank" rel="noopener noreferrer">Политика конфиденциальности</a>
+          <a href="/terms-of-service.html" target="_blank" rel="noopener noreferrer">Пользовательское соглашение</a>
+        </div>
+
+        <div class="public-footer-col">
+          <h3>Контакты</h3>
+          <a class="public-footer-contact" href="mailto:support@myesep.kz">
+            <span class="public-footer-contact-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <rect x="3" y="5" width="18" height="14" rx="2"></rect>
+                <path d="M4 7l8 6 8-6"></path>
+              </svg>
+            </span>
+            <span>support@myesep.kz</span>
+          </a>
+          <!-- Добавлен Telegram-контакт после email -->
+          <a class="public-footer-contact" href="https://t.me/myesep_bot" target="_blank" rel="noopener noreferrer">
+            <span class="public-footer-contact-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M21 4L3.8 10.6c-.8.3-.8 1.4 0 1.7l4.3 1.4 1.7 5.1c.2.7 1.1.9 1.7.4l2.4-2 4.4 3.2c.6.4 1.4.1 1.6-.6L22 5.3C22.2 4.5 21.6 3.8 21 4z"></path>
+                <path d="M8.1 13.7l9.8-7.7"></path>
+              </svg>
+            </span>
+            <span>@myesep_bot</span>
+          </a>
+        </div>
+      </div>
+
+      <div class="public-footer-bottom">
+        <p>© 2026 MyEsep.kz. Все права защищены. Сделано для предпринимателей Казахстана.</p>
+      </div>
     </footer>
   </div>
 
@@ -246,13 +345,21 @@
         <div class="sidebar-group">
           <p class="sidebar-group-title">Учет</p>
           <button data-page="income"><i class="nav-icon" data-lucide="wallet"></i><span>Доходы</span></button>
+          <button data-page="crm"><i class="nav-icon" data-lucide="handshake"></i><span>CRM</span></button>
+          <button data-page="employees"><i class="nav-icon" data-lucide="users"></i><span>Сотрудники</span></button>
           <button data-page="taxes"><i class="nav-icon" data-lucide="file-check"></i><span>Налоги</span></button>
+          <button data-page="reports"><i class="nav-icon" data-lucide="files"></i><span>Отчетность</span></button>
         </div>
 
         <div class="sidebar-group">
           <p class="sidebar-group-title">Планирование</p>
           <button data-page="calendar"><i class="nav-icon" data-lucide="calendar"></i><span>Календарь</span><span id="sidebarCalendarBadge" class="nav-badge hidden"></span></button>
           <button data-page="calculator"><i class="nav-icon" data-lucide="sliders-horizontal"></i><span>Калькулятор</span></button>
+        </div>
+
+        <div class="sidebar-group">
+          <p class="sidebar-group-title">Помощник</p>
+          <button data-page="assistant"><i class="nav-icon" data-lucide="sparkles"></i><span>E-бухгалтер</span></button>
         </div>
 
         <div class="sidebar-group">
@@ -267,7 +374,7 @@
         <div class="account-box">
           <small>Аккаунт</small>
           <strong id="accountName">Demo User</strong>
-          <span id="planBadge"><span class="plan-badge plan-trial">Trial</span></span>
+          <span id="planBadge"><span class="plan-badge plan-trial">Базовый</span></span>
           <div id="sidebarBetaBanner" class="sidebar-beta-banner hidden"></div>
         </div>
         <div class="sidebar-legal-links">
@@ -326,7 +433,7 @@
           <div id="mobileDrawerUserName" class="mobile-drawer-user-name">Пользователь</div>
           <div id="mobileDrawerUserEmail" class="mobile-drawer-user-email">email@example.com</div>
         </div>
-        <div id="mobileDrawerPlanBadge" class="mobile-drawer-plan-badge"><span class="plan-badge plan-trial">Trial</span></div>
+        <div id="mobileDrawerPlanBadge" class="mobile-drawer-plan-badge"><span class="plan-badge plan-trial">Базовый</span></div>
       </button>
       <div class="mobile-drawer-regime-wrap">
         <div class="mobile-drawer-regime-label">Налоговый режим</div>
@@ -358,8 +465,20 @@
           <span class="mobile-drawer-item-main"><i class="mobile-drawer-item-icon" data-lucide="wallet"></i><span>Доходы</span></span>
           <span class="mobile-drawer-item-arrow">›</span>
         </button>
+        <button type="button" class="mobile-drawer-item" data-page="crm">
+          <span class="mobile-drawer-item-main"><i class="mobile-drawer-item-icon" data-lucide="handshake"></i><span>CRM</span></span>
+          <span class="mobile-drawer-item-arrow">›</span>
+        </button>
+        <button type="button" class="mobile-drawer-item" data-page="employees">
+          <span class="mobile-drawer-item-main"><i class="mobile-drawer-item-icon" data-lucide="users"></i><span>Сотрудники</span></span>
+          <span class="mobile-drawer-item-arrow">›</span>
+        </button>
         <button type="button" class="mobile-drawer-item" data-page="taxes">
           <span class="mobile-drawer-item-main"><i class="mobile-drawer-item-icon" data-lucide="file-check"></i><span>Налоги</span></span>
+          <span class="mobile-drawer-item-arrow">›</span>
+        </button>
+        <button type="button" class="mobile-drawer-item" data-page="reports">
+          <span class="mobile-drawer-item-main"><i class="mobile-drawer-item-icon" data-lucide="files"></i><span>Отчетность</span></span>
           <span class="mobile-drawer-item-arrow">›</span>
         </button>
 
@@ -370,6 +489,12 @@
         </button>
         <button type="button" class="mobile-drawer-item" data-page="calculator">
           <span class="mobile-drawer-item-main"><i class="mobile-drawer-item-icon" data-lucide="sliders-horizontal"></i><span>Калькулятор</span></span>
+          <span class="mobile-drawer-item-arrow">›</span>
+        </button>
+
+        <p class="mobile-drawer-group-title">Помощник</p>
+        <button type="button" class="mobile-drawer-item" data-page="assistant">
+          <span class="mobile-drawer-item-main"><i class="mobile-drawer-item-icon" data-lucide="sparkles"></i><span>E-бухгалтер</span></span>
           <span class="mobile-drawer-item-arrow">›</span>
         </button>
 
@@ -413,7 +538,7 @@
     <div class="modal-card login-card">
       <div class="modal-head login-head">
         <div>
-          <h3>Вход в MyEsep.kz</h3>
+          <h3>Вход в <span class="login-brand-main">MyEsep</span><span class="login-brand-suffix">.kz</span></h3>
           <p>Личный кабинет для ИП и самозанятых Казахстана</p>
         </div>
         <button class="icon-btn" data-action="close-login" aria-label="Закрыть">&times;</button>
@@ -440,18 +565,8 @@
           <span>Пароль</span>
           <input id="loginPassword" type="password" minlength="6" placeholder="Введите пароль" required />
         </label>
-        <button id="loginSubmitBtn" type="submit" class="btn btn-primary login-primary">Войти</button>
-        <div class="login-trust" role="note">
-          <span class="icon-inline" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <rect x="5" y="10" width="14" height="10" rx="2"></rect>
-              <path d="M8 10V8a4 4 0 0 1 8 0v2"></path>
-            </svg>
-          </span>
-          <span class="login-trust-text">Защищённый вход. Данные не передаются третьим лицам.</span>
-        </div>
         <button type="button" class="login-forgot-btn" data-action="forgot-password">Забыли пароль?</button>
-        <div class="login-auth-separator"><span>или</span></div>
+        <button id="loginSubmitBtn" type="submit" class="btn btn-primary login-primary">Войти</button>
         <button type="button" class="btn login-google-btn" data-action="login-google">
           <span class="google-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
@@ -463,6 +578,15 @@
           </span>
           <span>Войти через Google</span>
         </button>
+        <div class="login-trust" role="note">
+          <span class="icon-inline" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <rect x="5" y="10" width="14" height="10" rx="2"></rect>
+              <path d="M8 10V8a4 4 0 0 1 8 0v2"></path>
+            </svg>
+          </span>
+          <span class="login-trust-text">Защищённый вход. Данные не передаются третьим лицам.</span>
+        </div>
       </form>
       <p id="loginHelper" class="login-helper" hidden></p>
       <p id="loginStatus" class="status login-status"></p>
@@ -613,6 +737,53 @@
     </div>
   </div>
 
+  <div id="incomeEditModal" class="modal hidden">
+    <div class="modal-card income-edit-modal-card" role="dialog" aria-modal="true" aria-labelledby="incomeEditModalTitle">
+      <div class="modal-head income-edit-modal-head">
+        <div class="income-edit-modal-title-row">
+          <h3 id="incomeEditModalTitle">Редактировать операцию</h3>
+          <span class="income-edit-chip">режим редактирования</span>
+        </div>
+        <button type="button" class="icon-btn" data-action="close-income-edit-modal" aria-label="Закрыть">&times;</button>
+      </div>
+      <form id="incomeEditForm" class="stack-form income-form income-edit-modal-form">
+        <input id="incomeEditIdInput" name="editId" type="hidden" value="" />
+
+        <div class="form-grid-2">
+          <label>Дата
+            <input id="incomeEditDateInput" name="date" type="date" required />
+          </label>
+          <label>Сумма (₸)
+            <input id="incomeEditAmountInput" name="amount" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" data-amount-input required />
+            <div class="amount-presets" aria-label="Быстрый выбор суммы">
+              <button type="button" data-income-edit-preset="50000">50 тыс ₸</button>
+              <button type="button" data-income-edit-preset="100000">100 тыс ₸</button>
+              <button type="button" data-income-edit-preset="250000">250 тыс ₸</button>
+              <button type="button" data-income-edit-preset="500000">500 тыс ₸</button>
+            </div>
+          </label>
+        </div>
+
+        <label>Категория
+          <select id="incomeEditCategorySelect" name="categorySelect" required></select>
+        </label>
+
+        <label id="incomeEditCategoryCustomWrap" class="hidden">Своя категория
+          <input id="incomeEditCategoryCustomInput" name="categoryCustom" type="text" value="" placeholder="Например: Партнерская выплата" />
+        </label>
+
+        <label>Комментарий
+          <input id="incomeEditCommentInput" name="comment" type="text" value="" placeholder="Опционально" />
+        </label>
+
+        <div class="income-form-actions">
+          <button class="btn btn-primary income-save-btn" type="submit">Сохранить изменения</button>
+          <button type="button" class="btn btn-ghost" data-action="close-income-edit-modal">Отменить</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <div id="incomeDeleteModal" class="modal hidden">
     <div class="modal-card income-delete-modal-card">
       <div class="modal-head income-delete-head">
@@ -640,6 +811,222 @@
       <div class="beta-access-actions">
         <button id="betaAccessPrimary" type="button" class="btn btn-primary" data-action="activate-beta-pro">Активировать бесплатно</button>
       </div>
+    </div>
+  </div>
+
+  <div id="employeeModal" class="modal hidden">
+    <div class="modal-card employee-modal-card">
+      <div class="modal-head employee-modal-head">
+        <h3 id="employeeModalTitle">Добавить сотрудника</h3>
+        <button type="button" class="icon-btn" data-action="close-employee-modal" aria-label="Закрыть">&times;</button>
+      </div>
+      <form id="employeeForm" class="stack-form employee-form">
+        <input id="employeeEditIdInput" name="editId" type="hidden" value="" />
+
+        <label class="field-label">
+          <span>Имя сотрудника</span>
+          <input id="employeeNameInput" name="name" type="text" placeholder="Например, Айдос" required />
+        </label>
+
+        <label class="field-label">
+          <span>ИИН</span>
+          <input id="employeeIinInput" name="iin" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="12 цифр" maxlength="12" />
+          <small id="employeeIinHelper" class="employee-field-hint">Если укажете ИИН, мы автоматически определим дату рождения.</small>
+        </label>
+
+        <label class="field-label">
+          <span>Оклад</span>
+          <input id="employeeSalaryInput" name="salary" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" data-amount-input value="85 000" required />
+        </label>
+
+        <div class="employee-form-row">
+          <div class="employee-form-cell">
+            <label class="field-label">
+              <span>Работает с</span>
+              <input id="employeeStartMonthInput" name="startDate" type="date" required />
+            </label>
+          </div>
+
+          <div class="employee-form-cell employee-form-cell-with-hint">
+            <label class="field-label">
+              <span>Работает до</span>
+              <input id="employeeEndMonthInput" name="endDate" type="date" />
+            </label>
+            <p class="employee-field-hint">Оставьте пустым, если сотрудник продолжает работать.</p>
+          </div>
+        </div>
+
+        <section class="employee-salary-history-card">
+          <div class="employee-salary-history-head">
+            <div>
+              <strong>Изменения оклада</strong>
+              <p>Если оклад менялся, добавьте месяц и новую сумму.</p>
+            </div>
+            <button type="button" class="btn btn-ghost btn-xs" data-action="add-employee-salary-change">+ Изменение</button>
+          </div>
+          <div id="employeeSalaryHistoryList" class="employee-salary-history-list"></div>
+        </section>
+
+        <details id="employeeMonthlyAccrualsDetails" class="employee-salary-history-card employee-special-cases-details" hidden>
+          <summary class="employee-special-cases-summary">
+            <div class="employee-special-cases-head">
+              <strong>Начисления по месяцам</strong>
+              <p>Нужно только если в конкретном месяце начислено не по полному окладу.</p>
+            </div>
+          </summary>
+
+          <div class="employee-special-cases-body">
+            <div class="employee-salary-history-head">
+              <div>
+                <strong>Фактические начисления</strong>
+                <p>Например, для месяца приема, увольнения или неполного месяца.</p>
+              </div>
+              <button type="button" class="btn btn-ghost btn-xs" data-action="add-employee-monthly-accrual">+ Начисление</button>
+            </div>
+            <div id="employeeMonthlyAccrualsList" class="employee-salary-history-list"></div>
+          </div>
+        </details>
+
+        <fieldset class="employee-fieldset">
+          <legend>Тип договора</legend>
+          <div class="employee-choice-grid">
+            <label class="employee-choice-option">
+              <input type="radio" name="contractType" value="labor" checked />
+              <span>Трудовой договор</span>
+            </label>
+            <label class="employee-choice-option">
+              <input type="radio" name="contractType" value="gph" />
+              <span>ГПХ</span>
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset class="employee-fieldset">
+          <legend>Резидент РК</legend>
+          <div class="employee-choice-grid employee-choice-grid-toggle">
+            <label class="employee-choice-option">
+              <input type="radio" name="isResident" value="yes" checked />
+              <span>Да</span>
+            </label>
+            <label class="employee-choice-option">
+              <input type="radio" name="isResident" value="no" />
+              <span>Нет</span>
+            </label>
+          </div>
+        </fieldset>
+
+        <details id="employeeSpecialCasesDetails" class="employee-special-cases-card employee-special-cases-details">
+          <summary class="employee-special-cases-summary">
+            <div class="employee-special-cases-head">
+              <strong>Особые случаи</strong>
+              <p>Только если это влияет на удержания и взносы.</p>
+            </div>
+          </summary>
+
+          <div class="employee-special-cases-body">
+            <section id="employeeNonresidentFields" class="employee-nonresident-card" hidden>
+              <div class="employee-special-cases-head employee-nonresident-head">
+                <strong>Если сотрудник нерезидент</strong>
+                <p>Эти статусы помогают точнее считать ОПВ, ОСМС и соцотчисления.</p>
+              </div>
+
+              <div class="employee-special-cases-grid">
+                <fieldset class="employee-fieldset">
+                  <legend>Гражданин ЕАЭС</legend>
+                  <div class="employee-choice-grid employee-choice-grid-toggle">
+                    <label class="employee-choice-option">
+                      <input type="radio" name="isEaeuCitizen" value="yes" />
+                      <span>Да</span>
+                    </label>
+                    <label class="employee-choice-option">
+                      <input type="radio" name="isEaeuCitizen" value="no" checked />
+                      <span>Нет</span>
+                    </label>
+                  </div>
+                </fieldset>
+
+                <fieldset class="employee-fieldset">
+                  <legend>Есть ВНЖ / ПМЖ в РК</legend>
+                  <div class="employee-choice-grid employee-choice-grid-toggle">
+                    <label class="employee-choice-option">
+                      <input type="radio" name="hasResidencePermit" value="yes" />
+                      <span>Да</span>
+                    </label>
+                    <label class="employee-choice-option">
+                      <input type="radio" name="hasResidencePermit" value="no" checked />
+                      <span>Нет</span>
+                    </label>
+                  </div>
+                </fieldset>
+              </div>
+            </section>
+
+            <div class="employee-special-cases-grid">
+            <fieldset class="employee-fieldset">
+              <legend>Пенсионер</legend>
+              <div class="employee-choice-grid employee-choice-grid-toggle">
+                <label class="employee-choice-option">
+                  <input type="radio" name="isPensioner" value="yes" />
+                  <span>Да</span>
+                </label>
+                <label class="employee-choice-option">
+                  <input type="radio" name="isPensioner" value="no" checked />
+                  <span>Нет</span>
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset class="employee-fieldset">
+              <legend>Инвалидность I/II бессрочно</legend>
+              <div class="employee-choice-grid employee-choice-grid-toggle">
+                <label class="employee-choice-option">
+                  <input type="radio" name="hasDisabilityExemption" value="yes" />
+                  <span>Да</span>
+                </label>
+                <label class="employee-choice-option">
+                  <input type="radio" name="hasDisabilityExemption" value="no" checked />
+                  <span>Нет</span>
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset class="employee-fieldset">
+              <legend>Пенсионные взносы</legend>
+              <div class="employee-choice-grid employee-choice-grid-toggle">
+                <label class="employee-choice-option">
+                  <input type="radio" name="opvByApplication" value="yes" />
+                  <span>Да</span>
+                </label>
+                <label class="employee-choice-option">
+                  <input type="radio" name="opvByApplication" value="no" checked />
+                  <span>Нет</span>
+                </label>
+              </div>
+              <p class="employee-choice-help">Обычно нет. Включайте только если сотрудник сам попросил удерживать их.</p>
+            </fieldset>
+            <fieldset class="employee-fieldset">
+              <legend>Основное место работы</legend>
+              <div class="employee-choice-grid employee-choice-grid-toggle">
+                <label class="employee-choice-option">
+                  <input type="radio" name="applyStandardDeduction" value="yes" checked />
+                  <span>Да</span>
+                </label>
+                <label class="employee-choice-option">
+                  <input type="radio" name="applyStandardDeduction" value="no" />
+                  <span>Нет</span>
+                </label>
+              </div>
+              <p class="employee-choice-help">Обычно если да, вычет по ИПН применяется у вас.</p>
+            </fieldset>
+            </div>
+          </div>
+        </details>
+
+        <div class="employee-form-actions">
+          <button type="button" class="btn btn-ghost" data-action="close-employee-modal">Отмена</button>
+          <button id="employeeSubmitBtn" type="submit" class="btn btn-primary">Добавить</button>
+        </div>
+      </form>
     </div>
   </div>
 
@@ -701,7 +1088,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./config.js"></script>
-  <script src="./app.js?v=20260318-prelaunch-subscription-8" defer></script>
+  <script src="./app.js?v=20260414-income-cta-fix-v1" defer></script>
   <!-- Yandex.Metrika counter -->
   <script type="text/javascript">
     (function(m,e,t,r,i,k,a){
