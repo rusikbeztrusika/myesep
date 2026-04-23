@@ -3768,6 +3768,7 @@ const state = {
   crmCustomerEditId: null,
   crmSaleEditId: null,
   crmPaymentEditId: null,
+  crmSaleDraftCustomerId: null,
   crmPaymentDraftSaleId: null,
   crmSelectedCustomerId: null,
   crmTab: "overview",
@@ -3900,7 +3901,8 @@ const els = {
   mobileAmountsVisibilityBtn: document.getElementById("mobileAmountsVisibilityBtn"),
   calendarReminderToggle: document.getElementById("calendarReminderToggle"),
   mobileDrawerReminderToggle: document.getElementById("mobileDrawerReminderToggle"),
-  regimeSelect: document.getElementById("regimeSelect"),
+  headerRegimeStatusValue: document.getElementById("headerRegimeStatusValue"),
+  mobileDrawerRegimeValue: document.getElementById("mobileDrawerRegimeValue"),
   sidebarNav: document.getElementById("sidebarNav"),
   accountName: document.getElementById("accountName"),
   planBadge: document.getElementById("planBadge"),
@@ -3948,7 +3950,21 @@ const PAGE_TITLES = {
 
 init();
 
+function removeLegacySidebarSubtitle() {
+  document.querySelectorAll(".sidebar-brand").forEach((brand) => {
+    const logo = brand.querySelector(".logo");
+    Array.from(brand.childNodes).forEach((node) => {
+      const isWhitespaceText = node.nodeType === Node.TEXT_NODE && !node.textContent.trim();
+      if (node === logo || isWhitespaceText) {
+        return;
+      }
+      node.remove();
+    });
+  });
+}
+
 async function init() {
+  removeLegacySidebarSubtitle();
   initAnalyticsProviders();
   initSupabase();
   loadState();
@@ -4242,13 +4258,6 @@ function bindBaseEvents() {
     });
   }
 
-  if (els.regimeSelect) {
-    els.regimeSelect.addEventListener("change", (event) => {
-      const nextRegime = String(event.target.value || "").trim();
-      requestRegimeChange(nextRegime, "header_select");
-    });
-  }
-
   document.querySelectorAll("[data-page]").forEach((node) => {
     node.addEventListener("click", (event) => {
       if (!state.isLoggedIn) {
@@ -4345,6 +4354,7 @@ function loadState() {
   state.crmTab = normalizeCrmTab(saved.crmTab || state.crmTab);
   state.crmSalesPanel = normalizeCrmSalesPanel(saved.crmSalesPanel || state.crmSalesPanel);
   state.crmCustomerFormOpen = saved.crmCustomerFormOpen === true || saved.crmCustomerFormOpen === "true" || saved.crmCustomerFormOpen === 1;
+  state.crmSaleDraftCustomerId = Number(saved.crmSaleDraftCustomerId || 0) || null;
   state.crmPaymentDraftSaleId = Number(saved.crmPaymentDraftSaleId || 0) || null;
   state.crmSelectedCustomerId = Number(saved.crmSelectedCustomerId || 0) || null;
   state.employeesView = normalizeEmployeesView(saved.employeesView || state.employeesView);
@@ -4574,6 +4584,7 @@ function saveState() {
       crmSales: state.crmSales,
       crmPayments: state.crmPayments,
       reports: state.reports,
+      crmSaleDraftCustomerId: state.crmSaleDraftCustomerId,
       crmPaymentDraftSaleId: state.crmPaymentDraftSaleId,
       crmSelectedCustomerId: state.crmSelectedCustomerId,
       crmTab: state.crmTab,
@@ -4762,65 +4773,10 @@ function syncMobileDrawerProfile() {
 }
 
 function syncMobileDrawerRegimeTabs() {
-  const regimeButtons = document.querySelectorAll('#mobileDrawer [data-action="mobile-drawer-set-regime"]');
-  if (!regimeButtons.length) {
-    return;
+  if (els.mobileDrawerRegimeValue) {
+    els.mobileDrawerRegimeValue.textContent = regimeLabel(state.regime);
+    els.mobileDrawerRegimeValue.dataset.regime = state.regime;
   }
-
-  const allowedRegimes = new Set(["self", "simplified", "our"]);
-  const activeRegime = allowedRegimes.has(state.regime) ? state.regime : "simplified";
-  const monthlyIncome = getSelectedRegimeMonthlyIncome();
-  const availabilityOptions = getRegimeAvailabilityOptions();
-
-  regimeButtons.forEach((button) => {
-    const buttonRegime = String(button.dataset.regime || "").trim();
-    const isActive = buttonRegime === activeRegime;
-    const availability = allowedRegimes.has(buttonRegime)
-      ? getRegimeAvailability(buttonRegime, monthlyIncome, availabilityOptions)
-      : { available: true, reason: "" };
-    button.classList.toggle("active", isActive);
-    button.classList.toggle("is-unavailable", !availability.available);
-    button.classList.toggle("is-warning", availability.available && (!!availability.requiresIpClosure || !!availability.needsActivityAttention));
-    button.setAttribute("aria-pressed", isActive ? "true" : "false");
-    button.setAttribute("aria-selected", isActive ? "true" : "false");
-    button.setAttribute("aria-disabled", availability.available ? "false" : "true");
-    button.dataset.unavailableReason = availability.reason || "";
-    button.setAttribute(
-      "title",
-      availability.available
-        ? ((availability.requiresIpClosure || availability.needsActivityAttention) ? availability.reason || "Перед переключением проверьте ограничения режима" : "")
-        : availability.reason || "Режим недоступен"
-    );
-  });
-}
-
-function syncRegimeSelectAvailability() {
-  if (!els.regimeSelect) {
-    return;
-  }
-
-  const monthlyIncome = getSelectedRegimeMonthlyIncome();
-  const availabilityOptions = getRegimeAvailabilityOptions();
-
-  Array.from(els.regimeSelect.options).forEach((option) => {
-    const regime = String(option.value || "").trim();
-    if (!["self", "simplified", "our"].includes(regime)) {
-      option.disabled = false;
-      return;
-    }
-
-    const availability = getRegimeAvailability(regime, monthlyIncome, availabilityOptions);
-    option.disabled = false;
-    option.textContent = regime === "self"
-      ? (!availability.available
-        ? "Самозанятый (недоступен)"
-        : (availability.requiresIpClosure || availability.needsActivityAttention)
-          ? "Самозанятый"
-          : "Самозанятый")
-      : regime === "simplified"
-        ? "Упрощенка (910)"
-        : "ОУР (скоро)";
-  });
 }
 
 function openMobileDrawer() {
@@ -4876,9 +4832,9 @@ function closeMobileDrawerAndThen(callback) {
 }
 
 function syncRegimeControlsToState() {
-  if (els.regimeSelect) {
-    els.regimeSelect.value = state.regime;
-    syncRegimeSelectAvailability();
+  if (els.headerRegimeStatusValue) {
+    els.headerRegimeStatusValue.textContent = regimeLabel(state.regime);
+    els.headerRegimeStatusValue.dataset.regime = state.regime;
   }
   syncMobileDrawerRegimeTabs();
 }
@@ -5419,14 +5375,17 @@ function setCrmSalesPanel(panel, scrollTarget = "") {
   if (nextPanel === "sale") {
     state.crmSaleEditId = null;
     state.crmPaymentEditId = null;
+    state.crmSaleDraftCustomerId = null;
     state.crmPaymentDraftSaleId = null;
   } else if (nextPanel === "payment") {
     state.crmSaleEditId = null;
     state.crmPaymentEditId = null;
+    state.crmSaleDraftCustomerId = null;
     state.crmPaymentDraftSaleId = null;
   } else {
     state.crmSaleEditId = null;
     state.crmPaymentEditId = null;
+    state.crmSaleDraftCustomerId = null;
     state.crmPaymentDraftSaleId = null;
   }
   if (scrollTarget) {
@@ -5501,6 +5460,9 @@ function deleteCrmCustomer(customerId) {
       ? { ...sale, customerId: 0, updatedAt: new Date().toISOString() }
       : sale
   );
+  if (state.crmSaleDraftCustomerId === safeCustomerId) {
+    state.crmSaleDraftCustomerId = null;
+  }
   if (state.crmCustomerEditId === safeCustomerId) {
     state.crmCustomerEditId = null;
   }
@@ -5528,11 +5490,45 @@ function startCrmSaleEdit(saleId) {
   state.crmSalesPanel = "sale";
   state.crmSaleEditId = safeSaleId;
   state.crmPaymentEditId = null;
+  state.crmSaleDraftCustomerId = null;
   state.crmPaymentDraftSaleId = null;
-  queueCrmScrollTo("crmSaleForm");
   saveState();
   renderDashboard();
   trackEvent("crm_sale_edit_open", { id: safeSaleId });
+}
+
+function prefillCrmSale(customerId) {
+  const safeCustomerId = Number(customerId || 0) || null;
+  if (!safeCustomerId || state.page !== "crm") {
+    return;
+  }
+  state.crmSelectedCustomerId = null;
+  state.crmSaleEditId = null;
+  state.crmPaymentEditId = null;
+  state.crmSaleDraftCustomerId = safeCustomerId;
+  saveState();
+  renderDashboard();
+  trackEvent("crm_sale_prefill", { customerId: safeCustomerId });
+}
+
+function closeCrmQuickSale() {
+  if (!state.crmSaleDraftCustomerId) {
+    return;
+  }
+  state.crmSaleDraftCustomerId = null;
+  saveState();
+  renderDashboard();
+}
+
+function closeCrmSaleComposer() {
+  if (state.page !== "crm") {
+    return;
+  }
+  state.crmSalesPanel = "";
+  state.crmSaleEditId = null;
+  state.crmSaleDraftCustomerId = null;
+  saveState();
+  renderDashboard();
 }
 
 function deleteCrmSale(saleId) {
@@ -5580,6 +5576,7 @@ function startCrmPaymentEdit(paymentId) {
   state.crmSelectedCustomerId = null;
   state.crmSalesPanel = "payment";
   state.crmPaymentEditId = safePaymentId;
+  state.crmSaleDraftCustomerId = null;
   state.crmPaymentDraftSaleId = null;
   queueCrmScrollTo("crmPaymentForm");
   saveState();
@@ -5822,12 +5819,12 @@ function handleGlobalClick(event) {
     }
 
     if (action === "dashboard-recent-month-prev" && state.isLoggedIn && state.page === "dashboard") {
-      const maxMonthIndex = new Date().getMonth();
+      const { minMonthIndex, maxMonthIndex } = getDashboardVisibleMonthRange();
       const selectedMonthRaw = Number(state.dashboardSelectedMonth);
       const selectedMonth = Number.isFinite(selectedMonthRaw)
-        ? Math.min(maxMonthIndex, Math.max(0, Math.trunc(selectedMonthRaw)))
+        ? Math.min(maxMonthIndex, Math.max(minMonthIndex, Math.trunc(selectedMonthRaw)))
         : maxMonthIndex;
-      const prevMonth = Math.max(0, selectedMonth - 1);
+      const prevMonth = Math.max(minMonthIndex, selectedMonth - 1);
       if (prevMonth === selectedMonth) {
         return;
       }
@@ -5838,10 +5835,10 @@ function handleGlobalClick(event) {
     }
 
     if (action === "dashboard-recent-month-next" && state.isLoggedIn && state.page === "dashboard") {
-      const maxMonthIndex = new Date().getMonth();
+      const { minMonthIndex, maxMonthIndex } = getDashboardVisibleMonthRange();
       const selectedMonthRaw = Number(state.dashboardSelectedMonth);
       const selectedMonth = Number.isFinite(selectedMonthRaw)
-        ? Math.min(maxMonthIndex, Math.max(0, Math.trunc(selectedMonthRaw)))
+        ? Math.min(maxMonthIndex, Math.max(minMonthIndex, Math.trunc(selectedMonthRaw)))
         : maxMonthIndex;
       if (selectedMonth >= maxMonthIndex) {
         return;
@@ -5854,11 +5851,11 @@ function handleGlobalClick(event) {
 
     if (action === "select-dashboard-month" && state.isLoggedIn && state.page === "dashboard") {
       const monthIndex = Number(actionEl.dataset.monthIndex);
-      const maxMonthIndex = new Date().getMonth();
+      const { minMonthIndex, maxMonthIndex } = getDashboardVisibleMonthRange();
       if (!Number.isFinite(monthIndex)) {
         return;
       }
-      state.dashboardSelectedMonth = Math.min(maxMonthIndex, Math.max(0, Math.trunc(monthIndex)));
+      state.dashboardSelectedMonth = Math.min(maxMonthIndex, Math.max(minMonthIndex, Math.trunc(monthIndex)));
       renderDashboard();
       trackEvent("dashboard_month_select", { month: state.dashboardSelectedMonth, source: actionEl.dataset.monthSource || "unknown" });
       return;
@@ -6208,15 +6205,6 @@ function handleGlobalClick(event) {
 
     if (action === "open-mobile-drawer" && state.isLoggedIn) {
       openMobileDrawer();
-      return;
-    }
-
-    if (action === "mobile-drawer-set-regime" && state.isLoggedIn) {
-      const nextRegime = String(actionEl.dataset.regime || "").trim();
-      if (!["self", "simplified", "our"].includes(nextRegime)) {
-        return;
-      }
-      requestRegimeChange(nextRegime, "mobile_drawer");
       return;
     }
 
@@ -7412,7 +7400,7 @@ function handleGlobalClick(event) {
     }
 
     if (action === "crm-open-sale-form" && state.page === "crm") {
-      setCrmSalesPanel("sale", "crmSaleForm");
+      setCrmSalesPanel("sale");
       return;
     }
 
@@ -7427,10 +7415,7 @@ function handleGlobalClick(event) {
     }
 
     if (action === "crm-close-sale-form" && state.page === "crm") {
-      state.crmSalesPanel = "";
-      state.crmSaleEditId = null;
-      saveState();
-      renderDashboard();
+      closeCrmSaleComposer();
       return;
     }
 
@@ -7468,6 +7453,11 @@ function handleGlobalClick(event) {
 
     if (action === "crm-edit-sale" && state.page === "crm") {
       startCrmSaleEdit(actionEl.dataset.saleId);
+      return;
+    }
+
+    if (action === "crm-prefill-sale" && state.page === "crm") {
+      prefillCrmSale(actionEl.dataset.customerId);
       return;
     }
 
@@ -7565,23 +7555,13 @@ function handleGlobalClick(event) {
 
   const editCrmSaleBtn = event.target.closest("[data-edit-crm-sale]");
   if (editCrmSaleBtn && state.page === "crm") {
-    state.crmSaleEditId = Number(editCrmSaleBtn.dataset.editCrmSale || 0) || null;
-    state.crmSalesPanel = "sale";
-    state.crmPaymentEditId = null;
-    state.crmPaymentDraftSaleId = null;
-    queueCrmScrollTo("crmSaleForm");
-    saveState();
-    renderDashboard();
-    trackEvent("crm_sale_edit_open", { id: state.crmSaleEditId || 0 });
+    startCrmSaleEdit(editCrmSaleBtn.dataset.editCrmSale);
     return;
   }
 
   const cancelCrmSaleEditBtn = event.target.closest("[data-cancel-crm-sale-edit]");
   if (cancelCrmSaleEditBtn && state.page === "crm") {
-    state.crmSaleEditId = null;
-    state.crmSalesPanel = "";
-    saveState();
-    renderDashboard();
+    closeCrmSaleComposer();
     trackEvent("crm_sale_edit_cancel");
     return;
   }
@@ -8374,17 +8354,23 @@ async function handleGlobalSubmit(event) {
     return;
   }
 
-  if (event.target.id === "crmSaleForm" || event.target.id === "crmSaleFormInner") {
+  if (
+    event.target.id === "crmSaleForm"
+    || event.target.id === "crmSaleFormInner"
+    || event.target.id === "crmQuickSaleFormInner"
+  ) {
     event.preventDefault();
     const formData = new FormData(event.target);
     const editId = Number(formData.get("editId") || 0);
-    const title = String(formData.get("title") || "").trim() || "Продажа";
+    const titleInput = String(formData.get("title") || "").trim();
     const amount = normalizeIncome(formData.get("amount") || 0);
     const date = String(formData.get("date") || "").trim();
     const dueDate = normalizeEmployeeDateValue(formData.get("dueDate") || "", "");
     const status = normalizeCrmSaleStatus(formData.get("status") || "draft");
     const customerId = Number(formData.get("customerId") || 0) || 0;
     const note = String(formData.get("note") || "").trim();
+    const customer = customerId > 0 ? getCrmCustomerById(customerId, state.crmCustomers) : null;
+    const title = titleInput || (customer ? `Продажа · ${customer.name}` : "Продажа");
 
     if (amount <= 0) {
       showAppToast("Укажите сумму продажи");
@@ -8436,6 +8422,7 @@ async function handleGlobalSubmit(event) {
 
     state.crmSales = normalizeCrmSales(state.crmSales);
     state.crmSaleEditId = null;
+    state.crmSaleDraftCustomerId = null;
     state.crmSalesPanel = "";
     syncCrmSalesWithIncomeJournal();
     saveState();
@@ -8905,24 +8892,43 @@ async function handleGlobalSubmit(event) {
   if (event.target.id === "settingsForm") {
     event.preventDefault();
 
-    const nextProfile = getSettingsFormValues(event.target);
-    if (!hasSettingsProfileChanges(nextProfile)) {
+    const nextValues = getSettingsFormValues(event.target);
+    const profileChanged = hasSettingsProfileChanges(nextValues);
+    const regimeChanged = hasSettingsRegimeChange(nextValues);
+
+    if (!profileChanged && !regimeChanged) {
       return;
     }
 
-    state.profile = {
-      ...state.profile,
-      ...nextProfile
-    };
-    saveState();
-    await persistProfileSettingsToSupabase(state.profile);
-    updateAuthUi();
+    if (profileChanged) {
+      const nextProfile = { ...nextValues };
+      delete nextProfile.regime;
+
+      state.profile = {
+        ...state.profile,
+        ...nextProfile
+      };
+      saveState();
+      await persistProfileSettingsToSupabase(state.profile);
+      updateAuthUi();
+
+      trackEvent("settings_save", {
+        simplifiedRate: getSavedSimplifiedIpnRatePercent(state.profile),
+        selfSocialIncomeBase: getProfileSelfSocialIncomeBase(state.profile) || 0
+      });
+    }
+
+    if (regimeChanged) {
+      if (profileChanged) {
+        updateSettingsSaveButtonState(event.target);
+        showAppToast("Настройки профиля сохранены.");
+      }
+      requestRegimeChange(nextValues.regime, "settings_form");
+      return;
+    }
+
     renderDashboard();
     showAppToast("Настройки сохранены. Налоги и соцплатежи пересчитаны.");
-    trackEvent("settings_save", {
-      simplifiedRate: getSavedSimplifiedIpnRatePercent(state.profile),
-      selfSocialIncomeBase: getProfileSelfSocialIncomeBase(state.profile) || 0
-    });
   }
 }
 
@@ -13499,6 +13505,32 @@ function getDeadlineQuarterMeta(row) {
   };
 }
 
+function getDeadlineTrackedPeriodStart(row) {
+  if (!row || typeof row !== "object") {
+    return null;
+  }
+
+  if (row.type === "payment") {
+    return getDeadlinePayrollPeriodDate(row);
+  }
+
+  if (isFno910Deadline(row)) {
+    const meta = getFno910HalfYearMeta(row);
+    return meta && Array.isArray(meta.monthDates) && meta.monthDates[0]
+      ? new Date(meta.monthDates[0].getFullYear(), meta.monthDates[0].getMonth(), 1)
+      : null;
+  }
+
+  if (isFno200Deadline(row)) {
+    const meta = getDeadlineQuarterMeta(row);
+    return meta && Array.isArray(meta.monthDates) && meta.monthDates[0]
+      ? new Date(meta.monthDates[0].getFullYear(), meta.monthDates[0].getMonth(), 1)
+      : null;
+  }
+
+  return null;
+}
+
 function getDeadlineQuarterEmployeeRows(row, employees = state.employees) {
   const meta = getDeadlineQuarterMeta(row);
   if (!meta || !hasEmployeeFeatureEnabled()) {
@@ -15095,7 +15127,7 @@ function getUrgentSidebarDeadlines() {
     const isDone = doneSet.has(deadline.id);
     if (isDone) return false;
 
-    const byTracking = isDeadlineInTrackingRange(deadline.date);
+    const byTracking = isDeadlineInTrackingRange(deadline.date, deadline);
     if (!byTracking) return false;
 
     const target = new Date(deadline.date);
@@ -15284,6 +15316,40 @@ function normalizePayrollPeriodDate(periodDate = new Date()) {
 function getEmployeeStartMonthFallback() {
   const registrationMonth = getRegistrationMonthStart();
   return formatDashboardMonthKey(registrationMonth || new Date());
+}
+
+function getDashboardVisibleMonthRange(referenceDate = new Date()) {
+  const safeReference = referenceDate instanceof Date && !Number.isNaN(referenceDate.getTime())
+    ? referenceDate
+    : new Date();
+  const maxMonthIndex = safeReference.getMonth();
+  const registrationMonth = getEffectiveTrackingMonthStart();
+
+  if (!registrationMonth) {
+    return {
+      minMonthIndex: 0,
+      maxMonthIndex
+    };
+  }
+
+  if (registrationMonth.getFullYear() > safeReference.getFullYear()) {
+    return {
+      minMonthIndex: maxMonthIndex,
+      maxMonthIndex
+    };
+  }
+
+  if (registrationMonth.getFullYear() < safeReference.getFullYear()) {
+    return {
+      minMonthIndex: 0,
+      maxMonthIndex
+    };
+  }
+
+  return {
+    minMonthIndex: Math.min(maxMonthIndex, Math.max(0, registrationMonth.getMonth())),
+    maxMonthIndex
+  };
 }
 
 function shiftDashboardMonthKey(monthKey, delta = 1) {
@@ -16495,7 +16561,7 @@ function getUpcomingDeadlines() {
       const dateObj = new Date(row.date);
       const byRegime = isDeadlineApplicableForRegime(row, state.regime);
       const byDate = dateObj >= dayStart;
-      const byTracking = isDeadlineInTrackingRange(row.date);
+      const byTracking = isDeadlineInTrackingRange(row.date, row);
       const isDone = doneSet.has(row.id);
       return byRegime && byDate && byTracking && !isDone;
     })
@@ -17045,6 +17111,16 @@ function handleGlobalKeyDown(event) {
     closeModal(els.regimeConfirmModal);
     return;
   }
+
+  if (event.key === "Escape" && state.page === "crm" && (state.crmSaleDraftCustomerId || state.crmSalesPanel === "sale")) {
+    event.preventDefault();
+    if (state.crmSalesPanel === "sale") {
+      closeCrmSaleComposer();
+    } else {
+      closeCrmQuickSale();
+    }
+    return;
+  }
 }
 function renderDashboard() {
   const onboardingMode = shouldShowOnboarding();
@@ -17093,9 +17169,7 @@ function renderDashboard() {
 
   els.pageTitle.textContent = PAGE_TITLES[state.page] || PAGE_TITLES.dashboard;
   renderSidebarActive();
-  els.regimeSelect.value = state.regime;
-  syncRegimeSelectAvailability();
-  syncMobileDrawerRegimeTabs();
+  syncRegimeControlsToState();
   els.accountName.textContent = getProfileDisplayName();
   updatePlanUi();
   updateCalendarReminderToggleUi();
@@ -18213,11 +18287,11 @@ function renderDashboardPage() {
   const nextPaymentSummary = getUpcomingPaymentSummary();
   const hasUpcomingPaymentSummary = Boolean(nextPaymentSummary.row && nextPaymentSummary.breakdown);
   const now = new Date();
-  const currentMonthIndex = now.getMonth();
+  const { minMonthIndex: trackedStartMonthIndex, maxMonthIndex: currentMonthIndex } = getDashboardVisibleMonthRange(now);
   const hasSelectedMonth = state.dashboardSelectedMonth !== null && state.dashboardSelectedMonth !== undefined && state.dashboardSelectedMonth !== "";
   const selectedMonthRaw = hasSelectedMonth ? Number(state.dashboardSelectedMonth) : Number.NaN;
   const selectedMonthIndex = Number.isFinite(selectedMonthRaw)
-    ? Math.min(currentMonthIndex, Math.max(0, Math.trunc(selectedMonthRaw)))
+    ? Math.min(currentMonthIndex, Math.max(trackedStartMonthIndex, Math.trunc(selectedMonthRaw)))
     : currentMonthIndex;
   state.dashboardSelectedMonth = selectedMonthIndex;
   const selectedMonthDate = new Date(now.getFullYear(), selectedMonthIndex, 1);
@@ -18235,7 +18309,11 @@ function renderDashboardPage() {
   const selectedTaxRaw = calcByRegime(state.regime, selectedIncome, state.calcExpenses);
   const selectedTax = selectedTaxRaw;
   const isMobileDashboard = isMobileViewport();
-  const monthTabsHtml = Array.from({ length: currentMonthIndex + 1 }, (_, index) => {
+  const visibleMonthIndexes = Array.from(
+    { length: currentMonthIndex - trackedStartMonthIndex + 1 },
+    (_, offset) => trackedStartMonthIndex + offset
+  );
+  const monthTabsHtml = visibleMonthIndexes.map((index) => {
     const activeClass = index === selectedMonthIndex ? " active" : "";
     const monthLabel = isMobileDashboard
       ? MONTHS[index]
@@ -18305,9 +18383,13 @@ function renderDashboardPage() {
   const taxLoadTotalWithEmployees = hasUpcomingPaymentSummary
     ? nextPaymentSummary.total
     : taxLoadPayNow + dashboardEmployeesRemittanceTotal;
-  const infoHintIcon = '<span class="inline-info-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><circle cx="12" cy="12" r="9"></circle><path d="M12 10v6"></path><path d="M12 7h.01"></path></svg></span>';
-  const bars = monthlyData
-    .map((row, index) => {
+  const dashboardKpiActionArrow = '<span class="dashboard-kpi-action-arrow" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="m9 6 6 6-6 6"></path></svg></span>';
+  const incomeKpiActionIcon = '<span class="dashboard-kpi-action-icon dashboard-kpi-action-icon-income" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg></span>';
+  const taxLoadHintIcon = '<span class="dashboard-kpi-action-icon dashboard-kpi-action-icon-breakdown" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M7 4.75h10A1.25 1.25 0 0 1 18.25 6v13.25l-2.25-1.5-2.25 1.5-2.25-1.5-2.25 1.5V6A1.25 1.25 0 0 1 7 4.75Z"></path><path d="M9 9.25h6"></path><path d="M9 12h6"></path><path d="M9 14.75h4"></path></svg></span>';
+  const deadlineKpiActionIcon = '<span class="dashboard-kpi-action-icon dashboard-kpi-action-icon-calendar" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M8 3.75v3"></path><path d="M16 3.75v3"></path><path d="M4.75 9.25h14.5"></path><rect x="4.75" y="5.75" width="14.5" height="13.5" rx="2.25"></rect></svg></span>';
+  const bars = visibleMonthIndexes
+    .map((index) => {
+      const row = monthlyData[index] || { income: 0, entries: 0, name: MONTHS[index] };
       const height = Math.max((row.income / maxIncome) * 170, row.income > 0 ? 8 : 4);
       const activeClass = index === selectedMonthIndex ? " is-active" : "";
       const barClass = index === selectedMonthIndex ? " is-active" : " is-muted";
@@ -18334,9 +18416,6 @@ function renderDashboardPage() {
         ? "Ближайший срок уже сегодня — добавьте доход чтобы знать сколько платить."
         : `До ближайшего срока ${deadlineDaysLeft} ${getLandingDayWord(deadlineDaysLeft)} — добавьте доход чтобы знать сколько платить.`
     : "Добавьте доход чтобы знать сколько платить по ближайшим срокам.";
-  const deadlineIncomeHint = state.incomes.length === 0
-    ? '<div class="stat-sub deadline-income-hint">добавьте доход чтобы рассчитать сумму</div>'
-    : "";
   const isMobileKpiMode = isMobileViewport();
   const formatMobileKpiAmount = (value) => {
     const numeric = Number(value || 0);
@@ -18403,6 +18482,30 @@ function renderDashboardPage() {
         && taxLoadPayNow > 0
         && taxLoadPayNow === Math.round(Number(currentTax.vosms || 0))
       );
+  const zeroIncomeVosmsText = `При нулевом доходе обязателен ВОСМС ${fmt(currentTax.vosms || 0)}.`;
+  const deadlineIncomeHintMarkup = state.incomes.length === 0
+    ? showZeroIncomeVosmsHint
+      ? `<div class="stat-sub deadline-income-hint">${zeroIncomeVosmsText}</div>`
+      : '<div class="stat-sub deadline-income-hint">добавьте доход чтобы рассчитать сумму</div>'
+    : "";
+  const taxLoadCardTitle = showZeroIncomeVosmsHint
+    ? `Обязательный платёж за ${currentMonthLabelPlain}`
+    : taxLoadTitle;
+  const taxLoadKpiTitle = showZeroIncomeVosmsHint
+    ? taxLoadCardTitle
+    : `Оплатить до ${taxLoadDueDateLabel}`;
+  const taxLoadKpiPeriodNote = showZeroIncomeVosmsHint
+    ? `до ${taxLoadDueDateLabel}`
+    : `за ${currentMonthLabelPlain}`;
+  const welcomeBannerTitle = showZeroIncomeVosmsHint ? "Доходов за этот месяц пока нет" : "Добро пожаловать!";
+  const welcomeBannerLead = showZeroIncomeVosmsHint
+    ? `Сейчас обязательный платёж — ВОСМС ${fmt(currentTax.vosms || 0)}. Добавьте доход, чтобы рассчитать остальные платежи.`
+    : "Добавьте первый доход, чтобы увидеть свои налоги и прогнозы.";
+  const welcomeBannerDeadlineText = showZeroIncomeVosmsHint
+    ? nextDeadline
+      ? `Ближайший срок — ${mobileDeadlineDateLabel}. Даже без дохода сохраняется обязательный платёж.`
+      : zeroIncomeVosmsText
+    : welcomeDeadlineHint;
   const kpiActionClass = isMobileKpiMode ? " kpi-card-actionable" : "";
   const incomeKpiActionAttrs = isMobileKpiMode
     ? 'data-action="open-dashboard-kpi-sheet" data-kpi-key="income_current" role="button" tabindex="0" aria-label="Открыть расшифровку дохода за текущий месяц"'
@@ -18462,8 +18565,8 @@ function renderDashboardPage() {
         <div class="deadline-period-label">${nextDeadlinePrimaryLabel}</div>
         <div class="${deadlineNoteClass}">${deadlineDueText}</div>
         ${nextDeadlineSecondaryLabel ? `<div class="stat-sub">${nextDeadlineSecondaryLabel}</div>` : ""}
-        ${deadlineIncomeHint}
-        <button type="button" class="deadline-desktop-calendar-link" data-action="open-dashboard-deadline-calendar" aria-label="Перейти на страницу календаря">Перейти в календарь</button>
+        ${deadlineIncomeHintMarkup}
+        <div class="kpi-card-footer"><button type="button" class="deadline-desktop-calendar-link dashboard-kpi-action" data-action="open-dashboard-deadline-calendar" aria-label="Перейти на страницу календаря">${deadlineKpiActionIcon}<span>Перейти в календарь</span>${dashboardKpiActionArrow}</button></div>
       </article>
     `;
   const isSimplifiedRegime = state.regime === "simplified";
@@ -18495,7 +18598,7 @@ function renderDashboardPage() {
     currentIncome: Number(currentIncome || 0),
     incomeTrendClass: incomeTrend.className || "flat",
     incomeTrendText: incomeTrend.text || "Без изменений",
-    taxLoadTitle,
+    taxLoadTitle: taxLoadKpiTitle,
     taxLoadPayNow: Number(taxLoadPayNow || 0),
     taxLoadIpnReserve: Number(taxLoadIpnReserve || 0),
     taxLoadOpvSavings: Number(taxLoadOpvSavings || 0),
@@ -18515,14 +18618,20 @@ function renderDashboardPage() {
         <div class="dashboard-welcome-main">
           <span class="dashboard-welcome-icon" aria-hidden="true">👋</span>
           <div class="dashboard-welcome-copy">
-            <h3>Добро пожаловать!</h3>
-            <p>Добавьте первый доход, чтобы увидеть свои налоги и прогнозы.</p>
-            <p class="dashboard-welcome-deadline">${welcomeDeadlineHint}</p>
+            <h3>${welcomeBannerTitle}</h3>
+            <p>${welcomeBannerLead}</p>
+            <p class="dashboard-welcome-deadline">${welcomeBannerDeadlineText}</p>
           </div>
         </div>
         <div class="dashboard-welcome-actions">
-          <button type="button" class="btn btn-primary dashboard-welcome-primary" data-page="income">+ Добавить доход</button>
-          <button type="button" class="btn btn-ghost dashboard-welcome-secondary" data-action="load-dashboard-demo">Посмотреть демо</button>
+          <button
+            type="button"
+            class="btn btn-primary dashboard-welcome-primary"
+            data-action="open-income-page"
+            data-page="income"
+            data-nav-source="dashboard_welcome_banner"
+            aria-label="Перейти к добавлению первого дохода"
+          >+ Добавить доход</button>
         </div>
       </article>
     `
@@ -18545,28 +18654,29 @@ function renderDashboardPage() {
           ? `<div class="income-hero-meta"><div class="kpi-trend ${incomeTrend.className}">${incomeTrend.text}</div></div>`
           : ""}
         ${!isMobileKpiMode
-          ? '<button type="button" class="income-hero-cta" data-action="open-income-page" data-page="income" data-nav-source="dashboard_income_hero" aria-label="Перейти к добавлению дохода">+ Добавить доход</button>'
+          ? `<div class="kpi-card-footer"><button type="button" class="income-hero-cta dashboard-kpi-action dashboard-kpi-action-dark" data-action="open-income-page" data-page="income" data-nav-source="dashboard_income_hero" aria-label="Перейти к добавлению дохода">${incomeKpiActionIcon}<span>Добавить доход</span>${dashboardKpiActionArrow}</button></div>`
           : ""}
       </article>
   `;
 
   const taxLoadKpiCardMarkup = `
       <article class="card kpi-card danger tax-load-kpi${kpiActionClass}" data-tour-target="tax-load" ${taxKpiActionAttrs}>
-        <div class="stat-title">${taxLoadTitle}</div>
+        <div class="stat-title">${taxLoadKpiTitle}</div>
         <div class="stat-value stat-danger amount-sensitive${dashboardEmployeesRemittanceTotal > 0 ? taxLoadKpiTotalValueClass : taxLoadKpiValueClass}">${dashboardEmployeesRemittanceTotal > 0 ? taxLoadKpiTotalValueText : taxLoadKpiValueText}</div>
         ${dashboardEmployeesRemittanceTotal > 0
           ? `
             <div class="tax-load-monthly-note tax-load-monthly-note-split">
+              <span>${taxLoadKpiPeriodNote}</span>
               <span>за себя: ${fmt(taxLoadPayNow)}</span>
               <span>за сотрудников: ${fmt(dashboardEmployeesRemittanceTotal)}</span>
               ${dashboardEmployeesEmployerChargesTotal > 0 ? `<span>из них расходы работодателя: ${fmt(dashboardEmployeesEmployerChargesTotal)}</span>` : ""}
             </div>
           `
-          : `<div class="tax-load-monthly-note">до ${taxLoadDueDateLabel}</div>`}
+          : `<div class="tax-load-monthly-note">${taxLoadKpiPeriodNote}</div>`}
         ${showZeroIncomeVosmsHint
           ? `<div class="tax-load-min-note">При нулевом доходе обязательный платёж — ВОСМС ${fmt(currentTax.vosms || 0)}</div>`
           : ""}
-        <div class="stat-sub tax-load-hint">${infoHintIcon}Нажмите для расшифровки</div>
+        <div class="kpi-card-footer"><div class="stat-sub tax-load-hint"><span class="tax-load-hint-chip dashboard-kpi-action">${taxLoadHintIcon}<span>Посмотреть состав суммы</span>${dashboardKpiActionArrow}</span></div></div>
       </article>
   `;
 
@@ -18578,7 +18688,7 @@ function renderDashboardPage() {
       </div>
     `;
 
-  const chartPlaceholderBars = Array.from({ length: 12 }, (_, index) => `
+  const chartPlaceholderBars = visibleMonthIndexes.map((index) => `
       <div class="chart-item chart-item-placeholder" aria-hidden="true">
         <div class="chart-bar chart-bar-placeholder" style="height:68px"></div>
         <span>${MONTHS[index]}</span>
@@ -18690,7 +18800,7 @@ function renderDashboardPage() {
             <span>Итого к уплате:</span>
             <strong class="amount-sensitive">${fmt(payNowTotal)}</strong>
           </div>
-          <p class="dashboard-tax-subnote">Срок — до ${payNowDueDateLabel} · за ${escapeHtml(selectedMonthLabelPlain)}</p>
+          <p class="dashboard-tax-subnote">за ${escapeHtml(selectedMonthLabelPlain)}</p>
           ${zeroIncomeHint}
         </section>
 
@@ -18758,10 +18868,9 @@ function renderDashboardPage() {
   }, { fot: 0, employerExtraCost: 0 });
   const visibleDashboardEmployees = dashboardEmployees.slice(0, 3);
   const remainingDashboardEmployees = Math.max(0, dashboardEmployees.length - visibleDashboardEmployees.length);
-  const employeesSectionHtml = !canShowEmployeesDashboard
+  const employeesSectionHtml = !canShowEmployeesDashboard || dashboardEmployees.length === 0
     ? ""
-    : dashboardEmployees.length > 0
-    ? `
+    : `
       <article class="card dashboard-employees-panel">
         <div class="dashboard-recent-head dashboard-recent-head-compact">
           <div class="dashboard-recent-head-copy">
@@ -18816,25 +18925,6 @@ function renderDashboardPage() {
             : '<span class="dashboard-employees-more"></span>'}
         </div>
       </article>
-    `
-    : `
-      <article class="card dashboard-employees-panel">
-        <div class="dashboard-recent-head dashboard-recent-head-compact">
-          <div class="dashboard-recent-head-copy">
-            <h3>Сотрудники</h3>
-            <p>Здесь будет короткий обзор по зарплатам и нагрузке на бизнес, как только вы добавите первого сотрудника.</p>
-          </div>
-        </div>
-
-        <div class="dashboard-employees-empty">
-          <div class="dashboard-employees-empty-icon" aria-hidden="true">👥</div>
-          <div class="dashboard-employees-empty-copy">
-            <h4>Пока без сотрудников</h4>
-            <p>Добавьте сотрудника в отдельном разделе, чтобы видеть имя и ключевые суммы прямо на главной.</p>
-          </div>
-          <button type="button" class="btn btn-ghost" data-page="employees">Открыть раздел</button>
-        </div>
-      </article>
     `;
   const selfActivityStatus = state.regime === "self"
     ? getProfileSelfActivityStatus(state.profile && state.profile.selfActivity)
@@ -18874,7 +18964,6 @@ function renderDashboardPage() {
             <h3>Что платить за ${selectedMonthLabelAccusative}</h3>
             <p>Сразу видно, что оплатить сейчас и что держать в резерве.</p>
           </div>
-          <button type="button" class="btn btn-ghost btn-xs" data-page="calendar">Открыть календарь</button>
         </div>
         ${selectedMonthContextNote}
         <div class="dashboard-month-tabs">${monthTabsHtml}</div>
@@ -18890,7 +18979,6 @@ function renderDashboardPage() {
               <p>Показываем 5 последних операций, чтобы быстро проверить, что уже занесено.</p>
             </div>
             <div class="dashboard-recent-actions">
-              <button type="button" class="btn btn-primary" data-page="income">+ Добавить доход</button>
               <button type="button" class="btn btn-ghost" data-page="income">Все поступления</button>
             </div>
           </div>
@@ -18905,6 +18993,18 @@ function renderDashboardPage() {
       event.preventDefault();
       event.stopPropagation();
       navigateToPage("income", button.dataset.navSource || "dashboard_income_hero");
+    });
+  });
+
+  els.pageContent.querySelectorAll(".dashboard-lower-grid [data-page]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const nextPage = String(button.dataset.page || "").trim();
+      if (!nextPage) {
+        return;
+      }
+      navigateToPage(nextPage, button.dataset.navSource || `dashboard_lower_${nextPage}`);
     });
   });
 
@@ -20667,11 +20767,49 @@ function getRegistrationMonthStart() {
   return new Date(registration.getFullYear(), registration.getMonth(), 1);
 }
 
-function isDeadlineBeforeRegistration(dateString) {
-  const registration = toDayStart(state.registrationDate) || getDeadlineTrackingFromDate();
-  const deadlineDate = toDayStart(dateString);
-  if (!registration || !deadlineDate) return false;
-  return deadlineDate < registration;
+function getEarliestTrackedIncomeMonthStart(incomes = state.incomes) {
+  if (!Array.isArray(incomes) || incomes.length === 0) {
+    return null;
+  }
+
+  return incomes.reduce((earliest, row) => {
+    const incomeDate = toDayStart(row && row.date);
+    if (!incomeDate) {
+      return earliest;
+    }
+
+    const monthStart = new Date(incomeDate.getFullYear(), incomeDate.getMonth(), 1);
+    if (!earliest || monthStart < earliest) {
+      return monthStart;
+    }
+
+    return earliest;
+  }, null);
+}
+
+function getEffectiveTrackingMonthStart() {
+  const registrationMonth = getRegistrationMonthStart();
+  const earliestIncomeMonth = getEarliestTrackedIncomeMonthStart();
+
+  if (!registrationMonth) {
+    return earliestIncomeMonth;
+  }
+
+  if (!earliestIncomeMonth) {
+    return registrationMonth;
+  }
+
+  return earliestIncomeMonth < registrationMonth ? earliestIncomeMonth : registrationMonth;
+}
+
+function isDeadlineBeforeRegistration(dateString, row = null) {
+  const trackedPeriodStart = getDeadlineTrackedPeriodStart(row);
+  const trackingStart = trackedPeriodStart
+    ? (getEffectiveTrackingMonthStart() || getDeadlineTrackingFromDate())
+    : (toDayStart(state.registrationDate) || getDeadlineTrackingFromDate());
+  const compareDate = trackedPeriodStart || toDayStart(dateString);
+  if (!trackingStart || !compareDate) return false;
+  return compareDate < trackingStart;
 }
 
 function getDeadlineCompletionSource(deadlineId) {
@@ -20755,13 +20893,8 @@ function applyPreServiceDeadlineCompletions() {
 
   return changed;
 }
-function isDeadlineInTrackingRange(dateString) {
-  const trackingFrom = getDeadlineTrackingFromDate();
-  if (!trackingFrom) return true;
-
-  const targetStart = toDayStart(dateString);
-  if (!targetStart) return false;
-  return targetStart >= trackingFrom;
+function isDeadlineInTrackingRange(dateString, row = null) {
+  return !isDeadlineBeforeRegistration(dateString, row);
 }
 function getCalendarRowsByRegime() {
   const doneSet = new Set(normalizeDoneDeadlines(state.doneDeadlines));
@@ -20771,7 +20904,7 @@ function getCalendarRowsByRegime() {
       const done = doneSet.has(row.id);
       const due = getCalendarDueMeta(row.date, done);
       const dateObj = new Date(row.date);
-      const isBeforeRegistration = isDeadlineBeforeRegistration(row.date);
+      const isBeforeRegistration = isDeadlineBeforeRegistration(row.date, row);
       const blockedByMissingIin = isDeadlineBlockedByMissingEmployeeIin(row);
       const employeeReviewCount = isFno200Deadline(row)
         ? Number((getDeadlineQuarterReportBreakdown(row)?.employeesNeedingAccrualReviewCount) || 0)
@@ -20889,7 +21022,6 @@ function renderCalendarPage() {
 
   const relevantRegimeRows = allRegimeRows.filter((row) => !row.isBeforeRegistration);
   const pendingTotal = relevantRegimeRows.filter((row) => !row.done).length;
-  const doneTotal = relevantRegimeRows.filter((row) => row.done).length;
   const getCalendarDiffDays = (row) => {
     const dateSource = row && row.dateObj instanceof Date ? row.dateObj : new Date(row && row.date ? row.date : "");
     const rowDayStart = new Date(dateSource.getFullYear(), dateSource.getMonth(), dateSource.getDate());
@@ -20930,10 +21062,6 @@ function renderCalendarPage() {
   const focusTitle = focusRow
     ? `${formatDateShort(focusRow.date)} - ${focusRow.title}`
     : "Критичных сроков сейчас нет";
-  const urgentHint = urgentTotal > 0
-    ? `Просрочено: ${overdueTotal} • Сегодня: ${dueTodayTotal} • До 7 дней: ${dueSoonTotal}`
-    : "нет критичных сроков";
-
   const nextPending =
     relevantRegimeRows.find((row) => !row.done && row.dateObj >= dayStart) ||
     relevantRegimeRows.find((row) => !row.done) ||
@@ -20945,149 +21073,221 @@ function renderCalendarPage() {
   const nextPaymentSummary = getUpcomingPaymentSummary(nextPendingPayment);
   const nextPaymentTotal = nextPaymentSummary.total;
   const nextPaymentDueLabel = nextPaymentSummary.dueLabel;
-  const overdueKpiMarkup = overdueTotal > 0
-    ? `
-      <span>Просрочено</span>
-      <strong>${overdueTotal}</strong>
-      <small>требует внимания</small>
-    `
-    : `
-      <span>Просрочено</span>
-      <strong class="calendar-kpi-ok">✓</strong>
-      <small class="calendar-kpi-ok-text">Всё в порядке</small>
+  const activeRows = rows.filter((row) => !row.isBeforeRegistration);
+  const preregRows = rows.filter((row) => row.isBeforeRegistration);
+  const pendingRows = activeRows.filter((row) => !row.done);
+  const importantRows = pendingRows.slice(0, 4);
+  const importantRowIds = new Set(importantRows.map((row) => row.id));
+  const monthRows = activeRows.filter((row) => !importantRowIds.has(row.id));
+  const monthGroupsMap = new Map();
+
+  monthRows.forEach((row) => {
+    const keyDate = row.dateObj instanceof Date && !Number.isNaN(row.dateObj.getTime()) ? row.dateObj : new Date(row.date);
+    const monthKey = `${keyDate.getFullYear()}-${String(keyDate.getMonth() + 1).padStart(2, "0")}`;
+    const monthLabel = formatMonthYearLabel(keyDate);
+    if (!monthGroupsMap.has(monthKey)) {
+      monthGroupsMap.set(monthKey, {
+        key: monthKey,
+        label: monthLabel,
+        date: new Date(keyDate.getFullYear(), keyDate.getMonth(), 1),
+        rows: []
+      });
+    }
+    monthGroupsMap.get(monthKey).rows.push(row);
+  });
+
+  const monthGroups = Array.from(monthGroupsMap.values()).sort((a, b) => a.date - b.date);
+  const summaryCountLabel = pendingTotal > 0
+    ? `${pendingTotal} активных ${pendingTotal === 1 ? "срок" : pendingTotal >= 2 && pendingTotal <= 4 ? "срока" : "сроков"}`
+    : "Все активные сроки закрыты";
+  const payNowHint = nextPaymentTotal > 0
+    ? `до ${nextPaymentDueLabel}`
+    : "Новых платежей сейчас нет";
+  const importantValue = urgentTotal > 0 ? urgentTotal : importantRows.length;
+  const importantHint = urgentTotal > 0
+    ? focusTitle
+    : importantRows.length > 0
+      ? "Показываем ближайшие события без лишнего шума"
+      : "На сегодня критичных сроков нет";
+  let checklistTourAssigned = false;
+
+  const getCalendarEventStatusMarkup = (row) => {
+    if (row.isBeforeRegistration) {
+      return row.done
+        ? '<span class="badge badge-success">Подтверждено</span>'
+        : '<span class="badge badge-neutral">Проверьте вручную</span>';
+    }
+    return row.done
+      ? '<span class="badge badge-success">Сделано</span>'
+      : '<span class="badge badge-warning">Ожидает</span>';
+  };
+
+  const getCalendarMarkButtonLabel = (row) => {
+    if (row.isBeforeRegistration) {
+      return row.done ? "Снять" : "Подтвердить";
+    }
+    return row.done ? "Снять" : "Отметить";
+  };
+
+  const renderCalendarEventCard = (row, variant = "default") => {
+    const eventRegimeLabel = row.regimeLabel === "Для всех ИП" ? "" : row.regimeLabel;
+    const eventContextLabel = getDeadlineContextLabel(row, state.regime) || eventRegimeLabel;
+    const eventTypeTagMarkup = getCalendarEventTypeTagMarkup(row.title);
+    const dueMeta = getCalendarDueBadgeMeta(row);
+    const dueTone = dueMeta.tone;
+    const dateLabel = row.isBeforeRegistration ? formatDate(row.date) : formatDateShort(row.date);
+    const checklistTourTarget = !checklistTourAssigned ? ' data-tour-target="calendar-checklist-btn"' : "";
+    checklistTourAssigned = true;
+    const cardClasses = `calendar-event-card ${variant === "compact" ? "is-compact" : ""} ${row.done && !row.isBeforeRegistration ? "done" : ""} ${row.isBeforeRegistration ? "prereg" : ""} ${dueTone}`;
+    const statusMarkup = getCalendarEventStatusMarkup(row);
+    const actionsMarkup = `
+      <div class="calendar-event-card-actions">
+        <button type="button" class="btn btn-primary btn-xs"${checklistTourTarget} data-deadline-expand="${row.id}">Открыть</button>
+        <button type="button" class="btn btn-ghost btn-xs" data-toggle-deadline="${row.id}" ${!row.done && row.blockedByMissingIin ? "disabled title=\"Сначала заполните ИИН у сотрудников\"" : ""}>${getCalendarMarkButtonLabel(row)}</button>
+      </div>
     `;
 
-  const tableRows = rows
-    .map((row, index) => {
-      const eventRegimeLabel = row.regimeLabel === "Для всех ИП" ? "" : row.regimeLabel;
-      const eventContextLabel = getDeadlineContextLabel(row, state.regime) || eventRegimeLabel;
-      const eventTypeTagMarkup = getCalendarEventTypeTagMarkup(row.title);
-      const statusBadge = row.isBeforeRegistration
-        ? row.done
-          ? '<span class="badge badge-success">Отмечено вручную</span>'
-          : '<span class="badge badge-neutral">Проверьте вручную</span>'
-        : row.done
-          ? '<span class="badge badge-success">Сделано</span>'
-          : '<span class="badge badge-warning">Ожидает</span>';
-
-      const dueMeta = getCalendarDueBadgeMeta(row);
-      const dueTone = dueMeta.tone;
-      const checklistStats = getDeadlineChecklistStats(row.id, row);
-      const checklistTourTarget = index === 0 ? ' data-tour-target="calendar-checklist-btn"' : '';
-
+    if (variant === "compact") {
       return `
-        <tr class="calendar-row ${row.done && !row.isBeforeRegistration ? "done" : ""} ${row.isBeforeRegistration ? "prereg" : ""} ${dueTone}">
-          <td class="calendar-date-cell">${formatDate(row.date)}</td>
-          <td>
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <article class="${cardClasses}">
+          <div class="calendar-event-card-compact-main">
+            <div class="calendar-event-card-meta">
+              <span class="calendar-event-card-date">${escapeHtml(dateLabel)}</span>
               ${eventTypeTagMarkup}
-              <div class="calendar-event-title">${escapeHtml(row.title)}</div>
             </div>
-            ${eventContextLabel ? `<div class="calendar-event-sub">${escapeHtml(eventContextLabel)}</div>` : ""}
-            ${row.regimeHint ? `<div class="calendar-event-note">${escapeHtml(row.regimeHint)}</div>` : ""}
-          </td>
-          <td><span class="calendar-due-chip ${dueTone}">${dueMeta.text}</span></td>
-          <td>${statusBadge}</td>
-          <td class="calendar-actions-cell">
-            <button type="button" class="calendar-reminder-row-btn ${state.remindersEnabled ? "on" : "off"}" data-calendar-reminder-info="${row.id}" title="${state.remindersEnabled ? "Напоминания включены глобально" : "Напоминания выключены"}" aria-label="${state.remindersEnabled ? "Напоминания включены глобально" : "Напоминания выключены"}"><i class="calendar-reminder-row-icon" data-lucide="bell" aria-hidden="true"></i></button>
-            <button type="button" class="btn btn-ghost btn-xs"${checklistTourTarget} data-deadline-expand="${row.id}">Чеклист</button>
-            <button type="button" class="btn btn-ghost btn-xs" data-toggle-deadline="${row.id}" ${!row.done && row.blockedByMissingIin ? "disabled title=\"Сначала заполните ИИН у сотрудников\"" : ""}>${row.done ? "Снять" : "Отметить"}</button>
-          </td>
-        </tr>
-      `;
-    })
-    .join("");
-
-  const mobileRows = rows
-    .map((row, index) => {
-      const eventRegimeLabel = row.regimeLabel === "Для всех ИП" ? "" : row.regimeLabel;
-      const eventContextLabel = getDeadlineContextLabel(row, state.regime) || eventRegimeLabel;
-      const eventTypeTagMarkup = getCalendarEventTypeTagMarkup(row.title);
-      const statusBadge = row.isBeforeRegistration
-        ? row.done
-          ? '<span class="badge badge-success">Отмечено вручную</span>'
-          : '<span class="badge badge-neutral">Проверьте вручную</span>'
-        : row.done
-          ? '<span class="badge badge-success">Сделано</span>'
-          : '<span class="badge badge-warning">Ожидает</span>';
-
-      const typeTone = row.type === "payment" ? "payment" : "report";
-      const dueMeta = getCalendarDueBadgeMeta(row);
-      const dueTone = dueMeta.tone;
-      const checklistStats = getDeadlineChecklistStats(row.id, row);
-      const checklistTourTarget = index === 0 ? ' data-tour-target="calendar-checklist-btn"' : "";
-
-      return `
-        <article class="calendar-mobile-row ${row.done && !row.isBeforeRegistration ? "done" : ""} ${row.isBeforeRegistration ? "prereg" : ""}">
-          <div class="calendar-mobile-row-head">
-            <span class="calendar-mobile-date">${formatDate(row.date)}</span>
-            <span class="calendar-due-chip ${dueTone}">${dueMeta.text}</span>
+            <div class="calendar-event-card-main">
+              <h4 class="calendar-event-card-title">${escapeHtml(row.title)}</h4>
+              ${eventContextLabel ? `<div class="calendar-event-card-sub">${escapeHtml(eventContextLabel)}</div>` : ""}
+              ${row.regimeHint ? `<div class="calendar-event-card-note">${escapeHtml(row.regimeHint)}</div>` : ""}
+            </div>
+            <div class="calendar-event-card-status">${statusMarkup}</div>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            ${eventTypeTagMarkup}
-            <div class="calendar-mobile-title">${escapeHtml(row.title)}</div>
-          </div>
-          ${eventContextLabel ? `<div class="calendar-mobile-sub">${escapeHtml(eventContextLabel)}</div>` : ""}
-          ${row.regimeHint ? `<div class="calendar-mobile-note">${escapeHtml(row.regimeHint)}</div>` : ""}
-          <div class="calendar-mobile-meta">
-            ${statusBadge}
-          </div>
-          <div class="calendar-mobile-actions">
-            <button type="button" class="calendar-reminder-row-btn ${state.remindersEnabled ? "on" : "off"}" data-calendar-reminder-info="${row.id}" title="${state.remindersEnabled ? "Напоминания включены глобально" : "Напоминания выключены"}" aria-label="${state.remindersEnabled ? "Напоминания включены глобально" : "Напоминания выключены"}"><i class="calendar-reminder-row-icon" data-lucide="bell" aria-hidden="true"></i></button>
-            <button type="button" class="btn btn-ghost btn-xs calendar-mobile-action-btn"${checklistTourTarget} data-deadline-expand="${row.id}">Чеклист</button>
-            <button type="button" class="btn btn-ghost btn-xs calendar-mobile-action-btn" data-toggle-deadline="${row.id}" ${!row.done && row.blockedByMissingIin ? "disabled title=\"Сначала заполните ИИН у сотрудников\"" : ""}>${row.done ? "Снять" : "Отметить"}</button>
+          <div class="calendar-event-card-compact-side">
+            <span class="calendar-due-chip ${dueTone}">${escapeHtml(dueMeta.text)}</span>
+            ${actionsMarkup}
           </div>
         </article>
       `;
-    })
-    .join("");
+    }
+
+    return `
+      <article class="${cardClasses}">
+        <div class="calendar-event-card-top">
+          <div class="calendar-event-card-meta">
+            <span class="calendar-event-card-date">${escapeHtml(dateLabel)}</span>
+            ${eventTypeTagMarkup}
+          </div>
+          <span class="calendar-due-chip ${dueTone}">${escapeHtml(dueMeta.text)}</span>
+        </div>
+        <div class="calendar-event-card-main">
+          <h4 class="calendar-event-card-title">${escapeHtml(row.title)}</h4>
+          ${eventContextLabel ? `<div class="calendar-event-card-sub">${escapeHtml(eventContextLabel)}</div>` : ""}
+          ${row.regimeHint ? `<div class="calendar-event-card-note">${escapeHtml(row.regimeHint)}</div>` : ""}
+        </div>
+        <div class="calendar-event-card-footer">
+          <div class="calendar-event-card-status">${statusMarkup}</div>
+          ${actionsMarkup}
+        </div>
+      </article>
+    `;
+  };
+
+  const importantRowsMarkup = importantRows.length > 0
+    ? importantRows.map((row) => renderCalendarEventCard(row)).join("")
+    : `
+      <div class="calendar-empty-block">
+        <strong>На сегодня всё спокойно</strong>
+        <span>Критичных сроков сейчас нет. Следующий срок уже показан сверху.</span>
+      </div>
+    `;
+
+  const monthGroupsMarkup = monthGroups.length > 0
+    ? monthGroups
+      .map((group) => `
+        <section class="calendar-month-group">
+          <div class="calendar-month-group-head">
+            <h4>${escapeHtml(group.label)}</h4>
+            <span class="calendar-month-count">${group.rows.length} ${group.rows.length === 1 ? "событие" : group.rows.length >= 2 && group.rows.length <= 4 ? "события" : "событий"}</span>
+          </div>
+          <div class="calendar-month-list">
+            ${group.rows.map((row) => renderCalendarEventCard(row, "compact")).join("")}
+          </div>
+        </section>
+      `)
+      .join("")
+    : `
+      <div class="calendar-empty-block">
+        <strong>Остальные сроки пока не нужны</strong>
+        <span>Все актуальные события уже вынесены в блок «Сейчас важно».</span>
+      </div>
+    `;
+
+  const preregRowsMarkup = preregRows.length > 0
+    ? `
+      <details class="card mt-16 calendar-archive-card">
+        <summary class="calendar-archive-summary">
+          <div>
+            <strong>Было до регистрации</strong>
+            <span>${preregRows.length} ${preregRows.length === 1 ? "событие" : preregRows.length >= 2 && preregRows.length <= 4 ? "события" : "событий"} до подключения сервиса</span>
+          </div>
+          <span class="calendar-archive-toggle" aria-hidden="true"></span>
+        </summary>
+        <div class="calendar-archive-content">
+          ${preregRows.map((row) => renderCalendarEventCard(row, "compact")).join("")}
+        </div>
+      </details>
+    `
+    : "";
 
   els.pageContent.innerHTML = `
     <article class="card calendar-summary-card" data-tour-target="calendar-overview">
       <div class="calendar-summary-head">
         <h3>${isMobileCalendar ? `Календарь сроков: ${regimeLabel(state.regime)}` : `Календарь сроков по режиму: ${regimeLabel(state.regime)}`}</h3>
-        <span class="calendar-summary-chip">${isMobileCalendar ? `${rows.length} событий` : `${rows.length} записей в текущем фильтре`}</span>
+        <span class="calendar-summary-chip">${escapeHtml(summaryCountLabel)}</span>
       </div>
 
       <div class="calendar-kpi-grid">
         <div class="calendar-kpi-item">
-          <span>Следующий срок</span>
+          <span>Ближайший срок</span>
           <strong>${nextPending ? formatDateShort(nextPending.date) : "Нет"}</strong>
           <small>${nextPending ? escapeHtml(nextPending.title) : "Все сроки закрыты"}</small>
         </div>
         <div class="calendar-kpi-item">
-          <span>Сумма следующего платежа</span>
+          <span>К оплате сейчас</span>
           <strong>${fmt(nextPaymentTotal)}</strong>
-          <small>к уплате ${nextPaymentDueLabel}</small>
+          <small>${escapeHtml(payNowHint)}</small>
         </div>
-        <div class="calendar-kpi-item danger">
-          <span>Срочно (до 7 дней)</span>
-          <strong>${urgentTotal}</strong>
-          <small class="calendar-kpi-focus">${escapeHtml(focusTitle)}</small>
-        </div>
-        <div class="calendar-kpi-item ${overdueTotal > 0 ? "danger" : "success"}">
-          ${overdueKpiMarkup}
+        <div class="calendar-kpi-item ${urgentTotal > 0 ? "danger" : "success"}">
+          <span>Сейчас важно</span>
+          <strong>${importantValue}</strong>
+          <small class="calendar-kpi-focus">${escapeHtml(importantHint)}</small>
         </div>
       </div>
     </article>
 
-    <article class="card mt-16 calendar-table-card" data-tour-target="calendar-reminder-entry">
-      <div class="table-wrap calendar-table-wrap-desktop">
-        <table class="table calendar-table calendar-table-compact">
-          <thead><tr><th>Дата</th><th>Событие</th><th>Когда</th><th>Статус</th><th></th></tr></thead>
-          <tbody>
-            ${
-              tableRows ||
-              '<tr><td colspan="5" class="empty-row">По текущим фильтрам событий не найдено.</td></tr>'
-            }
-          </tbody>
-        </table>
+    ${preregRowsMarkup}
+
+    <article class="card mt-16 calendar-priority-card" data-tour-target="calendar-reminder-entry">
+      <div class="calendar-section-head">
+        <div>
+          <h3>Сейчас важно</h3>
+          <p>Показываем ближайшие сроки, которые стоит увидеть в первую очередь.</p>
+        </div>
       </div>
-      <div class="calendar-mobile-list" aria-label="Сроки оплаты (мобильная версия)">
-        ${
-          mobileRows ||
-          '<div class="calendar-mobile-empty">По текущим фильтрам событий не найдено.</div>'
-        }
+      <div class="calendar-priority-grid">
+        ${importantRowsMarkup}
+      </div>
+    </article>
+
+    <article class="card mt-16 calendar-months-card">
+      <div class="calendar-section-head">
+        <div>
+          <h3>Дальше по месяцам</h3>
+          <p>Остальные сроки без событий до регистрации, сгруппированные по месяцам.</p>
+        </div>
+      </div>
+      <div class="calendar-month-groups">
+        ${monthGroupsMarkup}
       </div>
     </article>
   `;
@@ -22253,12 +22453,8 @@ function renderAssistantPage() {
         <article class="card assistant-chat-shell">
           <div class="assistant-chat-head">
             <div class="assistant-chat-head-copy">
-              <div class="assistant-status-pill">
-                <i data-lucide="sparkles"></i>
-                <span>Раздел ещё развивается, но уже умеет отвечать по вашим данным.</span>
-              </div>
               <h1 class="assistant-title">E-бухгалтер</h1>
-              <p class="assistant-subtitle">Это ранняя версия AI-помощника MyEsep. Уже сейчас он подсказывает по доходам, срокам, налогам и CRM, а загрузку фото, документы и автоматические действия мы добавим позже.</p>
+              <p class="assistant-subtitle">Спросите про налоги, сроки, доходы или CRM — отвечу по вашим данным в MyEsep.</p>
             </div>
             <button type="button" class="btn btn-ghost btn-xs" data-assistant-reset-thread>Новый диалог</button>
           </div>
@@ -22270,81 +22466,6 @@ function renderAssistantPage() {
             <button type="submit" class="btn btn-primary">Отправить</button>
           </form>
         </article>
-
-        <aside class="assistant-side-column">
-          <article class="card assistant-panel-card assistant-side-shell">
-            <div class="assistant-panel-head">
-              <div>
-                <h3>Сегодня для вас</h3>
-                <p class="muted">Контекст, на котором уже могут строиться персональные ответы.</p>
-              </div>
-            </div>
-            <div class="assistant-side-stats assistant-side-stats-compact">
-              <div class="assistant-side-stat">
-                <span>Ближайший срок</span>
-                <strong>${escapeHtml(snapshot.nextDeadlineDate)}</strong>
-                <small>${escapeHtml(snapshot.nextDeadlineNote)}</small>
-              </div>
-              <div class="assistant-side-stat">
-                <span>К оплате сейчас</span>
-                <strong>${escapeHtml(snapshot.payNowValue)}</strong>
-                <small>${escapeHtml(snapshot.payNowNote)}</small>
-              </div>
-              <div class="assistant-side-stat">
-                <span>Доход месяца</span>
-                <strong>${escapeHtml(snapshot.incomeValue)}</strong>
-                <small>${escapeHtml(snapshot.incomeNote)}</small>
-              </div>
-              <div class="assistant-side-stat">
-                <span>CRM-фокус</span>
-                <strong>${escapeHtml(snapshot.waitingSalesLabel)}</strong>
-                <small>${escapeHtml(snapshot.waitingSalesNote)}</small>
-              </div>
-            </div>
-
-            <div class="assistant-mini-section">
-              <div class="assistant-mini-head">
-                <h4>Быстрые переходы</h4>
-                <p>Открыть нужный рабочий раздел без лишнего скролла.</p>
-              </div>
-              <div class="assistant-compact-links">
-                <button type="button" class="assistant-compact-link" data-page="taxes">
-                  <span class="assistant-link-icon"><i data-lucide="file-check"></i></span>
-                  <span class="assistant-link-copy">
-                    <strong>Налоги</strong>
-                    <span>Расчёт и расшифровка.</span>
-                  </span>
-                </button>
-                <button type="button" class="assistant-compact-link" data-page="calendar">
-                  <span class="assistant-link-icon"><i data-lucide="calendar"></i></span>
-                  <span class="assistant-link-copy">
-                    <strong>Календарь</strong>
-                    <span>Сроки и чеклисты.</span>
-                  </span>
-                </button>
-                <button type="button" class="assistant-compact-link" data-page="crm">
-                  <span class="assistant-link-icon"><i data-lucide="handshake"></i></span>
-                  <span class="assistant-link-copy">
-                    <strong>CRM</strong>
-                    <span>Продажи и оплаты.</span>
-                  </span>
-                </button>
-              </div>
-            </div>
-
-            <div class="assistant-mini-section">
-              <div class="assistant-mini-head">
-                <h4>Скоро появится</h4>
-                <p>Следующие AI-сценарии уже запланированы.</p>
-              </div>
-              <div class="assistant-soon-list">
-                <button type="button" class="assistant-soon-pill" data-assistant-soon="Фото → данные пока в разработке, но этот сценарий уже запланирован для E-бухгалтера.">Фото → данные</button>
-                <button type="button" class="assistant-soon-pill" data-assistant-soon="Архив документов ИП пока в планах и появится следующим этапом развития E-бухгалтера.">Документы ИП</button>
-                <button type="button" class="assistant-soon-pill" data-assistant-soon="AI-действия с подтверждением появятся позже: создание клиентов, доходов, оплат и отметка сроков.">AI-действия</button>
-              </div>
-            </div>
-          </article>
-        </aside>
       </div>
     </section>
   `;
@@ -23074,8 +23195,10 @@ function renderCrmPage() {
   const editingCustomer = state.crmCustomerEditId ? customers.find((row) => row.id === state.crmCustomerEditId) : null;
   const editingSale = state.crmSaleEditId ? sales.find((row) => row.id === state.crmSaleEditId) : null;
   const editingPayment = state.crmPaymentEditId ? payments.find((row) => row.id === state.crmPaymentEditId) : null;
+  const draftSaleCustomerId = Number(state.crmSaleDraftCustomerId || 0) || null;
   const draftPaymentSaleId = Number(state.crmPaymentDraftSaleId || 0) || null;
   const selectedCustomer = state.crmSelectedCustomerId ? customers.find((row) => row.id === state.crmSelectedCustomerId) : null;
+  const quickSaleCustomer = draftSaleCustomerId ? customers.find((row) => row.id === draftSaleCustomerId) : null;
 
   if (state.crmCustomerEditId && !editingCustomer) {
     state.crmCustomerEditId = null;
@@ -23088,6 +23211,9 @@ function renderCrmPage() {
   }
   if (state.crmPaymentDraftSaleId && !sales.some((row) => row.id === draftPaymentSaleId)) {
     state.crmPaymentDraftSaleId = null;
+  }
+  if (state.crmSaleDraftCustomerId && !quickSaleCustomer) {
+    state.crmSaleDraftCustomerId = null;
   }
   if (state.crmSelectedCustomerId && !selectedCustomer) {
     state.crmSelectedCustomerId = null;
@@ -23130,8 +23256,11 @@ function renderCrmPage() {
     return sum + Number(summary.remaining || 0);
   }, 0);
 
+  const selectedSaleCustomerId = editingSale
+    ? Number(editingSale.customerId || 0) || 0
+    : draftSaleCustomerId || 0;
   const customerOptions = customers
-    .map((row) => `<option value="${row.id}" ${editingSale && row.id === Number(editingSale.customerId || 0) ? "selected" : ""}>${escapeHtml(row.name)}</option>`)
+    .map((row) => `<option value="${row.id}" ${row.id === selectedSaleCustomerId ? "selected" : ""}>${escapeHtml(row.name)}</option>`)
     .join("");
   const selectedPaymentSaleId = editingPayment
     ? Number(editingPayment.saleId || 0) || 0
@@ -23222,6 +23351,10 @@ function renderCrmPage() {
             <td>${linkedSales.length}</td>
             <td>${fmt(paidTotal)}</td>
             <td class="income-row-actions">
+              <button type="button" class="btn btn-ghost btn-xs crm-row-action-sale" data-action="crm-prefill-sale" data-customer-id="${customer.id}" aria-label="Добавить продажу" title="Добавить продажу">
+                <i data-lucide="plus" class="income-action-icon" aria-hidden="true"></i>
+                <span>Продажа</span>
+              </button>
               <button type="button" class="icon-action-btn ${isActive ? "icon-view-active" : "icon-view"}" data-action="crm-open-customer" data-customer-id="${customer.id}" data-open-crm-customer="${customer.id}" aria-label="Открыть карточку клиента" title="Карточка клиента">
                 <i data-lucide="eye" class="income-action-icon" aria-hidden="true"></i>
               </button>
@@ -23361,63 +23494,61 @@ function renderCrmPage() {
   const waitingSalesNote = waitingSales.length === 0
     ? "Сейчас все оплаты закрыты."
     : `На сумму ${fmt(waitingAmount)}`;
-  const recentSales = sales
-    .slice()
+  const overdueSalesCount = waitingSales.filter(({ summary }) => String((summary.paymentMeta || {}).id || "") === "overdue").length;
+  const recentCrmActivity = [
+    ...sales.map((sale) => {
+      const summary = saleSummaries.get(sale.id) || {};
+      const customer = summary.customer || null;
+      return {
+        type: "sale",
+        id: sale.id,
+        icon: "briefcase",
+        badge: "Продажа",
+        title: sale.title || "Продажа",
+        note: `${customer ? customer.name : "Без клиента"} · ${sale.dueDate ? `срок ${formatDate(sale.dueDate)}` : `сделка ${formatDate(sale.date)}`}`,
+        amountLabel: fmt(sale.amount),
+        date: sale.date
+      };
+    }),
+    ...payments.map((payment) => {
+      const sale = getCrmSaleById(payment.saleId, sales);
+      const customer = sale ? getCrmCustomerById(sale.customerId, customers) : null;
+      return {
+        type: "payment",
+        id: payment.id,
+        icon: "wallet",
+        badge: "Оплата",
+        title: customer ? customer.name : (sale ? sale.title : "Оплата"),
+        note: `${sale ? sale.title : "Продажа удалена"} · ${payment.linkedIncomeId ? "уже в доходах" : "попадёт в доходы"}`,
+        amountLabel: fmt(payment.amount),
+        date: payment.date
+      };
+    })
+  ]
     .sort((left, right) => new Date(right.date) - new Date(left.date) || Number(right.id || 0) - Number(left.id || 0))
-    .slice(0, 4);
-  const recentPayments = payments
-    .slice()
-    .sort((left, right) => new Date(right.date) - new Date(left.date) || Number(right.id || 0) - Number(left.id || 0))
-    .slice(0, 4);
-  const recentSalesMarkup = recentSales.length > 0
-    ? recentSales.map((sale) => {
-        const summary = saleSummaries.get(sale.id) || {};
-        const customer = summary.customer || null;
-        const paymentMeta = summary.paymentMeta || getCrmPaymentStateMeta(sale, payments);
-        const remaining = Number(summary.remaining || 0);
-        const showAddPayment = normalizeCrmSaleStatus(sale.status) !== "cancelled" && remaining > 0;
-        return `
-          <div class="crm-overview-item">
-            <div class="crm-overview-main">
-              <div class="crm-user-cell">
-                <strong>${escapeHtml(sale.title || "Продажа")}</strong>
-                <small>${escapeHtml(customer ? customer.name : "Без клиента")} · ${formatDate(sale.date)}${sale.dueDate ? ` · срок ${formatDate(sale.dueDate)}` : ""}</small>
+    .slice(0, 6);
+  const recentActivityMarkup = recentCrmActivity.length > 0
+    ? recentCrmActivity.map((item) => `
+        <div class="crm-activity-item">
+          <div class="crm-activity-main">
+            <span class="crm-activity-icon crm-activity-icon-${item.type}">
+              <i data-lucide="${item.icon}" class="crm-activity-icon-svg" aria-hidden="true"></i>
+            </span>
+            <div class="crm-activity-copy">
+              <div class="crm-activity-topline">
+                <strong>${escapeHtml(item.title)}</strong>
+                <span class="crm-activity-badge">${escapeHtml(item.badge)}</span>
               </div>
-              <div class="crm-overview-meta">
-                <strong>${fmt(sale.amount)}</strong>
-                <span class="crm-status-badge ${paymentMeta.className}">${escapeHtml(paymentMeta.label)}</span>
-              </div>
-            </div>
-            <div class="crm-overview-actions">
-              ${showAddPayment ? `<button type="button" class="btn btn-ghost btn-xs" data-action="crm-prefill-payment" data-sale-id="${sale.id}">+ Оплата</button>` : `<button type="button" class="btn btn-ghost btn-xs" data-action="crm-edit-sale" data-sale-id="${sale.id}" data-edit-crm-sale="${sale.id}">Изменить</button>`}
+              <small>${escapeHtml(item.note)}</small>
             </div>
           </div>
-        `;
-      }).join("")
-    : '<div class="crm-overview-empty">Пока нет продаж. Добавьте первую сделку, и здесь появится свежая активность.</div>';
-  const recentPaymentsMarkup = recentPayments.length > 0
-    ? recentPayments.map((payment) => {
-        const sale = getCrmSaleById(payment.saleId, sales);
-        const customer = sale ? getCrmCustomerById(sale.customerId, customers) : null;
-        return `
-          <div class="crm-overview-item">
-            <div class="crm-overview-main">
-              <div class="crm-user-cell">
-                <strong>${escapeHtml(customer ? customer.name : (sale ? sale.title : "Оплата"))}</strong>
-                <small>${escapeHtml(sale ? sale.title : "Продажа удалена")} · ${formatDate(payment.date)}</small>
-              </div>
-              <div class="crm-overview-meta">
-                <strong>${fmt(payment.amount)}</strong>
-                <span class="crm-sync-badge ${payment.linkedIncomeId ? "" : "crm-sync-badge-muted"}">${payment.linkedIncomeId ? "В доходах" : "Не в доходах"}</span>
-              </div>
-            </div>
-            <div class="crm-overview-actions">
-              <button type="button" class="btn btn-ghost btn-xs" data-action="crm-edit-payment" data-payment-id="${payment.id}" data-edit-crm-payment="${payment.id}">Изменить</button>
-            </div>
+          <div class="crm-activity-meta">
+            <strong>${escapeHtml(item.amountLabel)}</strong>
+            <span>${formatDate(item.date)}</span>
           </div>
-        `;
-      }).join("")
-    : '<div class="crm-overview-empty">Пока нет оплат. Как только появятся поступления, они будут показаны здесь.</div>';
+        </div>
+      `).join("")
+    : "";
   const customerCardMarkup = selectedCustomer ? (() => {
     const linkedSales = sales.filter((sale) => Number(sale.customerId || 0) === selectedCustomer.id);
     const linkedSaleIds = new Set(linkedSales.map((row) => row.id));
@@ -23521,130 +23652,293 @@ function renderCrmPage() {
       ? "payment"
       : normalizeCrmSalesPanel(state.crmSalesPanel);
   const isCustomerFormOpen = Boolean(editingCustomer) || Boolean(state.crmCustomerFormOpen);
+  const crmSetupSteps = [
+    { id: "client", label: "Клиент", done: customers.length > 0 },
+    { id: "sale", label: "Продажа", done: sales.length > 0 },
+    { id: "payment", label: "Оплата", done: payments.length > 0 }
+  ];
+  const crmSetupCompletedCount = crmSetupSteps.filter((step) => step.done).length;
+  const showCrmStartGuide = payments.length === 0 && customers.length === 0 && sales.length === 0;
+  const showCrmSetupProgress = payments.length === 0 && !showCrmStartGuide;
+  let crmNextStepAction = "crm-open-payment-form";
+  let crmNextStepLabel = "Добавить оплату";
+  let crmNextStepTitle = "Остался последний шаг";
+  let crmNextStepDescription = "Отметьте первую оплату, и она сразу попадёт в доходы.";
+
+  if (customers.length === 0) {
+    crmNextStepAction = "crm-open-customer-form";
+    crmNextStepLabel = "Добавить клиента";
+    crmNextStepTitle = "Начните с клиента";
+    crmNextStepDescription = "Сначала сохраните клиента, чтобы потом было проще привязать к нему продажу.";
+  } else if (sales.length === 0) {
+    crmNextStepAction = "crm-open-sale-form";
+    crmNextStepLabel = "Добавить продажу";
+    crmNextStepTitle = "Следующий шаг — продажа";
+    crmNextStepDescription = "Клиент уже есть. Теперь добавьте первую продажу и сумму, которую вам должны оплатить.";
+  }
 
   const crmNavButtonsMarkup = `
-    <button type="button" class="btn crm-nav-action crm-nav-overview${crmTab === "overview" ? " is-active" : ""}" data-action="crm-switch-tab" data-crm-tab="overview">Обзор</button>
-    <button type="button" class="btn crm-nav-action crm-nav-main${crmTab === "sales" && effectiveSalesPanel !== "payment" ? " is-active" : ""}" data-action="crm-open-sale-form">+ Продажа</button>
-    <button type="button" class="btn crm-nav-action crm-nav-main${crmTab === "sales" && effectiveSalesPanel === "payment" ? " is-active" : ""}" data-action="crm-open-payment-form">+ Оплата</button>
-    <button type="button" class="btn crm-nav-action crm-nav-main${crmTab === "clients" ? " is-active" : ""}" data-action="crm-open-customer-form">+ Клиент</button>
-    <button type="button" class="btn crm-nav-action crm-nav-secondary" data-action="crm-open-income">Открыть доходы</button>
+    <button type="button" class="btn crm-nav-action crm-nav-tab${crmTab === "overview" ? " is-active" : ""}" data-action="crm-switch-tab" data-crm-tab="overview">Обзор</button>
+    <button type="button" class="btn crm-nav-action crm-nav-tab${crmTab === "clients" ? " is-active" : ""}" data-action="crm-switch-tab" data-crm-tab="clients">Клиенты</button>
+    <button type="button" class="btn crm-nav-action crm-nav-tab${crmTab === "sales" ? " is-active" : ""}" data-action="crm-switch-tab" data-crm-tab="sales">Продажи и оплаты</button>
   `;
 
   const crmOverviewMarkup = `
     <div class="crm-section-stack">
-      <div class="grid grid-4 crm-metrics-grid">
+      ${showCrmStartGuide ? `
+        <article class="card crm-start-card">
+          <div class="crm-start-head">
+            <div>
+              <h3>С чего начать</h3>
+              <p class="muted">Здесь всего три шага: клиент, продажа, оплата. Когда отмечаете оплату, MyEsep сам отправляет её в доходы.</p>
+            </div>
+          </div>
+          <div class="crm-start-grid">
+            <article class="crm-start-step">
+              <div class="crm-start-step-top">
+                <span class="crm-start-step-number">1</span>
+                <span class="crm-start-step-icon">
+                  <i data-lucide="user-plus" class="crm-start-step-icon-svg" aria-hidden="true"></i>
+                </span>
+              </div>
+              <div class="crm-start-step-copy">
+                <h4>Клиент</h4>
+                <p>Сохраняете имя и телефон. Потом клиента легко выбрать в продаже.</p>
+              </div>
+              <div class="crm-start-step-meta">Пока клиентов нет</div>
+              <button type="button" class="btn btn-primary btn-sm crm-step-btn" data-action="crm-open-customer-form">Добавить клиента</button>
+            </article>
+            <article class="crm-start-step">
+              <div class="crm-start-step-top">
+                <span class="crm-start-step-number">2</span>
+                <span class="crm-start-step-icon">
+                  <i data-lucide="briefcase" class="crm-start-step-icon-svg" aria-hidden="true"></i>
+                </span>
+              </div>
+              <div class="crm-start-step-copy">
+                <h4>Продажа</h4>
+                <p>Фиксируете сумму и срок оплаты. Налоги пока не меняются.</p>
+              </div>
+              <div class="crm-start-step-meta">Пока продаж нет</div>
+              <button type="button" class="btn btn-primary btn-sm crm-step-btn" data-action="crm-open-sale-form">Добавить продажу</button>
+            </article>
+            <article class="crm-start-step">
+              <div class="crm-start-step-top">
+                <span class="crm-start-step-number">3</span>
+                <span class="crm-start-step-icon">
+                  <i data-lucide="wallet" class="crm-start-step-icon-svg" aria-hidden="true"></i>
+                </span>
+              </div>
+              <div class="crm-start-step-copy">
+                <h4>Оплата</h4>
+                <p>Как только деньги пришли, отмечаете оплату. Она сразу появляется в доходах.</p>
+              </div>
+              <div class="crm-start-step-meta">Поступлений в этом месяце пока нет</div>
+              <button type="button" class="btn btn-primary btn-sm crm-step-btn" data-action="crm-open-payment-form">Добавить оплату</button>
+            </article>
+          </div>
+        </article>
+      ` : showCrmSetupProgress ? `
+        <article class="card crm-progress-card">
+          <div class="crm-progress-head">
+            <div>
+              <h3>${escapeHtml(crmNextStepTitle)}</h3>
+              <p class="muted">Вы уже заполнили ${crmSetupCompletedCount} из 3 шагов. ${escapeHtml(crmNextStepDescription)}</p>
+            </div>
+            <span class="crm-progress-badge">${crmSetupCompletedCount}/3</span>
+          </div>
+          <div class="crm-progress-pills" aria-label="Прогресс настройки CRM">
+            ${crmSetupSteps.map((step, index) => `
+              <span class="crm-progress-pill ${step.done ? "is-done" : "is-pending"}">
+                ${index + 1}. ${escapeHtml(step.label)}
+              </span>
+            `).join("")}
+          </div>
+          <div class="crm-progress-actions">
+            <button type="button" class="btn btn-primary btn-sm" data-action="${crmNextStepAction}">${escapeHtml(crmNextStepLabel)}</button>
+          </div>
+        </article>
+      ` : ""}
+
+      <div class="grid crm-metrics-grid crm-metrics-grid-simple">
         <article class="card crm-metric-card">
           <span class="crm-metric-label">Клиенты</span>
           <strong class="crm-metric-value">${customers.length}</strong>
-        </article>
-        <article class="card crm-metric-card">
-          <span class="crm-metric-label">Продажи</span>
-          <strong class="crm-metric-value">${sales.length}</strong>
-        </article>
-        <article class="card crm-metric-card">
-          <span class="crm-metric-label">Оплаты в этом месяце</span>
-          <strong class="crm-metric-value">${fmt(paidThisMonth)}</strong>
+          <span class="crm-metric-note">База клиентов CRM</span>
         </article>
         <article class="card crm-metric-card">
           <span class="crm-metric-label">Ждут оплаты</span>
           <strong class="crm-metric-value">${escapeHtml(waitingSalesLabel)}</strong>
           <span class="crm-metric-note">${escapeHtml(waitingSalesNote)}</span>
         </article>
-      </div>
-      <div class="crm-overview-grid">
-        <article class="card crm-table-card">
-          <div class="crm-table-head">
-            <div>
-              <h3>Последние продажи</h3>
-              <p class="muted">Свежие сделки, чтобы обзор CRM не был пустым.</p>
-            </div>
-          </div>
-          <div class="crm-overview-list">
-            ${recentSalesMarkup}
-          </div>
-        </article>
-        <article class="card crm-table-card">
-          <div class="crm-table-head">
-            <div>
-              <h3>Последние оплаты</h3>
-              <p class="muted">Последние поступления денег по продажам и их синхронизация с доходами.</p>
-            </div>
-          </div>
-          <div class="crm-overview-list">
-            ${recentPaymentsMarkup}
-          </div>
+        <article class="card crm-metric-card">
+          <span class="crm-metric-label">Оплаты в этом месяце</span>
+          <strong class="crm-metric-value">${fmt(paidThisMonth)}</strong>
+          <span class="crm-metric-note">Эти деньги уже попали в доходы</span>
         </article>
       </div>
-      ${waitingSales.length > 0 ? `
-        <article class="card crm-table-card crm-waiting-card">
-          <div class="crm-table-head">
-            <div>
-              <h3>Ждут оплату</h3>
-              <p class="muted">Здесь только продажи, по которым ещё не пришла полная оплата.</p>
-            </div>
-          </div>
-          <div class="crm-waiting-list">
-            ${waitingListMarkup}
-          </div>
-        </article>
+
+      ${waitingSales.length > 0 || recentCrmActivity.length > 0 ? `
+        <div class="crm-overview-grid crm-overview-grid-simple">
+          ${waitingSales.length > 0 ? `
+            <article class="card crm-table-card crm-focus-card">
+              <div class="crm-table-head">
+                <div>
+                  <h3>Ждут оплаты</h3>
+                  <p class="muted">${overdueSalesCount > 0 ? `Есть просрочки: ${overdueSalesCount}. Остальные продажи можно закрыть по сроку.` : "Здесь только продажи, по которым ещё не пришла полная оплата."}</p>
+                </div>
+              </div>
+              <div class="crm-waiting-list">
+                ${waitingListMarkup}
+              </div>
+            </article>
+          ` : ""}
+          ${recentCrmActivity.length > 0 ? `
+            <article class="card crm-table-card crm-focus-card">
+              <div class="crm-table-head">
+                <div>
+                  <h3>Последняя активность</h3>
+                  <p class="muted">Здесь видно, что происходило недавно: продажи и оплаты в одном списке.</p>
+                </div>
+              </div>
+              <div class="crm-activity-list">
+                ${recentActivityMarkup}
+              </div>
+            </article>
+          ` : ""}
+        </div>
       ` : ""}
     </div>
   `;
 
-  const crmSalesMarkup = `
-    <div class="crm-section-stack">
-      ${effectiveSalesPanel === "sale" ? `
-        <article id="crmSaleForm" class="card crm-form-card crm-sale-form-card">
-          <div class="income-card-head">
-            <div>
-              <h3>${editingSale ? "Редактировать продажу" : "Добавить продажу"}</h3>
-              <p class="muted crm-head-note">Продажа сама не влияет на налоги. В доходы попадают только оплаты.</p>
-            </div>
-            <div class="crm-form-head-actions">
-              ${editingSale ? '<span class="income-edit-chip">режим редактирования</span>' : ""}
-              <button type="button" class="btn btn-ghost btn-xs" data-action="crm-close-sale-form">Скрыть</button>
-            </div>
+  const saleModalMarkup = effectiveSalesPanel === "sale" ? `
+    <div class="crm-modal-backdrop" data-crm-sale-backdrop>
+      <article id="crmSaleModal" class="card crm-table-card crm-sale-modal" role="dialog" aria-modal="true" aria-labelledby="crmSaleModalTitle">
+        <div class="income-card-head">
+          <div>
+            <h3 id="crmSaleModalTitle">${editingSale ? "Редактировать продажу" : "Добавить продажу"}</h3>
+            <p class="muted crm-head-note">Продажа сама не влияет на налоги. В доходы попадают только оплаты.</p>
           </div>
-          <form id="crmSaleFormInner" class="stack-form">
-            <input type="hidden" name="editId" value="${editingSale ? editingSale.id : ""}" />
-            <div class="form-grid-2">
-              <label>Сделка / продажа
-                <input name="title" type="text" value="${escapeHtml(editingSale ? editingSale.title : "")}" placeholder="Например, Продажа партии товара" />
-              </label>
-              <label>Сумма сделки (₸)
-                <input name="amount" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" data-amount-input value="${editingSale ? formatPlainAmount(editingSale.amount) : ""}" required />
-              </label>
-            </div>
-            <div class="form-grid-2">
-              <label>Дата сделки
-                <input name="date" type="date" value="${editingSale ? editingSale.date : new Date().toISOString().slice(0, 10)}" required />
-              </label>
-              <label>Срок оплаты
-                <input name="dueDate" type="date" value="${editingSale ? escapeHtml(editingSale.dueDate || "") : ""}" />
-              </label>
-            </div>
-            <label>Статус сделки
-              <select name="status">
-                ${CRM_SALE_STATUSES.map((item) => `<option value="${item.id}" ${(editingSale ? normalizeCrmSaleStatus(editingSale.status) : "draft") === item.id ? "selected" : ""}>${escapeHtml(item.label)}</option>`).join("")}
-              </select>
-            </label>
+          <div class="crm-form-head-actions">
+            ${editingSale ? '<span class="income-edit-chip">режим редактирования</span>' : ""}
+            <button type="button" class="btn btn-ghost btn-xs" data-action="crm-close-sale-form">Закрыть</button>
+          </div>
+        </div>
+        <form id="crmSaleFormInner" class="stack-form">
+          <input type="hidden" name="editId" value="${editingSale ? editingSale.id : ""}" />
+          <div class="form-grid-2">
             <label>Клиент
               <select name="customerId">
                 <option value="0">Без клиента</option>
                 ${customerOptions}
               </select>
             </label>
-            <p class="crm-inline-note">Можно сохранить продажу без клиента, но с клиентом проще смотреть историю сделок и оплат.</p>
-            <label>Комментарий
-              <input name="note" type="text" value="${escapeHtml(editingSale ? editingSale.note : "")}" placeholder="Например, продажа по договору" />
+            <label>Сумма сделки (₸)
+              <input name="amount" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" data-amount-input value="${editingSale ? formatPlainAmount(editingSale.amount) : ""}" required />
             </label>
-            <div class="income-form-actions">
-              <button type="submit" class="btn btn-primary">${editingSale ? "Сохранить продажу" : "Добавить продажу"}</button>
-              ${editingSale ? '<button type="button" class="btn btn-ghost" data-cancel-crm-sale-edit>Отмена</button>' : ""}
+          </div>
+          <div class="form-grid-2">
+            <label>Дата сделки
+              <input name="date" type="date" value="${editingSale ? editingSale.date : new Date().toISOString().slice(0, 10)}" required />
+            </label>
+            <label>Название продажи
+              <input name="title" type="text" value="${escapeHtml(editingSale ? editingSale.title : "")}" placeholder="Необязательно, можно оставить пустым" />
+            </label>
+          </div>
+          <p class="crm-inline-note">Можно сохранить продажу без клиента, но с клиентом проще смотреть историю сделок и оплат.</p>
+          <details class="crm-advanced-fields">
+            <summary>Дополнительно</summary>
+            <div class="crm-advanced-fields-grid">
+              <label>Срок оплаты
+                <input name="dueDate" type="date" value="${editingSale ? escapeHtml(editingSale.dueDate || "") : ""}" />
+              </label>
+              ${editingSale ? `
+                <label>Статус сделки
+                  <select name="status">
+                    ${CRM_SALE_STATUSES.map((item) => `<option value="${item.id}" ${(editingSale ? normalizeCrmSaleStatus(editingSale.status) : "draft") === item.id ? "selected" : ""}>${escapeHtml(item.label)}</option>`).join("")}
+                  </select>
+                </label>
+              ` : ""}
+              <label class="crm-advanced-fields-full">Комментарий
+                <input name="note" type="text" value="${escapeHtml(editingSale ? editingSale.note : "")}" placeholder="Например, продажа по договору" />
+              </label>
             </div>
-          </form>
-        </article>
-      ` : effectiveSalesPanel === "payment" ? `
+          </details>
+          <div class="income-form-actions">
+            <button type="submit" class="btn btn-primary">${editingSale ? "Сохранить продажу" : "Добавить продажу"}</button>
+            ${editingSale ? '<button type="button" class="btn btn-ghost" data-cancel-crm-sale-edit>Отмена</button>' : '<button type="button" class="btn btn-ghost" data-action="crm-close-sale-form">Отмена</button>'}
+          </div>
+        </form>
+      </article>
+    </div>
+  ` : "";
+
+  const quickSaleModalMarkup = quickSaleCustomer && !editingSale && effectiveSalesPanel !== "sale" ? `
+    <div class="crm-modal-backdrop" data-crm-quick-sale-backdrop>
+      <article id="crmQuickSaleModal" class="card crm-table-card crm-quick-sale-modal" role="dialog" aria-modal="true" aria-labelledby="crmQuickSaleTitle">
+        <div class="crm-table-head">
+          <div>
+            <h3 id="crmQuickSaleTitle">Быстрая продажа</h3>
+            <p class="muted">Клиент уже выбран. Введите сумму и сохраните продажу.</p>
+          </div>
+          <button type="button" class="btn btn-ghost btn-xs" data-action="crm-close-quick-sale">Закрыть</button>
+        </div>
+        <form id="crmQuickSaleFormInner" class="stack-form">
+          <input type="hidden" name="editId" value="" />
+          <input type="hidden" name="customerId" value="${quickSaleCustomer.id}" />
+          <div class="crm-quick-sale-customer">
+            <span class="crm-quick-sale-label">Клиент</span>
+            <strong>${escapeHtml(quickSaleCustomer.name)}</strong>
+            <small>${escapeHtml(quickSaleCustomer.contact || "Контакт не указан")}</small>
+          </div>
+          <div class="form-grid-2">
+            <label>Сумма продажи (₸)
+              <input name="amount" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" data-amount-input required />
+            </label>
+            <label>Дата продажи
+              <input name="date" type="date" value="${new Date().toISOString().slice(0, 10)}" required />
+            </label>
+          </div>
+          <label>Название продажи
+            <input name="title" type="text" value="" placeholder="Необязательно" />
+          </label>
+          <details class="crm-advanced-fields">
+            <summary>Дополнительно</summary>
+            <div class="crm-advanced-fields-grid">
+              <label>Срок оплаты
+                <input name="dueDate" type="date" value="" />
+              </label>
+              <label class="crm-advanced-fields-full">Комментарий
+                <input name="note" type="text" value="" placeholder="Например, предоплата за заказ" />
+              </label>
+            </div>
+          </details>
+          <div class="income-form-actions">
+            <button type="submit" class="btn btn-primary">Сохранить продажу</button>
+            <button type="button" class="btn btn-ghost" data-action="crm-close-quick-sale">Отмена</button>
+          </div>
+        </form>
+      </article>
+    </div>
+  ` : "";
+
+  const crmSalesMarkup = `
+    <div class="crm-section-stack">
+      <article class="card crm-workspace-card">
+        <div class="crm-workspace-head">
+          <div>
+            <h3>Продажи и оплаты</h3>
+            <p class="muted">Сначала добавьте продажу, а когда деньги пришли — отдельно отметьте оплату. Только оплаты попадают в доходы.</p>
+          </div>
+          <div class="crm-toolbar">
+            <button type="button" class="btn btn-primary btn-sm" data-action="crm-open-sale-form">+ Продажа</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-action="crm-open-payment-form">+ Оплата</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-action="crm-open-income">Открыть доходы</button>
+          </div>
+        </div>
+      </article>
+
+      ${effectiveSalesPanel === "payment" ? `
         <article id="crmPaymentForm" class="card crm-form-card crm-payment-form-card">
           <div class="income-card-head">
             <div>
@@ -23763,6 +24057,18 @@ function renderCrmPage() {
 
   const crmClientsMarkup = `
     <div class="crm-section-stack">
+      <article class="card crm-workspace-card">
+        <div class="crm-workspace-head">
+          <div>
+            <h3>Клиенты</h3>
+            <p class="muted">Сохраняйте здесь клиентов и контакты. Потом их можно быстро выбрать при добавлении продажи или оплаты.</p>
+          </div>
+          <div class="crm-toolbar">
+            <button type="button" class="btn btn-primary btn-sm" data-action="crm-open-customer-form">+ Клиент</button>
+          </div>
+        </div>
+      </article>
+
       ${isCustomerFormOpen ? `
         <article id="crmCustomerForm" class="card crm-form-card crm-customer-form-card">
           <div class="income-card-head">
@@ -23828,29 +24134,26 @@ function renderCrmPage() {
 
   els.pageContent.innerHTML = `
     <section class="crm-page crm-user-page">
-      <article class="card crm-hero-card">
-        <div class="crm-hero-top">
-          <div>
-            <h1 class="crm-title">CRM</h1>
-            <p class="crm-subtitle">Отмечайте реальные оплаты в CRM — они сразу попадают в доходы, а налоги пересчитываются автоматически.</p>
-          </div>
-        </div>
-        <div class="crm-logic-row">
-          <span class="crm-logic-pill is-success">CRM → Доходы → Налоги</span>
-        </div>
-      </article>
-
-      <div class="crm-nav-row crm-tabs" role="navigation" aria-label="Управление CRM">
+      <div class="crm-nav-row crm-tabs" role="navigation" aria-label="Разделы CRM">
         ${crmNavButtonsMarkup}
       </div>
 
       ${crmBodyMarkup}
+      ${saleModalMarkup}
+      ${quickSaleModalMarkup}
       ${customerCardMarkup}
     </section>
   `;
 
   if (window.lucide && typeof window.lucide.createIcons === "function") {
     window.lucide.createIcons();
+  }
+  const saleAmountInput = els.pageContent.querySelector('#crmSaleFormInner [name="amount"], #crmQuickSaleFormInner [name="amount"]');
+  if (saleAmountInput instanceof HTMLInputElement) {
+    window.requestAnimationFrame(() => {
+      saleAmountInput.focus();
+      saleAmountInput.select();
+    });
   }
   els.pageContent.querySelectorAll("[data-crm-tab]").forEach((btn) => {
     btn.addEventListener("click", (event) => {
@@ -23863,7 +24166,7 @@ function renderCrmPage() {
     btn.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      setCrmSalesPanel("sale", "crmSaleForm");
+      setCrmSalesPanel("sale");
     });
   });
   els.pageContent.querySelectorAll('[data-action="crm-open-payment-form"]').forEach((btn) => {
@@ -23880,14 +24183,53 @@ function renderCrmPage() {
       setCrmCustomerFormOpen(true, "crmCustomerForm");
     });
   });
+  els.pageContent.querySelectorAll('[data-action="crm-prefill-sale"]').forEach((btn) => {
+    btn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      prefillCrmSale(btn.dataset.customerId);
+    });
+  });
+  els.pageContent.querySelectorAll('[data-action="crm-close-quick-sale"]').forEach((btn) => {
+    btn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      closeCrmQuickSale();
+    });
+  });
+  const quickSaleBackdrop = els.pageContent.querySelector("[data-crm-quick-sale-backdrop]");
+  if (quickSaleBackdrop instanceof HTMLElement) {
+    quickSaleBackdrop.addEventListener("click", (event) => {
+      if (event.target !== quickSaleBackdrop) {
+        return;
+      }
+      closeCrmQuickSale();
+    });
+  }
+  els.pageContent.querySelectorAll(".crm-quick-sale-modal").forEach((panel) => {
+    panel.addEventListener("click", (event) => {
+      event.stopPropagation();
+    });
+  });
   els.pageContent.querySelectorAll('[data-action="crm-close-sale-form"]').forEach((btn) => {
     btn.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      state.crmSalesPanel = "";
-      state.crmSaleEditId = null;
-      saveState();
-      renderDashboard();
+      closeCrmSaleComposer();
+    });
+  });
+  const saleBackdrop = els.pageContent.querySelector("[data-crm-sale-backdrop]");
+  if (saleBackdrop instanceof HTMLElement) {
+    saleBackdrop.addEventListener("click", (event) => {
+      if (event.target !== saleBackdrop) {
+        return;
+      }
+      closeCrmSaleComposer();
+    });
+  }
+  els.pageContent.querySelectorAll(".crm-sale-modal").forEach((panel) => {
+    panel.addEventListener("click", (event) => {
+      event.stopPropagation();
     });
   });
   els.pageContent.querySelectorAll('[data-action="crm-close-payment-form"]').forEach((btn) => {
@@ -24137,6 +24479,7 @@ function updateSettingsIpnVisibility(regime = state.regime) {
 function getSettingsFormValues(form) {
   if (!(form instanceof HTMLFormElement)) {
     return {
+      regime: ["self", "simplified", "our"].includes(state.regime) ? state.regime : "simplified",
       name: String(state.profile.name || "").trim(),
       iin: String(state.profile.iin || "").trim(),
       city: String(state.profile.city || "").trim(),
@@ -24155,6 +24498,8 @@ function getSettingsFormValues(form) {
   const activityField = form.querySelector('[name="activity"]');
   const selfActivityField = form.querySelector('[name="selfActivity"]');
   const simplifiedRateField = form.querySelector('[name="simplifiedRate"]');
+  const rawRegimeValue = String(fd.get("regime") || state.regime || "simplified").trim();
+  const nextRegime = ["self", "simplified", "our"].includes(rawRegimeValue) ? rawRegimeValue : (["self", "simplified", "our"].includes(state.regime) ? state.regime : "simplified");
   const rawSimplifiedRateValue = simplifiedRateField ? String(fd.get("simplifiedRate") || "") : "";
   const simplifiedRateMode = rawSimplifiedRateValue === "auto" ? "auto" : "manual";
   let iin = String(fd.get("iin") || "").trim();
@@ -24166,6 +24511,7 @@ function getSettingsFormValues(form) {
   }
 
   return {
+    regime: nextRegime,
     name: String(fd.get("name") || "").trim(),
     iin,
     city: String(fd.get("city") || "").trim(),
@@ -24184,6 +24530,12 @@ function getSettingsFormValues(form) {
       : normalizeProfileSimplifiedRate(state.profile.simplifiedRate),
     selfSocialIncomeBase: ""
   };
+}
+
+function hasSettingsRegimeChange(nextValues) {
+  const nextRegime = String(nextValues.regime || state.regime || "simplified").trim();
+  const currentRegime = String(state.regime || "simplified").trim();
+  return nextRegime !== currentRegime;
 }
 
 function hasSettingsProfileChanges(nextValues) {
@@ -24207,7 +24559,7 @@ function updateSettingsSaveButtonState(form) {
   if (!(saveBtn instanceof HTMLButtonElement)) return;
 
   const nextValues = getSettingsFormValues(form);
-  const changed = hasSettingsProfileChanges(nextValues);
+  const changed = hasSettingsProfileChanges(nextValues) || hasSettingsRegimeChange(nextValues);
   saveBtn.disabled = !changed;
 }
 
@@ -24268,6 +24620,11 @@ function renderSettingsPage() {
     `<option value="0.04" ${profileRateMode === "manual" && profileRateOverride === 0.04 ? "selected" : ""}>4% (стандарт)</option>`,
     `<option value="0.05" ${profileRateMode === "manual" && profileRateOverride === 0.05 ? "selected" : ""}>5%</option>`,
     `<option value="0.06" ${profileRateMode === "manual" && profileRateOverride === 0.06 ? "selected" : ""}>6%</option>`
+  ].join("");
+  const settingsRegimeOptions = [
+    `<option value="simplified" ${state.regime === "simplified" ? "selected" : ""}>Упрощенка (910)</option>`,
+    `<option value="self" ${state.regime === "self" ? "selected" : ""}>Самозанятый</option>`,
+    `<option value="our" ${state.regime === "our" ? "selected" : ""}>ОУР (скоро)</option>`
   ].join("");
   const normalizedSelfActivity = normalizeSelfActivityChoice(state.profile.selfActivity);
   const profileSelfActivityStatus = getProfileSelfActivityStatus(normalizedSelfActivity);
@@ -24339,6 +24696,17 @@ function renderSettingsPage() {
       <article class="card">
         <h3>${isSelfRegime ? "Профиль самозанятого" : "Профиль ИП"}</h3>
         <form id="settingsForm" class="stack-form">
+          <div class="settings-regime-setting">
+            <label>Налоговый режим
+              <select name="regime">
+                ${settingsRegimeOptions}
+              </select>
+            </label>
+            <div class="settings-hint">
+              <i data-lucide="info" style="width:13px;height:13px;color:#F59E0B;flex-shrink:0;margin-top:1px" aria-hidden="true"></i>
+              <span>Меняйте режим только если действительно переходите на другой сценарий работы. После сохранения сервис пересчитает налоги, сроки, подсказки и обновит доступные поля ниже.</span>
+            </div>
+          </div>
           <label>${isSelfRegime ? "Имя" : "ФИО / Наименование"}<input name="name" type="text" value="${escapeHtml(state.profile.name)}" placeholder="${isSelfRegime ? "Введите ваше имя" : "Введите ваше имя или название ИП"}" /></label>
           <label>${isSelfRegime ? "ИИН" : "БИН/ИИН"}
             <input id="settingsIinInput" name="iin" type="text" value="${escapeHtml(maskedIin)}" data-full="${escapeHtml(state.profile.iin)}" data-masked="${escapeHtml(maskedIin)}" data-revealed="false" autocomplete="off" placeholder="${isSelfRegime ? "Введите ИИН" : "Введите БИН/ИИН"}" />
@@ -24406,6 +24774,20 @@ function renderSettingsPage() {
         <button type="button" class="tour-restart-btn" data-action="reset-onboarding-tour">Показать тур ещё раз</button>
       </div>
     </article>
+
+    <div class="settings-legal-inline mt-16" aria-label="Документы">
+      <span class="settings-legal-label">Документы</span>
+      <div class="settings-legal-links-inline">
+        <a class="settings-legal-link-minimal" href="/privacy-policy.html" target="_blank" rel="noopener noreferrer">
+          <i data-lucide="shield-check" aria-hidden="true"></i>
+          <span>Политика конфиденциальности</span>
+        </a>
+        <a class="settings-legal-link-minimal" href="/terms-of-service.html" target="_blank" rel="noopener noreferrer">
+          <i data-lucide="file-text" aria-hidden="true"></i>
+          <span>Пользовательское соглашение</span>
+        </a>
+      </div>
+    </div>
   `;
 
   if (window.lucide && typeof window.lucide.createIcons === "function") {

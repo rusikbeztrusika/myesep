@@ -30,7 +30,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Montserrat:wght@600;700;800&family=Rubik:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=20260414-income-cta-fix-v1" />
+  <link rel="stylesheet" href="./styles.css?v=20260421-calendar-density-v2" />
 </head>
 <body>
   <div id="publicApp" class="public-app">
@@ -334,7 +334,6 @@
     <aside class="sidebar">
       <div class="sidebar-brand">
         <div class="logo" data-action="go-home" role="button" tabindex="0" aria-label="Перейти на главную">MyEsep<span>.kz</span></div>
-        <p>Казахстан · 2026</p>
       </div>
 
       <nav id="sidebarNav" class="sidebar-nav">
@@ -359,7 +358,7 @@
 
         <div class="sidebar-group">
           <p class="sidebar-group-title">Помощник</p>
-          <button data-page="assistant"><i class="nav-icon" data-lucide="sparkles"></i><span>E-бухгалтер</span></button>
+          <button data-page="assistant"><i class="nav-icon" data-lucide="bot"></i><span>E-бухгалтер</span></button>
         </div>
 
         <div class="sidebar-group">
@@ -376,10 +375,6 @@
           <strong id="accountName">Demo User</strong>
           <span id="planBadge"><span class="plan-badge plan-trial">Базовый</span></span>
           <div id="sidebarBetaBanner" class="sidebar-beta-banner hidden"></div>
-        </div>
-        <div class="sidebar-legal-links">
-          <a href="/privacy-policy.html" target="_blank" rel="noopener noreferrer">Политика конфиденциальности</a>
-          <a href="/terms-of-service.html" target="_blank" rel="noopener noreferrer">Пользовательское соглашение</a>
         </div>
       </div>
     </aside>
@@ -411,11 +406,10 @@
               <i class="calendar-reminder-settings-icon" data-lucide="settings-2" aria-hidden="true"></i>
             </button>
           </div>
-          <select id="regimeSelect">
-            <option value="self">Самозанятый</option>
-            <option value="simplified">Упрощенка (910)</option>
-            <option value="our">ОУР</option>
-          </select>
+          <div id="headerRegimeStatus" class="header-regime-status" aria-label="Текущий налоговый режим">
+            <span class="header-regime-status-label">Режим</span>
+            <span id="headerRegimeStatusValue" class="header-regime-status-value">Упрощенка (910)</span>
+          </div>
           <button id="proBtn" class="btn btn-pro" data-action="open-pro">Pro</button>
           <button class="btn btn-ghost" data-action="logout">Выйти</button>
         </div>
@@ -437,11 +431,8 @@
       </button>
       <div class="mobile-drawer-regime-wrap">
         <div class="mobile-drawer-regime-label">Налоговый режим</div>
-        <div class="mobile-drawer-regime-tabs" role="tablist" aria-label="Выбор налогового режима">
-          <button type="button" class="mobile-drawer-regime-btn" data-action="mobile-drawer-set-regime" data-regime="self" role="tab" aria-pressed="false">Самозанятый</button>
-          <button type="button" class="mobile-drawer-regime-btn" data-action="mobile-drawer-set-regime" data-regime="simplified" role="tab" aria-pressed="false">Упрощёнка</button>
-          <button type="button" class="mobile-drawer-regime-btn" data-action="mobile-drawer-set-regime" data-regime="our" role="tab" aria-pressed="false">ОУР</button>
-        </div>
+        <div id="mobileDrawerRegimeValue" class="mobile-drawer-regime-value">Упрощенка (910)</div>
+        <button type="button" class="mobile-drawer-regime-link" data-page="settings">Изменить в настройках</button>
       </div>
       <div class="mobile-drawer-reminders-wrap">
         <div id="mobileDrawerReminderToggle" class="calendar-reminder-toggle hidden" title="Напоминания">
@@ -494,7 +485,7 @@
 
         <p class="mobile-drawer-group-title">Помощник</p>
         <button type="button" class="mobile-drawer-item" data-page="assistant">
-          <span class="mobile-drawer-item-main"><i class="mobile-drawer-item-icon" data-lucide="sparkles"></i><span>E-бухгалтер</span></span>
+          <span class="mobile-drawer-item-main"><i class="mobile-drawer-item-icon" data-lucide="bot"></i><span>E-бухгалтер</span></span>
           <span class="mobile-drawer-item-arrow">›</span>
         </button>
 
@@ -518,10 +509,6 @@
           <i class="mobile-drawer-item-icon" data-lucide="log-out"></i>
           <span>Выйти</span>
         </button>
-      </div>
-      <div class="mobile-drawer-links">
-        <a href="/privacy-policy.html" target="_blank" rel="noopener noreferrer">Политика конфиденциальности</a>
-        <a href="/terms-of-service.html" target="_blank" rel="noopener noreferrer">Пользовательское соглашение</a>
       </div>
     </aside>
 
@@ -1088,7 +1075,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./config.js"></script>
-  <script src="./app.js?v=20260414-income-cta-fix-v1" defer></script>
+  <script src="./app.js?v=20260421-calendar-density-v2" defer></script>
   <!-- Yandex.Metrika counter -->
   <script type="text/javascript">
     (function(m,e,t,r,i,k,a){
