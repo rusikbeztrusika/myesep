@@ -2937,12 +2937,18 @@ function buildCrmIncomeRow(payment, sales = state.crmSales, customers = state.cr
   const customer = sale ? getCrmCustomerById(sale.customerId, customers) : null;
   const safeTitle = String(sale && sale.title || "").trim() || "Продажа";
   const safeCustomerName = customer ? customer.name : "";
-  const commentParts = [safeCustomerName, safeTitle].filter(Boolean);
+  const commentParts = [];
+  if (safeTitle) {
+    commentParts.push(`Продажа: ${safeTitle}`);
+  }
+  if (safeCustomerName && safeCustomerName !== safeTitle) {
+    commentParts.push(`Клиент: ${safeCustomerName}`);
+  }
   return {
     id: incomeId,
     amount: normalizeIncome(payment.amount),
     date: String(payment.date || "").trim(),
-    category: "Продажа",
+    category: "Оплата",
     comment: commentParts.join(" · "),
     source: CRM_INCOME_SOURCE,
     sourceId: String(payment.id)
@@ -5418,7 +5424,6 @@ function startCrmCustomerEdit(customerId) {
   state.crmCustomerEditId = safeCustomerId;
   state.crmSelectedCustomerId = null;
   state.crmCustomerFormOpen = true;
-  queueCrmScrollTo("crmCustomerForm");
   saveState();
   renderDashboard();
   trackEvent("crm_customer_edit_open", { id: safeCustomerId });
@@ -5531,6 +5536,27 @@ function closeCrmSaleComposer() {
   renderDashboard();
 }
 
+function closeCrmPaymentComposer() {
+  if (state.page !== "crm") {
+    return;
+  }
+  state.crmSalesPanel = "";
+  state.crmPaymentEditId = null;
+  state.crmPaymentDraftSaleId = null;
+  saveState();
+  renderDashboard();
+}
+
+function closeCrmCustomerComposer() {
+  if (state.page !== "crm") {
+    return;
+  }
+  state.crmCustomerFormOpen = false;
+  state.crmCustomerEditId = null;
+  saveState();
+  renderDashboard();
+}
+
 function deleteCrmSale(saleId) {
   const safeSaleId = Number(saleId || 0) || 0;
   if (!safeSaleId || state.page !== "crm") {
@@ -5578,7 +5604,6 @@ function startCrmPaymentEdit(paymentId) {
   state.crmPaymentEditId = safePaymentId;
   state.crmSaleDraftCustomerId = null;
   state.crmPaymentDraftSaleId = null;
-  queueCrmScrollTo("crmPaymentForm");
   saveState();
   renderDashboard();
   trackEvent("crm_payment_edit_open", { id: safePaymentId });
@@ -5594,7 +5619,6 @@ function prefillCrmPayment(saleId) {
   state.crmSalesPanel = "payment";
   state.crmPaymentDraftSaleId = safeSaleId;
   state.crmPaymentEditId = null;
-  queueCrmScrollTo("crmPaymentForm");
   saveState();
   renderDashboard();
   trackEvent("crm_payment_prefill", { saleId: safeSaleId });
@@ -7405,12 +7429,12 @@ function handleGlobalClick(event) {
     }
 
     if (action === "crm-open-payment-form" && state.page === "crm") {
-      setCrmSalesPanel("payment", "crmPaymentForm");
+      setCrmSalesPanel("payment");
       return;
     }
 
     if (action === "crm-open-customer-form" && state.page === "crm") {
-      setCrmCustomerFormOpen(true, "crmCustomerForm");
+      setCrmCustomerFormOpen(true);
       return;
     }
 
@@ -7420,19 +7444,12 @@ function handleGlobalClick(event) {
     }
 
     if (action === "crm-close-payment-form" && state.page === "crm") {
-      state.crmSalesPanel = "";
-      state.crmPaymentEditId = null;
-      state.crmPaymentDraftSaleId = null;
-      saveState();
-      renderDashboard();
+      closeCrmPaymentComposer();
       return;
     }
 
     if (action === "crm-close-customer-form" && state.page === "crm") {
-      state.crmCustomerFormOpen = false;
-      state.crmCustomerEditId = null;
-      saveState();
-      renderDashboard();
+      closeCrmCustomerComposer();
       return;
     }
 
@@ -7480,7 +7497,6 @@ function handleGlobalClick(event) {
   if (editCrmCustomerBtn && state.page === "crm") {
     state.crmCustomerEditId = Number(editCrmCustomerBtn.dataset.editCrmCustomer || 0) || null;
     state.crmCustomerFormOpen = true;
-    queueCrmScrollTo("crmCustomerForm");
     saveState();
     renderDashboard();
     trackEvent("crm_customer_edit_open", { id: state.crmCustomerEditId || 0 });
@@ -7507,10 +7523,7 @@ function handleGlobalClick(event) {
 
   const cancelCrmCustomerEditBtn = event.target.closest("[data-cancel-crm-customer-edit]");
   if (cancelCrmCustomerEditBtn && state.page === "crm") {
-    state.crmCustomerEditId = null;
-    state.crmCustomerFormOpen = false;
-    saveState();
-    renderDashboard();
+    closeCrmCustomerComposer();
     trackEvent("crm_customer_edit_cancel");
     return;
   }
@@ -7604,7 +7617,6 @@ function handleGlobalClick(event) {
     state.crmPaymentEditId = Number(editCrmPaymentBtn.dataset.editCrmPayment || 0) || null;
     state.crmSalesPanel = "payment";
     state.crmPaymentDraftSaleId = null;
-    queueCrmScrollTo("crmPaymentForm");
     saveState();
     renderDashboard();
     trackEvent("crm_payment_edit_open", { id: state.crmPaymentEditId || 0 });
@@ -7613,11 +7625,7 @@ function handleGlobalClick(event) {
 
   const cancelCrmPaymentEditBtn = event.target.closest("[data-cancel-crm-payment-edit]");
   if (cancelCrmPaymentEditBtn && state.page === "crm") {
-    state.crmPaymentEditId = null;
-    state.crmPaymentDraftSaleId = null;
-    state.crmSalesPanel = "";
-    saveState();
-    renderDashboard();
+    closeCrmPaymentComposer();
     trackEvent("crm_payment_edit_cancel");
     return;
   }
@@ -17112,10 +17120,18 @@ function handleGlobalKeyDown(event) {
     return;
   }
 
-  if (event.key === "Escape" && state.page === "crm" && (state.crmSaleDraftCustomerId || state.crmSalesPanel === "sale")) {
+  if (event.key === "Escape" && state.page === "crm" && (state.crmSaleDraftCustomerId || state.crmSalesPanel === "sale" || state.crmSalesPanel === "payment" || state.crmCustomerFormOpen || state.crmCustomerEditId || state.crmSelectedCustomerId)) {
     event.preventDefault();
     if (state.crmSalesPanel === "sale") {
       closeCrmSaleComposer();
+    } else if (state.crmSalesPanel === "payment") {
+      closeCrmPaymentComposer();
+    } else if (state.crmCustomerFormOpen || state.crmCustomerEditId) {
+      closeCrmCustomerComposer();
+    } else if (state.crmSelectedCustomerId) {
+      state.crmSelectedCustomerId = null;
+      saveState();
+      renderDashboard();
     } else {
       closeCrmQuickSale();
     }
@@ -19194,6 +19210,7 @@ function getIncomeCategoryToneClass(category) {
   const normalized = String(category || "").trim().toLowerCase();
 
   if (normalized.includes("аренд")) return "cat-pill-rent";
+  if (normalized.includes("оплат")) return "cat-pill-sales";
   if (normalized.includes("продаж") || normalized.includes("товар")) return "cat-pill-sales";
   if (normalized.includes("комисс")) return "cat-pill-commission";
   if (normalized.includes("услуг")) return "cat-pill-services";
@@ -23242,12 +23259,14 @@ function renderCrmPage() {
   });
 
   const now = new Date();
-  const paidThisMonth = payments
+  const paymentsThisMonth = payments
     .filter((row) => {
       const date = new Date(row.date);
       return !Number.isNaN(date.getTime()) && date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
-    })
-    .reduce((sum, row) => sum + Number(row.amount || 0), 0);
+    });
+  const paidThisMonth = paymentsThisMonth.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  const activeSales = sales.filter((sale) => normalizeCrmSaleStatus(sale.status) !== "cancelled");
+  const salesTotalAmount = activeSales.reduce((sum, sale) => sum + Number(sale.amount || 0), 0);
   const waitingAmount = sales.reduce((sum, sale) => {
     const summary = saleSummaries.get(sale.id);
     if (!summary || normalizeCrmSaleStatus(sale.status) === "cancelled") {
@@ -23334,11 +23353,17 @@ function renderCrmPage() {
     const linkedVisible = linkedSales.some((sale) => filteredSaleIds.has(sale.id));
     return directMatch && (crmStatus === "all" ? true : linkedVisible || linkedSales.length === 0);
   });
+  const customersWithSalesCount = customers.filter((customer) => sales.some((sale) => Number(sale.customerId || 0) === customer.id)).length;
+  const customersWithoutSalesCount = Math.max(0, customers.length - customersWithSalesCount);
+  const totalCustomerPaid = payments.reduce((sum, row) => sum + Number(row.amount || 0), 0);
 
   const customerRows = filteredCustomers.length > 0
     ? filteredCustomers.map((customer) => {
         const linkedSales = sales.filter((sale) => Number(sale.customerId || 0) === customer.id);
         const paidTotal = linkedSales.reduce((sum, sale) => sum + Number((saleSummaries.get(sale.id) || {}).paidTotal || 0), 0);
+        const lastSale = linkedSales.length > 0
+          ? linkedSales.slice().sort((left, right) => new Date(right.date) - new Date(left.date))[0]
+          : null;
         const isActive = selectedCustomer && customer.id === selectedCustomer.id;
         return `
           <tr>
@@ -23348,7 +23373,12 @@ function renderCrmPage() {
                 <small>${escapeHtml(customer.contact || "Контакт не указан")}</small>
               </div>
             </td>
-            <td>${linkedSales.length}</td>
+            <td>
+              <div class="crm-customer-sales-cell">
+                <strong>${linkedSales.length}</strong>
+                <small>${lastSale ? `последняя ${formatDate(lastSale.date)}` : "Продаж пока нет"}</small>
+              </div>
+            </td>
             <td>${fmt(paidTotal)}</td>
             <td class="income-row-actions">
               <button type="button" class="btn btn-ghost btn-xs crm-row-action-sale" data-action="crm-prefill-sale" data-customer-id="${customer.id}" aria-label="Добавить продажу" title="Добавить продажу">
@@ -23383,6 +23413,7 @@ function renderCrmPage() {
         const paidTotal = Number(summary.paidTotal || 0);
         const remaining = Number(summary.remaining || 0);
         const salePayments = Array.isArray(summary.salePayments) ? summary.salePayments : [];
+        const canAddPayment = remaining > 0 && normalizeCrmSaleStatus(sale.status) !== "cancelled";
         return `
           <tr>
             <td>
@@ -23398,6 +23429,12 @@ function renderCrmPage() {
             <td>${fmt(remaining)}</td>
             <td>${salePayments.length > 0 ? `<span class="crm-sync-badge">${salePayments.length} ${pluralizeRu(salePayments.length, "оплата", "оплаты", "оплат")}</span>` : '<span class="crm-sync-badge crm-sync-badge-muted">Нет оплат</span>'}</td>
             <td class="income-row-actions">
+              ${canAddPayment ? `
+                <button type="button" class="btn btn-ghost btn-xs crm-row-action-payment" data-action="crm-prefill-payment" data-sale-id="${sale.id}" aria-label="Добавить оплату по продаже" title="Добавить оплату">
+                  <i data-lucide="wallet" class="income-action-icon" aria-hidden="true"></i>
+                  <span>Оплата</span>
+                </button>
+              ` : ""}
               <button type="button" class="icon-action-btn icon-edit" data-action="crm-edit-sale" data-sale-id="${sale.id}" data-edit-crm-sale="${sale.id}" aria-label="Изменить продажу" title="Изменить">
                 <i data-lucide="pencil" class="income-action-icon" aria-hidden="true"></i>
               </button>
@@ -23474,17 +23511,18 @@ function renderCrmPage() {
                 <strong>${escapeHtml(sale.title || "Продажа")}</strong>
                 <small>${escapeHtml(customer ? customer.name : "Без клиента")} · сделка ${formatDate(sale.date)}${sale.dueDate ? ` · срок оплаты ${formatDate(sale.dueDate)}` : ""}</small>
               </div>
-              <div class="crm-waiting-badges">
-                <span class="crm-status-badge ${paymentMeta.className}">${escapeHtml(paymentMeta.label)}</span>
-                <span class="crm-sync-badge crm-sync-badge-muted">Осталось ${fmt(summary.remaining || 0)}</span>
+              <div class="crm-waiting-amount">
+                <span>Осталось</span>
+                <strong>${fmt(summary.remaining || 0)}</strong>
               </div>
             </div>
-            <div class="crm-waiting-meta">
+            <div class="crm-waiting-meta-row">
+              <span class="crm-status-badge ${paymentMeta.className}">${escapeHtml(paymentMeta.label)}</span>
               <span>Сумма сделки: <strong>${fmt(sale.amount)}</strong></span>
               <span>Уже оплачено: <strong>${fmt(summary.paidTotal || 0)}</strong></span>
             </div>
             <div class="crm-waiting-actions">
-              <button type="button" class="btn btn-ghost btn-xs" data-action="crm-prefill-payment" data-sale-id="${sale.id}">Добавить оплату</button>
+              <button type="button" class="btn btn-primary btn-xs" data-action="crm-prefill-payment" data-sale-id="${sale.id}">Добавить оплату</button>
             </div>
           </div>
         `;
@@ -23622,6 +23660,8 @@ function renderCrmPage() {
           </div>
           <div class="crm-customer-meta-row">
             <span class="crm-sync-badge ${lastPayment ? "" : "crm-sync-badge-muted"}">${lastPayment ? `Последняя оплата: ${formatDate(lastPayment.date)}` : "Оплат пока не было"}</span>
+            <button type="button" class="btn btn-primary btn-xs" data-action="crm-prefill-sale" data-customer-id="${selectedCustomer.id}">Добавить продажу</button>
+            <button type="button" class="btn btn-ghost btn-xs" data-action="crm-edit-customer" data-customer-id="${selectedCustomer.id}">Изменить клиента</button>
           </div>
           <div class="table-wrap crm-table-wrap">
             <table class="table crm-table">
@@ -23658,23 +23698,30 @@ function renderCrmPage() {
     { id: "payment", label: "Оплата", done: payments.length > 0 }
   ];
   const crmSetupCompletedCount = crmSetupSteps.filter((step) => step.done).length;
+  const crmSetupProgressPercent = Math.round((crmSetupCompletedCount / crmSetupSteps.length) * 100);
   const showCrmStartGuide = payments.length === 0 && customers.length === 0 && sales.length === 0;
   const showCrmSetupProgress = payments.length === 0 && !showCrmStartGuide;
   let crmNextStepAction = "crm-open-payment-form";
   let crmNextStepLabel = "Добавить оплату";
   let crmNextStepTitle = "Остался последний шаг";
   let crmNextStepDescription = "Отметьте первую оплату, и она сразу попадёт в доходы.";
+  let crmNextStepIcon = "wallet";
+  let crmNextStepHint = "После оплаты сумма появится в доходах и налогах.";
 
   if (customers.length === 0) {
     crmNextStepAction = "crm-open-customer-form";
     crmNextStepLabel = "Добавить клиента";
     crmNextStepTitle = "Начните с клиента";
     crmNextStepDescription = "Сначала сохраните клиента, чтобы потом было проще привязать к нему продажу.";
+    crmNextStepIcon = "user-plus";
+    crmNextStepHint = "Достаточно имени, телефон можно добавить позже.";
   } else if (sales.length === 0) {
     crmNextStepAction = "crm-open-sale-form";
     crmNextStepLabel = "Добавить продажу";
     crmNextStepTitle = "Следующий шаг — продажа";
     crmNextStepDescription = "Клиент уже есть. Теперь добавьте первую продажу и сумму, которую вам должны оплатить.";
+    crmNextStepIcon = "briefcase";
+    crmNextStepHint = "Продажа сама не влияет на налоги, пока нет оплаты.";
   }
 
   const crmNavButtonsMarkup = `
@@ -23741,38 +23788,61 @@ function renderCrmPage() {
       ` : showCrmSetupProgress ? `
         <article class="card crm-progress-card">
           <div class="crm-progress-head">
-            <div>
+            <div class="crm-progress-main">
+              <span class="crm-progress-kicker">CRM почти готова</span>
               <h3>${escapeHtml(crmNextStepTitle)}</h3>
-              <p class="muted">Вы уже заполнили ${crmSetupCompletedCount} из 3 шагов. ${escapeHtml(crmNextStepDescription)}</p>
+              <p class="muted">${escapeHtml(crmNextStepDescription)}</p>
+              <div class="crm-progress-track" aria-hidden="true">
+                <span style="width: ${crmSetupProgressPercent}%"></span>
+              </div>
+              <div class="crm-progress-pills" aria-label="Прогресс настройки CRM">
+                ${crmSetupSteps.map((step, index) => `
+                  <span class="crm-progress-pill ${step.done ? "is-done" : "is-pending"}">
+                    ${index + 1}. ${escapeHtml(step.label)}
+                  </span>
+                `).join("")}
+              </div>
             </div>
-            <span class="crm-progress-badge">${crmSetupCompletedCount}/3</span>
-          </div>
-          <div class="crm-progress-pills" aria-label="Прогресс настройки CRM">
-            ${crmSetupSteps.map((step, index) => `
-              <span class="crm-progress-pill ${step.done ? "is-done" : "is-pending"}">
-                ${index + 1}. ${escapeHtml(step.label)}
+            <div class="crm-progress-action-panel">
+              <span class="crm-progress-badge">${crmSetupCompletedCount}/3</span>
+              <span class="crm-progress-action-icon">
+                <i data-lucide="${crmNextStepIcon}" class="crm-progress-action-icon-svg" aria-hidden="true"></i>
               </span>
-            `).join("")}
-          </div>
-          <div class="crm-progress-actions">
-            <button type="button" class="btn btn-primary btn-sm" data-action="${crmNextStepAction}">${escapeHtml(crmNextStepLabel)}</button>
+              <button type="button" class="btn btn-primary btn-sm" data-action="${crmNextStepAction}">${escapeHtml(crmNextStepLabel)}</button>
+              <small>${escapeHtml(crmNextStepHint)}</small>
+            </div>
           </div>
         </article>
       ` : ""}
 
       <div class="grid crm-metrics-grid crm-metrics-grid-simple">
-        <article class="card crm-metric-card">
-          <span class="crm-metric-label">Клиенты</span>
+        <article class="card crm-metric-card crm-metric-card-clients">
+          <div class="crm-metric-head">
+            <span class="crm-metric-icon">
+              <i data-lucide="users" class="crm-metric-icon-svg" aria-hidden="true"></i>
+            </span>
+            <span class="crm-metric-label">Клиенты</span>
+          </div>
           <strong class="crm-metric-value">${customers.length}</strong>
           <span class="crm-metric-note">База клиентов CRM</span>
         </article>
-        <article class="card crm-metric-card">
-          <span class="crm-metric-label">Ждут оплаты</span>
+        <article class="card crm-metric-card crm-metric-card-waiting">
+          <div class="crm-metric-head">
+            <span class="crm-metric-icon">
+              <i data-lucide="clock" class="crm-metric-icon-svg" aria-hidden="true"></i>
+            </span>
+            <span class="crm-metric-label">Ждут оплаты</span>
+          </div>
           <strong class="crm-metric-value">${escapeHtml(waitingSalesLabel)}</strong>
           <span class="crm-metric-note">${escapeHtml(waitingSalesNote)}</span>
         </article>
-        <article class="card crm-metric-card">
-          <span class="crm-metric-label">Оплаты в этом месяце</span>
+        <article class="card crm-metric-card crm-metric-card-paid">
+          <div class="crm-metric-head">
+            <span class="crm-metric-icon">
+              <i data-lucide="credit-card" class="crm-metric-icon-svg" aria-hidden="true"></i>
+            </span>
+            <span class="crm-metric-label">Оплаты в этом месяце</span>
+          </div>
           <strong class="crm-metric-value">${fmt(paidThisMonth)}</strong>
           <span class="crm-metric-note">Эти деньги уже попали в доходы</span>
         </article>
@@ -23782,11 +23852,12 @@ function renderCrmPage() {
         <div class="crm-overview-grid crm-overview-grid-simple">
           ${waitingSales.length > 0 ? `
             <article class="card crm-table-card crm-focus-card">
-              <div class="crm-table-head">
+              <div class="crm-table-head crm-focus-head">
                 <div>
                   <h3>Ждут оплаты</h3>
                   <p class="muted">${overdueSalesCount > 0 ? `Есть просрочки: ${overdueSalesCount}. Остальные продажи можно закрыть по сроку.` : "Здесь только продажи, по которым ещё не пришла полная оплата."}</p>
                 </div>
+                <span class="crm-section-badge">К действию</span>
               </div>
               <div class="crm-waiting-list">
                 ${waitingListMarkup}
@@ -23795,11 +23866,12 @@ function renderCrmPage() {
           ` : ""}
           ${recentCrmActivity.length > 0 ? `
             <article class="card crm-table-card crm-focus-card">
-              <div class="crm-table-head">
+              <div class="crm-table-head crm-focus-head">
                 <div>
                   <h3>Последняя активность</h3>
                   <p class="muted">Здесь видно, что происходило недавно: продажи и оплаты в одном списке.</p>
                 </div>
+                <span class="crm-section-badge crm-section-badge-muted">История</span>
               </div>
               <div class="crm-activity-list">
                 ${recentActivityMarkup}
@@ -23922,68 +23994,109 @@ function renderCrmPage() {
     </div>
   ` : "";
 
+  const paymentModalMarkup = effectiveSalesPanel === "payment" ? `
+    <div class="crm-modal-backdrop" data-crm-payment-backdrop>
+      <article id="crmPaymentForm" class="card crm-form-card crm-payment-modal" role="dialog" aria-modal="true" aria-labelledby="crmPaymentModalTitle">
+        <div class="income-card-head">
+          <div>
+            <h3 id="crmPaymentModalTitle">${editingPayment ? "Редактировать оплату" : "Добавить оплату"}</h3>
+            <p class="muted crm-head-note">Оплата сразу попадает в доходы и пересчитывает налоги.</p>
+          </div>
+          <div class="crm-form-head-actions">
+            ${editingPayment ? '<span class="income-edit-chip">режим редактирования</span>' : ""}
+            <button type="button" class="btn btn-ghost btn-xs" data-action="crm-close-payment-form">Закрыть</button>
+          </div>
+        </div>
+        <form id="crmPaymentFormInner" class="stack-form">
+          <input type="hidden" name="editId" value="${editingPayment ? editingPayment.id : ""}" />
+          <label>Продажа
+            <select name="saleId" ${hasPaymentTargetSales ? "" : "disabled"}>
+              <option value="0">${hasPaymentTargetSales ? "Выберите продажу" : "Сначала добавьте продажу"}</option>
+              ${activeSaleOptions}
+            </select>
+          </label>
+          <div class="form-grid-2">
+            <label>Сумма оплаты (₸)
+              <input name="amount" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" data-amount-input value="${editingPayment ? formatPlainAmount(editingPayment.amount) : ""}" ${hasPaymentTargetSales ? "" : "disabled"} required />
+            </label>
+            <label>Дата оплаты
+              <input name="date" type="date" value="${editingPayment ? editingPayment.date : new Date().toISOString().slice(0, 10)}" ${hasPaymentTargetSales ? "" : "disabled"} required />
+            </label>
+          </div>
+          <label>Комментарий
+            <input name="note" type="text" value="${escapeHtml(editingPayment ? editingPayment.note : "")}" placeholder="Например, аванс или доплата" ${hasPaymentTargetSales ? "" : "disabled"} />
+          </label>
+          <p class="crm-inline-note">${hasPaymentTargetSales ? "Если по одной продаже деньги пришли частями, добавляйте каждую оплату отдельно." : "Сначала добавьте хотя бы одну продажу. После этого здесь можно будет фиксировать оплаты."}</p>
+          <div class="income-form-actions">
+            <button type="submit" class="btn btn-primary" ${hasPaymentTargetSales ? "" : "disabled"}>${editingPayment ? "Сохранить оплату" : hasPaymentTargetSales ? "Добавить оплату" : "Сначала добавьте продажу"}</button>
+            ${editingPayment ? '<button type="button" class="btn btn-ghost" data-cancel-crm-payment-edit>Отмена</button>' : '<button type="button" class="btn btn-ghost" data-action="crm-close-payment-form">Отмена</button>'}
+          </div>
+        </form>
+      </article>
+    </div>
+  ` : "";
+
   const crmSalesMarkup = `
     <div class="crm-section-stack">
       <article class="card crm-workspace-card">
         <div class="crm-workspace-head">
           <div>
             <h3>Продажи и оплаты</h3>
-            <p class="muted">Сначала добавьте продажу, а когда деньги пришли — отдельно отметьте оплату. Только оплаты попадают в доходы.</p>
+            <p class="muted">Продажа показывает, сколько вам должны. Оплата фиксирует поступившие деньги и отправляет их в доходы.</p>
           </div>
           <div class="crm-toolbar">
-            <button type="button" class="btn btn-primary btn-sm" data-action="crm-open-sale-form">+ Продажа</button>
-            <button type="button" class="btn btn-ghost btn-sm" data-action="crm-open-payment-form">+ Оплата</button>
-            <button type="button" class="btn btn-ghost btn-sm" data-action="crm-open-income">Открыть доходы</button>
+            <button type="button" class="btn btn-primary btn-sm crm-toolbar-btn" data-action="crm-open-sale-form">
+              <i data-lucide="plus" class="crm-action-icon" aria-hidden="true"></i>
+              <span>Добавить продажу</span>
+            </button>
+            <button type="button" class="btn btn-ghost btn-sm crm-toolbar-btn" data-action="crm-open-payment-form">
+              <i data-lucide="wallet" class="crm-action-icon" aria-hidden="true"></i>
+              <span>Добавить оплату</span>
+            </button>
           </div>
         </div>
       </article>
 
-      ${effectiveSalesPanel === "payment" ? `
-        <article id="crmPaymentForm" class="card crm-form-card crm-payment-form-card">
-          <div class="income-card-head">
-            <div>
-              <h3>${editingPayment ? "Редактировать оплату" : "Добавить оплату"}</h3>
-              <p class="muted crm-head-note">Каждая оплата сразу попадает в доходы.</p>
-            </div>
-            <div class="crm-form-head-actions">
-              ${editingPayment ? '<span class="income-edit-chip">режим редактирования</span>' : ""}
-              <button type="button" class="btn btn-ghost btn-xs" data-action="crm-close-payment-form">Скрыть</button>
-            </div>
+      <div class="crm-sales-summary-grid">
+        <article class="crm-sales-summary-item">
+          <span class="crm-sales-summary-icon">
+            <i data-lucide="briefcase" class="crm-sales-summary-icon-svg" aria-hidden="true"></i>
+          </span>
+          <div>
+            <span>Активных продаж</span>
+            <strong>${activeSales.length}</strong>
+            <small>${fmt(salesTotalAmount)}</small>
           </div>
-          <form id="crmPaymentFormInner" class="stack-form">
-            <input type="hidden" name="editId" value="${editingPayment ? editingPayment.id : ""}" />
-            <label>Продажа
-              <select name="saleId" ${hasPaymentTargetSales ? "" : "disabled"}>
-                <option value="0">${hasPaymentTargetSales ? "Выберите продажу" : "Сначала добавьте продажу"}</option>
-                ${activeSaleOptions}
-              </select>
-            </label>
-            <div class="form-grid-2">
-              <label>Сумма оплаты (₸)
-                <input name="amount" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" data-amount-input value="${editingPayment ? formatPlainAmount(editingPayment.amount) : ""}" ${hasPaymentTargetSales ? "" : "disabled"} required />
-              </label>
-              <label>Дата оплаты
-                <input name="date" type="date" value="${editingPayment ? editingPayment.date : new Date().toISOString().slice(0, 10)}" ${hasPaymentTargetSales ? "" : "disabled"} required />
-              </label>
-            </div>
-            <label>Комментарий
-              <input name="note" type="text" value="${escapeHtml(editingPayment ? editingPayment.note : "")}" placeholder="Например, аванс или доплата" ${hasPaymentTargetSales ? "" : "disabled"} />
-            </label>
-            <p class="crm-inline-note">${hasPaymentTargetSales ? "Если по одной сделке было несколько поступлений денег, добавляйте каждую оплату отдельно." : "Сначала добавьте хотя бы одну продажу. После этого здесь можно будет фиксировать оплаты и сразу отправлять их в «Доходы»."}</p>
-            <div class="income-form-actions">
-              <button type="submit" class="btn btn-primary" ${hasPaymentTargetSales ? "" : "disabled"}>${editingPayment ? "Сохранить оплату" : hasPaymentTargetSales ? "Добавить оплату" : "Сначала добавьте продажу"}</button>
-              ${editingPayment ? '<button type="button" class="btn btn-ghost" data-cancel-crm-payment-edit>Отмена</button>' : ""}
-            </div>
-          </form>
         </article>
-      ` : ""}
+        <article class="crm-sales-summary-item crm-sales-summary-item-warning">
+          <span class="crm-sales-summary-icon">
+            <i data-lucide="clock" class="crm-sales-summary-icon-svg" aria-hidden="true"></i>
+          </span>
+          <div>
+            <span>Ждут оплаты</span>
+            <strong>${waitingSales.length}</strong>
+            <small>${fmt(waitingAmount)}</small>
+          </div>
+        </article>
+        <article class="crm-sales-summary-item crm-sales-summary-item-success">
+          <span class="crm-sales-summary-icon">
+            <i data-lucide="credit-card" class="crm-sales-summary-icon-svg" aria-hidden="true"></i>
+          </span>
+          <div>
+            <span>Оплачено за месяц</span>
+            <strong>${fmt(paidThisMonth)}</strong>
+            <small>${paymentsThisMonth.length} ${pluralizeRu(paymentsThisMonth.length, "оплата", "оплаты", "оплат")}</small>
+          </div>
+        </article>
+      </div>
 
       <article class="card crm-table-card crm-table-card-primary">
-        <div class="crm-table-head">
+        <div class="crm-table-head crm-focus-head">
           <div>
-            <h3>Продажи</h3>
-            <p class="muted">Здесь видно, сколько уже оплачено и сколько ещё осталось.</p>
+            <h3>Все продажи</h3>
+            <p class="muted">Сумма сделки, оплачено и остаток по каждой продаже.</p>
           </div>
+          <span class="crm-section-badge crm-section-badge-muted">${filteredSales.length} из ${sales.length}</span>
         </div>
         <form id="crmFilterForm" class="crm-filter-bar" onsubmit="return false;">
           <label class="crm-filter-field crm-filter-search">
@@ -24030,12 +24143,15 @@ function renderCrmPage() {
       </article>
 
       <article class="card crm-table-card crm-table-card-secondary">
-        <div class="crm-table-head">
+        <div class="crm-table-head crm-focus-head">
           <div>
             <h3>Оплаты</h3>
             <p class="muted">Каждая оплата — отдельное поступление денег и отдельная запись в «Доходах».</p>
           </div>
-          <button type="button" class="btn btn-ghost btn-xs" data-action="crm-open-income">Открыть доходы</button>
+          <div class="crm-table-head-actions">
+            <span class="crm-section-badge crm-section-badge-muted">${filteredPayments.length}</span>
+            <button type="button" class="btn btn-ghost btn-xs" data-action="crm-open-income">Посмотреть в доходах</button>
+          </div>
         </div>
         <div class="table-wrap crm-table-wrap">
           <table class="table crm-table">
@@ -24055,59 +24171,98 @@ function renderCrmPage() {
     </div>
   `;
 
+  const customerFormModalMarkup = isCustomerFormOpen ? `
+    <div class="crm-modal-backdrop" data-crm-customer-form-backdrop>
+      <article id="crmCustomerForm" class="card crm-form-card crm-customer-form-modal" role="dialog" aria-modal="true" aria-labelledby="crmCustomerModalTitle">
+        <div class="income-card-head">
+          <div>
+            <h3 id="crmCustomerModalTitle">${editingCustomer ? "Редактировать клиента" : "Добавить клиента"}</h3>
+            <p class="muted crm-head-note">Сохраните имя и контакт. Потом клиента можно быстро выбрать при продаже.</p>
+          </div>
+          <div class="crm-form-head-actions">
+            ${editingCustomer ? '<span class="income-edit-chip">режим редактирования</span>' : ""}
+            <button type="button" class="btn btn-ghost btn-xs" data-action="crm-close-customer-form">Закрыть</button>
+          </div>
+        </div>
+        <form id="crmCustomerFormInner" class="stack-form crm-customer-form">
+          <input type="hidden" name="editId" value="${editingCustomer ? editingCustomer.id : ""}" />
+          <div class="form-grid-2">
+            <label>Имя клиента
+              <input name="name" type="text" value="${escapeHtml(editingCustomer ? editingCustomer.name : "")}" placeholder="Например, ТОО Асыл" required />
+            </label>
+            <label>Телефон / WhatsApp
+              <input name="contact" type="tel" inputmode="tel" autocomplete="tel" maxlength="16" value="${escapeHtml(editingCustomer ? editingCustomer.contact : "")}" placeholder="+7 777 123 45 67" data-kz-phone-input />
+            </label>
+          </div>
+          <label>Комментарий
+            <input name="note" type="text" value="${escapeHtml(editingCustomer ? editingCustomer.note : "")}" placeholder="Например, постоянный клиент" />
+          </label>
+          <div class="income-form-actions">
+            <button type="submit" class="btn btn-primary">${editingCustomer ? "Сохранить клиента" : "Добавить клиента"}</button>
+            ${editingCustomer ? '<button type="button" class="btn btn-ghost" data-cancel-crm-customer-edit>Отмена</button>' : '<button type="button" class="btn btn-ghost" data-action="crm-close-customer-form">Отмена</button>'}
+          </div>
+        </form>
+      </article>
+    </div>
+  ` : "";
+
   const crmClientsMarkup = `
     <div class="crm-section-stack">
       <article class="card crm-workspace-card">
         <div class="crm-workspace-head">
           <div>
             <h3>Клиенты</h3>
-            <p class="muted">Сохраняйте здесь клиентов и контакты. Потом их можно быстро выбрать при добавлении продажи или оплаты.</p>
+            <p class="muted">Это база клиентов: имя, контакт и история продаж. Отсюда удобно начинать новую сделку.</p>
           </div>
           <div class="crm-toolbar">
-            <button type="button" class="btn btn-primary btn-sm" data-action="crm-open-customer-form">+ Клиент</button>
+            <button type="button" class="btn btn-primary btn-sm crm-toolbar-btn" data-action="crm-open-customer-form">
+              <i data-lucide="user-plus" class="crm-action-icon" aria-hidden="true"></i>
+              <span>Добавить клиента</span>
+            </button>
           </div>
         </div>
       </article>
 
-      ${isCustomerFormOpen ? `
-        <article id="crmCustomerForm" class="card crm-form-card crm-customer-form-card">
-          <div class="income-card-head">
-            <div>
-              <h3>${editingCustomer ? "Редактировать клиента" : "Добавить клиента"}</h3>
-              <p class="muted crm-head-note">Клиент нужен, чтобы привязывать продажи.</p>
-            </div>
-            <div class="crm-form-head-actions">
-              ${editingCustomer ? '<span class="income-edit-chip">режим редактирования</span>' : ""}
-              <button type="button" class="btn btn-ghost btn-xs" data-action="crm-close-customer-form">Скрыть</button>
-            </div>
+      <div class="crm-sales-summary-grid">
+        <article class="crm-sales-summary-item">
+          <span class="crm-sales-summary-icon">
+            <i data-lucide="users" class="crm-sales-summary-icon-svg" aria-hidden="true"></i>
+          </span>
+          <div>
+            <span>Клиентов в базе</span>
+            <strong>${customers.length}</strong>
+            <small>${filteredCustomers.length === customers.length ? "Показываем всех" : `в списке ${filteredCustomers.length}`}</small>
           </div>
-          <form id="crmCustomerFormInner" class="stack-form crm-customer-form">
-            <input type="hidden" name="editId" value="${editingCustomer ? editingCustomer.id : ""}" />
-            <div class="form-grid-3">
-              <label>Имя клиента
-                <input name="name" type="text" value="${escapeHtml(editingCustomer ? editingCustomer.name : "")}" placeholder="Например, ТОО Асыл" required />
-              </label>
-              <label>Телефон / WhatsApp
-                <input name="contact" type="tel" inputmode="tel" autocomplete="tel" maxlength="16" value="${escapeHtml(editingCustomer ? editingCustomer.contact : "")}" placeholder="+7 777 123 45 67" data-kz-phone-input />
-              </label>
-              <label>Комментарий
-                <input name="note" type="text" value="${escapeHtml(editingCustomer ? editingCustomer.note : "")}" placeholder="Опционально" />
-              </label>
-            </div>
-            <div class="income-form-actions">
-              <button type="submit" class="btn btn-primary">${editingCustomer ? "Сохранить клиента" : "Добавить клиента"}</button>
-              ${editingCustomer ? '<button type="button" class="btn btn-ghost" data-cancel-crm-customer-edit>Отмена</button>' : ""}
-            </div>
-          </form>
         </article>
-      ` : ""}
+        <article class="crm-sales-summary-item crm-sales-summary-item-warning">
+          <span class="crm-sales-summary-icon">
+            <i data-lucide="briefcase" class="crm-sales-summary-icon-svg" aria-hidden="true"></i>
+          </span>
+          <div>
+            <span>Уже с продажами</span>
+            <strong>${customersWithSalesCount}</strong>
+            <small>без продаж ${customersWithoutSalesCount}</small>
+          </div>
+        </article>
+        <article class="crm-sales-summary-item crm-sales-summary-item-success">
+          <span class="crm-sales-summary-icon">
+            <i data-lucide="credit-card" class="crm-sales-summary-icon-svg" aria-hidden="true"></i>
+          </span>
+          <div>
+            <span>Оплачено клиентами</span>
+            <strong>${fmt(totalCustomerPaid)}</strong>
+            <small>${payments.length} ${pluralizeRu(payments.length, "оплата", "оплаты", "оплат")}</small>
+          </div>
+        </article>
+      </div>
 
       <article class="card crm-table-card crm-table-card-secondary">
-        <div class="crm-table-head">
+        <div class="crm-table-head crm-focus-head">
           <div>
             <h3>Клиенты</h3>
-            <p class="muted">Клиенты и контакты для продаж.</p>
+            <p class="muted">Откройте карточку клиента, чтобы посмотреть его продажи и остаток к оплате.</p>
           </div>
+          <span class="crm-section-badge crm-section-badge-muted">${filteredCustomers.length}</span>
         </div>
         <div class="table-wrap crm-table-wrap">
           <table class="table crm-table">
@@ -24141,6 +24296,8 @@ function renderCrmPage() {
       ${crmBodyMarkup}
       ${saleModalMarkup}
       ${quickSaleModalMarkup}
+      ${paymentModalMarkup}
+      ${customerFormModalMarkup}
       ${customerCardMarkup}
     </section>
   `;
@@ -24148,11 +24305,11 @@ function renderCrmPage() {
   if (window.lucide && typeof window.lucide.createIcons === "function") {
     window.lucide.createIcons();
   }
-  const saleAmountInput = els.pageContent.querySelector('#crmSaleFormInner [name="amount"], #crmQuickSaleFormInner [name="amount"]');
-  if (saleAmountInput instanceof HTMLInputElement) {
+  const crmPrimaryInput = els.pageContent.querySelector('#crmSaleFormInner [name="amount"], #crmQuickSaleFormInner [name="amount"], #crmPaymentFormInner [name="amount"], #crmCustomerFormInner [name="name"]');
+  if (crmPrimaryInput instanceof HTMLInputElement) {
     window.requestAnimationFrame(() => {
-      saleAmountInput.focus();
-      saleAmountInput.select();
+      crmPrimaryInput.focus();
+      crmPrimaryInput.select();
     });
   }
   els.pageContent.querySelectorAll("[data-crm-tab]").forEach((btn) => {
@@ -24173,14 +24330,14 @@ function renderCrmPage() {
     btn.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      setCrmSalesPanel("payment", "crmPaymentForm");
+      setCrmSalesPanel("payment");
     });
   });
   els.pageContent.querySelectorAll('[data-action="crm-open-customer-form"]').forEach((btn) => {
     btn.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      setCrmCustomerFormOpen(true, "crmCustomerForm");
+      setCrmCustomerFormOpen(true);
     });
   });
   els.pageContent.querySelectorAll('[data-action="crm-prefill-sale"]').forEach((btn) => {
@@ -24232,25 +24389,46 @@ function renderCrmPage() {
       event.stopPropagation();
     });
   });
+  const paymentBackdrop = els.pageContent.querySelector("[data-crm-payment-backdrop]");
+  if (paymentBackdrop instanceof HTMLElement) {
+    paymentBackdrop.addEventListener("click", (event) => {
+      if (event.target !== paymentBackdrop) {
+        return;
+      }
+      closeCrmPaymentComposer();
+    });
+  }
+  els.pageContent.querySelectorAll(".crm-payment-modal").forEach((panel) => {
+    panel.addEventListener("click", (event) => {
+      event.stopPropagation();
+    });
+  });
+  const customerFormBackdrop = els.pageContent.querySelector("[data-crm-customer-form-backdrop]");
+  if (customerFormBackdrop instanceof HTMLElement) {
+    customerFormBackdrop.addEventListener("click", (event) => {
+      if (event.target !== customerFormBackdrop) {
+        return;
+      }
+      closeCrmCustomerComposer();
+    });
+  }
+  els.pageContent.querySelectorAll(".crm-customer-form-modal").forEach((panel) => {
+    panel.addEventListener("click", (event) => {
+      event.stopPropagation();
+    });
+  });
   els.pageContent.querySelectorAll('[data-action="crm-close-payment-form"]').forEach((btn) => {
     btn.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      state.crmSalesPanel = "";
-      state.crmPaymentEditId = null;
-      state.crmPaymentDraftSaleId = null;
-      saveState();
-      renderDashboard();
+      closeCrmPaymentComposer();
     });
   });
   els.pageContent.querySelectorAll('[data-action="crm-close-customer-form"]').forEach((btn) => {
     btn.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      state.crmCustomerFormOpen = false;
-      state.crmCustomerEditId = null;
-      saveState();
-      renderDashboard();
+      closeCrmCustomerComposer();
     });
   });
   els.pageContent.querySelectorAll('[data-action="crm-open-customer"]').forEach((btn) => {
